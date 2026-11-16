@@ -89,6 +89,7 @@ const { createHash } = require("node:crypto");
     ).toEqual({
       node: "undefined",
       bridge: [
+        "analysisSource",
         "cancelGeneration",
         "checkCodex",
         "chooseImage",

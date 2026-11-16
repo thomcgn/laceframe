@@ -1113,3 +1113,28 @@ button.text-link { border:0; background:transparent; padding:2px 0; color:var(--
 .relight-actions { position:sticky; bottom:-18px; background:var(--ink); padding:10px 0; border-top:1px solid var(--slate); flex-wrap:wrap; }
 .relight-dialog .modal-backdrop { z-index:130; }
 @media(max-width:1000px) { .relight-layout { grid-template-columns:220px minmax(0,1fr); gap:10px; } .relight-dialog {padding:12px;} .relight-canvas {height:45vh;} }
+
+/* Measured style proposals share the existing library and review surface. */
+.style-analyzer { border-top:1px solid var(--sage); margin-top:18px; padding-top:12px; min-width:0; }
+.style-analyzer fieldset { min-width:0; border:1px solid #526273; margin:10px 0; }
+.style-analyzer details, .analysis-comparison { border:1px solid #526273; border-radius:6px; margin:8px 0; padding:8px; min-width:0; }
+.style-analyzer summary, .analysis-comparison summary { cursor:pointer; overflow-wrap:anywhere; }
+.style-analyzer textarea { width:100%; box-sizing:border-box; }
+.style-analyzer input[type=checkbox] { width:auto; }
+.analysis-reference { display:grid; grid-template-columns:140px minmax(0,1fr); gap:12px; border-bottom:1px solid #526273; padding:10px 0; }
+.analysis-reference figure {margin:0; min-width:0; overflow-wrap:anywhere;}
+.analysis-reference .preview {height:120px; min-height:0;}
+.analysis-reference .inspector-options { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+.analysis-metrics dl {display:grid; grid-template-columns: minmax(160px,1fr) minmax(0,1fr); gap:5px 12px; font-size:12px;}
+.analysis-metrics dd { margin:0; overflow-wrap:anywhere; }
+.analysis-palette {display:flex; flex-wrap:wrap; gap:8px; margin:8px 0;}
+.analysis-palette span {display:grid; gap:3px; font-size:11px;}
+.analysis-palette i {display:block; width:48px; height:24px; border:1px solid #f0e5d366;}
+.analysis-palette input {width:60px; height:32px; padding:2px;}
+.analysis-hist {display:flex; gap:3px; align-items:end; height:65px;}
+.analysis-hist span {background:var(--sage); flex:1;}
+.analysis-comparison table, .analysis-metrics table { width:100%; font-size:11px; table-layout:fixed; overflow-wrap:anywhere; }
+.analysis-comparison .master-compare { margin-top:12px; }
+@media(max-width:1000px){.analysis-reference {grid-template-columns:100px minmax(0,1fr);} .analysis-reference .inspector-options {grid-template-columns:repeat(2,minmax(0,1fr));} }
+.analysis-steps {display:flex; flex-wrap:wrap; gap:6px; position:sticky; top:0; z-index:2; background:var(--slate); padding:6px 0;}
+.analysis-steps [aria-pressed=true] {border-color:var(--sage);background:#344947;}

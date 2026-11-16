@@ -98,6 +98,9 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC() {
+  handle("image:analysis-source", (input) =>
+    service.analysisSource(idSchema.parse(input)),
+  );
   handle("image:relight-source", (input) =>
     service.relightSource(idSchema.parse(input)),
   );
