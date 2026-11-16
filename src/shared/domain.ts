@@ -57,6 +57,20 @@ export const variantSchema = z
     suggestedAction: actionSchema,
   })
   .strict();
+export const artDirectionSchema = z.object({
+  id: idSchema,
+  name: label,
+  revision: z.number().int().positive(),
+  renderRules: z.string().trim().min(1).max(8000),
+  lightingRules: z.string().max(4000).optional(),
+  colorRules: z.string().max(4000).optional(),
+  framingRules: z.string().max(4000).optional(),
+}).strict();
+export const expressionPerformanceSchema = z.object({
+  characterId: idSchema,
+  variantId: idSchema,
+  direction: z.string().trim().min(1).max(8000),
+}).strict();
 const projectObject = z
   .object({
     schemaVersion: z.literal(2),
@@ -83,6 +97,9 @@ const projectObject = z
     variants: z.array(variantSchema).max(10000),
     assets: z.array(assetSchema).max(10000),
     attempts: z.array(attemptSchema).max(10000),
+    artDirections: z.array(artDirectionSchema).max(100).default([]),
+    defaultArtDirectionId: idSchema.optional(),
+    expressionPerformances: z.array(expressionPerformanceSchema).max(10000).default([]),
   })
   .strict();
 export const projectSchema = projectObject.superRefine((p, ctx) => {
@@ -97,6 +114,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       ...p.assets,
       ...p.attempts,
       ...p.attempts.map((a) => a.promptRevision),
+      ...p.artDirections,
     ].map((x) => x.id),
   ];
   if (new Set(allIds).size !== allIds.length) fail("Duplicate IDs");
@@ -119,6 +137,15 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     if (m.file !== assetFile("originals", m.sha256, m.format))
       fail("Unsafe master path");
   }
+  if (p.defaultArtDirectionId && !p.artDirections.some((a) => a.id === p.defaultArtDirectionId))
+    fail("Unknown default art direction");
+  if (new Set(p.artDirections.map((a) => a.name.toLowerCase())).size !== p.artDirections.length)
+    fail("Duplicate art direction names");
+  if (new Set(p.expressionPerformances.map((e) => `${e.characterId}/${e.variantId}`)).size !== p.expressionPerformances.length)
+    fail("Duplicate character expression performance");
+  for (const e of p.expressionPerformances)
+    if (!p.characters.some((c) => c.id === e.characterId) || !p.variants.some((v) => v.id === e.variantId))
+      fail("Unknown character expression performance reference");
   for (const v of p.variants)
     if (!p.families.some((f) => f.id === v.familyId))
       fail("Unknown variant family");
@@ -194,6 +221,8 @@ export function parseProject(input: unknown) {
   return projectSchema.parse(input);
 }
 export type Project = z.infer<typeof projectSchema>;
+export type ArtDirection = z.infer<typeof artDirectionSchema>;
+export type ExpressionPerformance = z.infer<typeof expressionPerformanceSchema>;
 export type Master = z.infer<typeof masterSchema>;
 export type ExpressionAsset = z.infer<typeof assetSchema>;
 export type Variant = z.infer<typeof variantSchema>;
@@ -227,6 +256,10 @@ export const commandSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("addCharacter"), name: label }).strict(),
+  z.object({ type: z.literal("addArtDirection"), name: label, renderRules: z.string().trim().min(1).max(8000) }).strict(),
+  z.object({ type: z.literal("updateArtDirection"), id: idSchema, name: label, renderRules: z.string().trim().min(1).max(8000) }).strict(),
+  z.object({ type: z.literal("setArtDirection"), id: idSchema }).strict(),
+  z.object({ type: z.literal("setExpressionPerformance"), characterId: idSchema, variantId: idSchema, direction: z.string().max(8000) }).strict(),
   z
     .object({ type: z.literal("renameCharacter"), id: idSchema, name: label })
     .strict(),
