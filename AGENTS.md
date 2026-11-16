@@ -22,4 +22,4 @@ Read `docs/MVP_PLAN.md` and `docs/CHARACTER_EXPRESSIONS.md` before editing. The 
 Dark, calm and responsive. Laceframe colors: Ink #141820, Slate #242D3A, Sage #8FADA6, Copper #D9A77E, Ivory #F0E5D3. Clearly communicate import, candidate, approved and rejected states.
 
 ## Current target
-Create offline Characters → Expressions → Motion workflow. A working image import + locked master + expression approval + PNG-frame animation playback/export beats speculative generative AI support.
+Task 01 (Characters/Expressions) is implemented. **Next: Task 02 Create Workspace** in `docs/CODEX_02_CREATE.md`, then **Task 03 Motion** in `docs/CODEX_03_MOTION.md`. Do not work on Motion before Create is validated. Build an honest manual-generation loop (master reference → prompt → external ChatGPT → local result → approval), not a fake integrated generator.

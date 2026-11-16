@@ -1,6 +1,8 @@
-# Codex Task 02 — Motion MVP: blink, speaking and shouting
+# Codex Task 03 — Motion MVP: blink, speaking and shouting
 
-Read `AGENTS.md`, `docs/MVP_PLAN.md`, and `docs/CHARACTER_EXPRESSIONS.md`. Continue from the merged Task 01 implementation on a fresh feature branch / PR. No worktrees.
+Read `AGENTS.md`, `docs/MVP_PLAN.md`, and `docs/CHARACTER_EXPRESSIONS.md`. Continue from the merged Tasks 01 and 02 implementation on a fresh feature branch / PR. No worktrees.
+
+This task follows **Codex 02 — Create Workspace**. It does not implement generation. Retain compatibility with all existing imported/approved expression assets.
 
 ## Deliverables
 
