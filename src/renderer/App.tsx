@@ -1,3 +1,5 @@
+import { ImagePreview } from "./components/ImagePreview";
+import { CreateView } from "./views/CreateView";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type {
@@ -12,7 +14,7 @@ import type {
 import { MAX_IMAGE_BYTES } from "../shared/domain";
 import type { Result } from "../shared/bridge";
 
-type View = "Characters" | "Expressions" | "Motion" | "Inspect";
+type View = "Create" | "Characters" | "Expressions" | "Motion" | "Inspect";
 const statusLabel = {
   candidate: "Kandidat · ungeprüft",
   approved: "Freigegeben",
@@ -23,54 +25,6 @@ const actionLabel = {
   speaking: "Sprechend",
   shouting: "Rufend",
 };
-function ImagePreview({
-  id,
-  caption,
-  zoom,
-}: {
-  id?: string;
-  caption: string;
-  zoom: number;
-}) {
-  const [image, setImage] = useState("");
-  const [error, setError] = useState("");
-  useEffect(() => {
-    let active = true;
-    setImage("");
-    setError("");
-    if (id)
-      void window.laceframe
-        .preview(id)
-        .then((result) => {
-          if (active) {
-            if (result.ok) setImage(result.value);
-            else setError(result.error);
-          }
-        })
-        .catch(() => {
-          if (active) setError("Bild konnte nicht geladen werden.");
-        });
-    return () => {
-      active = false;
-    };
-  }, [id]);
-  return (
-    <figure>
-      <figcaption>{caption}</figcaption>
-      <div className="checker preview">
-        {image ? (
-          <img
-            src={image}
-            alt={caption}
-            style={{ zoom: zoom / 100, maxWidth: "none" }}
-          />
-        ) : (
-          <p>{error || (id ? "Lade Bild …" : "Noch kein Bild importiert")}</p>
-        )}
-      </div>
-    </figure>
-  );
-}
 function Actions({
   value,
   onChange,
@@ -222,6 +176,7 @@ function VariantEditor({
 export function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [view, setView] = useState<View>("Characters");
+  const [createDirty, setCreateDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -291,8 +246,12 @@ export function App() {
         success(result.value);
         setMessage(notice);
       }
-    } catch {
-      setError("Vorgang fehlgeschlagen. Bitte erneut versuchen.");
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Vorgang fehlgeschlagen. Bitte erneut versuchen.",
+      );
     } finally {
       setBusy(false);
     }
@@ -376,6 +335,13 @@ export function App() {
   }
   function addCharacter(e: FormEvent) {
     e.preventDefault();
+    if (
+      createDirty &&
+      !window.confirm(
+        "Ungespeicherten Create-Entwurf verwerfen und neue Figur erstellen?",
+      )
+    )
+      return;
     void command({ type: "addCharacter", name: characterName });
   }
   function reviewAsset(a: ExpressionAsset, status: "approved" | "rejected") {
@@ -483,18 +449,24 @@ export function App() {
         </div>
         <p className="eyebrow">WORKSPACE</p>
         <nav aria-label="Hauptnavigation">
-          {(["Characters", "Expressions", "Motion", "Inspect"] as const).map(
-            (name, i) => (
-              <button
-                key={name}
-                aria-current={view === name ? "page" : undefined}
-                onClick={() => setView(name)}
-              >
-                <span className="nav-index">0{i + 1}</span>
-                {name}
-              </button>
-            ),
-          )}
+          {(
+            [
+              "Create",
+              "Characters",
+              "Expressions",
+              "Motion",
+              "Inspect",
+            ] as const
+          ).map((name, i) => (
+            <button
+              key={name}
+              aria-current={view === name ? "page" : undefined}
+              onClick={() => setView(name)}
+            >
+              <span className="nav-index">0{i + 1}</span>
+              {name}
+            </button>
+          ))}
         </nav>
         <div className="sidebar-bottom">
           <span className="badge">Offline · lokal</span>
@@ -536,6 +508,13 @@ export function App() {
               className="inline-form"
               onSubmit={(e) => {
                 e.preventDefault();
+                if (
+                  createDirty &&
+                  !window.confirm(
+                    "Ungespeicherten Create-Entwurf verwerfen und Projekt wechseln?",
+                  )
+                )
+                  return;
                 void run(
                   () => window.laceframe.createProject(projectName),
                   changedProject,
@@ -555,12 +534,33 @@ export function App() {
             </form>
             <button
               onClick={() =>
+                (!createDirty ||
+                  window.confirm(
+                    "Ungespeicherten Create-Entwurf verwerfen und Projekt wechseln?",
+                  )) &&
                 void run(() => window.laceframe.openProject(), changedProject)
               }
             >
               Projekt öffnen …
             </button>
           </section>
+          {p && (
+            <div hidden={view !== "Create"}>
+              <CreateView
+                key={`${p.id}:${p.selectedCharacterId ?? ""}`}
+                snapshot={snapshot!}
+                busy={busy}
+                perform={run}
+                onSnapshot={setSnapshot}
+                onDirtyChange={setCreateDirty}
+                onCharacters={() => setView("Characters")}
+                onInspect={(id) => {
+                  setAssetId(id);
+                  setView("Inspect");
+                }}
+              />
+            </div>
+          )}
           {!p ? (
             <section className="welcome">
               <p className="eyebrow">VOM PORTRAIT ZUM AUSDRUCK</p>
@@ -578,13 +578,20 @@ export function App() {
             </section>
           ) : (
             <>
-              <section className="character-bar">
+              <section className="character-bar" hidden={view === "Create"}>
                 <label>
                   Aktive Figur
                   <select
                     aria-label="Aktive Figur"
                     value={character?.id ?? ""}
                     onChange={(e) => {
+                      if (
+                        createDirty &&
+                        !window.confirm(
+                          "Ungespeicherten Create-Entwurf verwerfen und Figur wechseln?",
+                        )
+                      )
+                        return;
                       setAssetId("");
                       void command({
                         type: "selectCharacter",
@@ -899,7 +906,7 @@ export function App() {
               {view === "Motion" && (
                 <section className="welcome">
                   <p className="eyebrow">ALS NÄCHSTES</p>
-                  <h2>Motion kommt in Task 02.</h2>
+                  <h2>Motion kommt in Task 03.</h2>
                   <p>
                     Geplant: manuell geladene Blink- und Mundframes, Timeline
                     mit individueller Dauer, Play/Pause und JSON- sowie

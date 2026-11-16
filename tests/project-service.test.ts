@@ -74,7 +74,7 @@ describe("versioned project schema", () => {
   });
   it("rejects unknown schema versions, duplicate IDs and fields", () => {
     const p = service.snapshot().project;
-    expect(projectSchema.safeParse({ ...p, schemaVersion: 2 }).success).toBe(
+    expect(projectSchema.safeParse({ ...p, schemaVersion: 3 }).success).toBe(
       false,
     );
     expect(projectSchema.safeParse({ ...p, token: "secret" }).success).toBe(

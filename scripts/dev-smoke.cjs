@@ -14,7 +14,7 @@ const { chromium, expect } = require("@playwright/test");
       );
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.reload();
+    // Verify first-load rendering before any reload: catches blocked Vite navigation.
     await expect(
       page.getByRole("heading", { name: "Characters", exact: true }),
     ).toBeVisible({ timeout: 10000 });
@@ -25,6 +25,18 @@ const { chromium, expect } = require("@playwright/test");
       ok: false,
       error: "Bitte zuerst ein Projekt öffnen.",
     });
+    const url = page.url();
+    await Promise.all([
+      page.waitForEvent(
+        "framenavigated",
+        (frame) => frame === page.mainFrame(),
+      ),
+      page.evaluate(() => window.location.assign(window.location.href)),
+    ]);
+    await expect(
+      page.getByRole("heading", { name: "Characters", exact: true }),
+    ).toBeVisible();
+    expect(page.url()).toBe(url);
     expect(errors).toEqual([]);
     console.log(
       "PASS npm run start: React UI visible, preload available, dev sender accepted, no renderer exceptions.",

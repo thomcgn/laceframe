@@ -90,10 +90,14 @@ const { createHash } = require("node:crypto");
       bridge: [
         "chooseImage",
         "command",
+        "copyPrompt",
         "createProject",
         "discardImage",
+        "openChatGPT",
         "openProject",
         "preview",
+        "providers",
+        "revealMaster",
         "stageImage",
       ],
     });
@@ -158,7 +162,7 @@ const { createHash } = require("node:crypto");
       page.getByText("Master V1 · gesperrt", { exact: true }),
     ).toBeVisible();
     await expect(page.getByAltText("Freigegebener Master V1")).toBeVisible();
-    await page.getByRole("button", { name: /02\s*Expressions/ }).click();
+    await page.getByRole("button", { name: /Expressions$/ }).click();
     await page
       .getByLabel("Emotionsfamilie", { exact: true })
       .selectOption({ label: "Wütend" });
@@ -216,7 +220,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Figur erstellen", exact: true })
       .click();
-    await page.getByRole("button", { name: /01\s*Characters/ }).click();
+    await page.getByRole("button", { name: /Characters$/ }).click();
     await expect(
       page.getByRole("heading", { name: "WebP Probe", exact: true }),
     ).toBeVisible();
@@ -247,7 +251,7 @@ const { createHash } = require("node:crypto");
       .click();
     await expect(page.getByRole("dialog")).not.toBeVisible();
     await expect(
-      page.getByText("8 × 10 px · WEBP", { exact: false }),
+      page.getByText("8 × 10 px · WEBP · bestätigt", { exact: false }),
     ).toBeVisible();
     await page
       .getByLabel("Aktive Figur", { exact: true })
@@ -255,7 +259,199 @@ const { createHash } = require("node:crypto");
     await expect(
       page.getByRole("heading", { name: "Ada Voss", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: /04\s*Inspect/ }).click();
+    await page.getByRole("button", { name: /Create$/ }).click();
+    await expect(page.getByAltText("Create · Masterreferenz")).toBeVisible();
+    await expect(
+      page.getByText("ChatGPT-Plan · direkte Bildgenerierung nicht verfügbar", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByAltText("Create · Ergebnisvorschau")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Ergebnis importieren …", exact: true }),
+    ).toBeEnabled();
+    await page.evaluate(() => {
+      const transfer = new DataTransfer();
+      transfer.items.add(
+        new File(["invalid image bytes"], "bad.png", { type: "image/png" }),
+      );
+      document
+        .querySelector(".create-result")
+        .dispatchEvent(
+          new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
+        );
+    });
+    await expect(page.getByRole("alert")).toBeVisible();
+    const afterInvalid = JSON.parse(
+      await fs.readFile(path.join(project, "laceframe.json"), "utf8"),
+    );
+    expect(afterInvalid.attempts).toHaveLength(0);
+    expect(afterInvalid.assets).toHaveLength(2);
+    const providers = await page.evaluate(() => window.laceframe.providers());
+    expect(providers.ok).toBe(true);
+    expect(
+      providers.value.map((p) => [p.id, p.capabilities.canGenerate]),
+    ).toEqual([
+      ["chatgpt-plan", false],
+      ["manual-import", false],
+    ]);
+    await page
+      .getByLabel("Create Familie", { exact: true })
+      .selectOption({ label: "Amüsiert" });
+    await page
+      .getByLabel("Create Variante", { exact: true })
+      .selectOption({ label: "half-smile / half-smile" });
+    await page
+      .getByLabel("Ergänzende Anweisung", { exact: true })
+      .fill("Keep the original framing.");
+    const prompt = page.getByLabel("Arbeits-Prompt", { exact: true });
+    await expect(prompt).toHaveValue(/Keep the original framing/);
+    await prompt.fill((await prompt.inputValue()) + "\nMy reviewed prompt.");
+    // Substitute the OS shell boundary only; real bridge validation, clipboard,
+    // storage and renderer interactions remain in use.
+    await app.evaluate(({ shell }) => {
+      globalThis.__opened = [];
+      shell.openExternal = async (url) => {
+        globalThis.__opened.push(url);
+      };
+      shell.showItemInFolder = (file) => {
+        globalThis.__revealed = file;
+      };
+    });
+    await page
+      .getByRole("button", {
+        name: "Prompt kopieren & ChatGPT öffnen",
+        exact: true,
+      })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Prompt kopiert.");
+    expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe(
+      await prompt.inputValue(),
+    );
+    expect(await app.evaluate(() => globalThis.__opened)).toEqual([
+      "https://chatgpt.com/",
+    ]);
+    const blocked = await page.evaluate(() =>
+      window.laceframe.openChatGPT("file:///etc/passwd"),
+    );
+    expect(blocked.ok).toBe(false);
+    expect(await app.evaluate(() => globalThis.__opened)).toHaveLength(1);
+    await page
+      .getByRole("button", { name: "Referenz im Ordner zeigen", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toContainText(
+      "Referenz im Dateimanager",
+    );
+    expect(await app.evaluate(() => globalThis.__revealed)).toMatch(
+      /assets[/\\]originals[/\\][a-f0-9]{64}\.png$/,
+    );
+    const dropResult = async (webp = false) =>
+      page.evaluate(
+        async ({ bytes, webp }) => {
+          let blob = new window.Blob([new Uint8Array(bytes)], {
+            type: "image/png",
+          });
+          if (webp) {
+            const c = document.createElement("canvas");
+            c.width = 8;
+            c.height = 10;
+            c.getContext("2d").fillRect(0, 0, 8, 10);
+            blob = await new Promise((r) => c.toBlob(r, "image/webp"));
+          }
+          const transfer = new DataTransfer();
+          transfer.items.add(
+            new File([blob], webp ? "result.webp" : "result.png", {
+              type: blob.type,
+            }),
+          );
+          document
+            .querySelector(".create-result")
+            .dispatchEvent(
+              new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
+            );
+        },
+        { bytes, webp },
+      );
+    await dropResult();
+    await expect(page.getByAltText("Create · Ergebnisvorschau")).toBeVisible();
+    await page
+      .getByRole("button", { name: "Als Expression freigeben", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toHaveText(
+      "Als Expression freigegeben.",
+    );
+    await page.getByRole("button", { name: /Expressions$/ }).click();
+    await expect(
+      page.getByText("Importierte Ausdrücke (3)", { exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /Create$/ }).click();
+    await page
+      .getByLabel("Create Familie", { exact: true })
+      .selectOption({ label: "Wütend" });
+    await expect(
+      page.getByRole("button", {
+        name: "Eigenen Prompt behalten",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
+      .click();
+    await page
+      .getByLabel("Create Variante", { exact: true })
+      .selectOption({ label: "Anbrüllen / shouting" });
+    await expect(prompt).toHaveValue(/VOCAL ACTION .*: shouting/);
+    await expect(prompt).toHaveValue(/Manuell geprüfte kontrollierte Wut/);
+    await dropResult(true);
+    await expect(
+      page.getByText(
+        /Abweichende Abmessungen: Master 24 × 32, Ergebnis 8 × 10/,
+      ),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Kandidat verwerfen", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Kandidat verworfen.");
+    await dropResult();
+    await expect(
+      page.getByText("Ergebnis ersetzen?", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Ersetzen bestätigen", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", {
+        name: "Als Expression freigeben",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Als Expression freigeben", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toHaveText(
+      "Als Expression freigegeben.",
+    );
+    await fs.mkdir("artifacts", { recursive: true });
+    await page.screenshot({
+      path: "artifacts/desktop-create.png",
+      fullPage: true,
+    });
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setSize(960, 720),
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: "artifacts/desktop-create-small.png",
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "An Inspect senden", exact: true })
+      .click();
+
     await fs.mkdir("artifacts", { recursive: true });
     await page.screenshot({
       path: "artifacts/desktop-inspect.png",
@@ -267,6 +463,9 @@ const { createHash } = require("node:crypto");
     expect(before.assets.map((a) => a.status)).toEqual([
       "approved",
       "rejected",
+      "approved",
+      "rejected",
+      "approved",
     ]);
     expect(
       before.assets.every(
@@ -291,9 +490,9 @@ const { createHash } = require("node:crypto");
       page.getByRole("heading", { name: "Ada Voss", exact: true }),
     ).toBeVisible();
     await expect(page.getByAltText("Freigegebener Master V1")).toBeVisible();
-    await page.getByRole("button", { name: /02\s*Expressions/ }).click();
+    await page.getByRole("button", { name: /Expressions$/ }).click();
     await expect(
-      page.getByText("Importierte Ausdrücke (2)", { exact: true }),
+      page.getByText("Importierte Ausdrücke (5)", { exact: true }),
     ).toBeVisible();
     await page
       .getByLabel("Emotionsfamilie", { exact: true })
@@ -306,13 +505,29 @@ const { createHash } = require("node:crypto");
         await fs.readFile(path.join(project, "laceframe.json"), "utf8"),
       ),
     ).toEqual(before);
-    await page.getByRole("button", { name: /03\s*Motion/ }).click();
+    await page.getByRole("button", { name: /Create$/ }).click();
+    await expect(page.getByAltText("Create · Ergebnisvorschau")).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Motion kommt in Task 02." }),
+      page.getByLabel("Arbeits-Prompt", { exact: true }),
+    ).toHaveValue(/VOCAL ACTION .*: shouting/);
+    expect(before.attempts).toHaveLength(3);
+    expect(
+      before.assets
+        .slice(2)
+        .every(
+          (a) =>
+            a.attemptId &&
+            a.promptRevisionId &&
+            a.providerId === "manual-import",
+        ),
+    ).toBe(true);
+    await page.getByRole("button", { name: /Motion$/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Motion kommt in Task 03." }),
     ).toBeVisible();
     expect(rendererErrors).toEqual([]);
     console.log(
-      "PASS Linux packaged Electron: sandbox/preload, create, character, drop, immutable master, editable expressions, WebP master, PNG candidate, protocol/IPC rejection, approve/reject, source hash, close/relaunch/reopen. No renderer exceptions.",
+      "PASS Linux packaged Electron: sandbox/preload, create, character, drop, immutable master, editable expressions, WebP master, PNG candidate, protocol/IPC rejection, approve/reject, source hash, close/relaunch/reopen. Create prompt/copy/browser allowlist, real PNG/WebP result drops, replace history, approval, dimension warning, Inspect, responsive layout and provider capabilities. No renderer exceptions.",
     );
   } catch (error) {
     if (app) {

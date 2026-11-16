@@ -6,6 +6,8 @@ import {
   session,
   protocol,
   net,
+  clipboard,
+  shell,
 } from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 import path from "node:path";
@@ -14,6 +16,9 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { commandSchema, idSchema, MAX_IMAGE_BYTES } from "../shared/domain";
 import { ProjectService } from "./project-service";
+import { validateExternalURL } from "../shared/generation";
+import { chatgptPlanProvider } from "./services/providers/chatgptPlan";
+import { manualImportProvider } from "./services/providers/manualImport";
 import { decodeImage } from "./decode-image";
 import type { Result } from "../shared/bridge";
 
@@ -73,6 +78,27 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC() {
+  handle("generation:reveal-master", async (input) => {
+    shell.showItemInFolder(await service.masterFile(idSchema.parse(input)));
+    return null;
+  });
+  handle("generation:providers", (input) => {
+    z.undefined().parse(input);
+    return [chatgptPlanProvider.descriptor, manualImportProvider.descriptor];
+  });
+  handle("generation:copy-prompt", (input) => {
+    const id = idSchema.parse(input);
+    const attempt = service
+      .snapshot()
+      .project.attempts.find((a) => a.id === id);
+    if (!attempt) throw new Error("Gespeicherten Versuch auswählen.");
+    clipboard.writeText(attempt.promptRevision.prompt);
+    return null;
+  });
+  handle("generation:open-external", async (input) => {
+    await shell.openExternal(validateExternalURL(input));
+    return null;
+  });
   handle("project:create", async (input) => {
     const name = z.string().trim().min(1).max(120).parse(input);
     const selected = await dialog.showOpenDialog(window, {
@@ -146,7 +172,11 @@ function createWindow() {
   });
   window.setMenuBarVisibility(false);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  window.webContents.on("will-navigate", (event) => event.preventDefault());
+  window.webContents.on("will-navigate", (event) => {
+    // Vite can navigate to its own entry URL while preparing dependencies.
+    if (!MAIN_WINDOW_VITE_DEV_SERVER_URL || event.url !== rendererURL())
+      event.preventDefault();
+  });
   window.webContents.on("will-redirect", (event) => event.preventDefault());
   void window.loadURL(rendererURL());
 }

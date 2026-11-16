@@ -7,11 +7,14 @@ import {
   commandSchema,
   MAX_IMAGE_BYTES,
   projectSchema,
+  parseProject,
   review,
   type Project,
   type Snapshot,
   type StagedImage,
 } from "../shared/domain";
+import { manualImportProvider } from "./services/providers/manualImport";
+import { draftFromAttempt } from "../shared/generation";
 import { createPresets } from "../shared/presets";
 
 export const hashBytes = (bytes: Uint8Array) =>
@@ -88,6 +91,7 @@ export class ProjectService {
   private directory = "";
   private project?: Project;
   private diskHash = "";
+  private legacyBytes?: Buffer;
   private staged?: { image: StagedImage; bytes: Buffer };
   constructor(
     private readonly decode: (
@@ -110,7 +114,7 @@ export class ProjectService {
       throw new Error("Bitte einen leeren Projektordner auswählen.");
     const now = new Date().toISOString();
     const project = projectSchema.parse({
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: randomUUID(),
       name,
       createdAt: now,
@@ -118,6 +122,7 @@ export class ProjectService {
       characters: [],
       masters: [],
       assets: [],
+      attempts: [],
       ...createPresets(randomUUID),
     });
     await fs.mkdir(path.join(root, "assets", "originals"), { recursive: true });
@@ -138,7 +143,8 @@ export class ProjectService {
       await safePath(root, manifestName),
       MAX_MANIFEST_BYTES,
     );
-    const project = projectSchema.parse(JSON.parse(bytes.toString("utf8")));
+    const raw: unknown = JSON.parse(bytes.toString("utf8"));
+    const project = parseProject(raw);
     for (const image of [...project.masters, ...project.assets]) {
       const contents = await readLimited(
         await safePath(root, image.file),
@@ -156,6 +162,10 @@ export class ProjectService {
       )
         throw new Error("Bildmetadaten stimmen nicht überein.");
     }
+    this.legacyBytes =
+      (raw as { schemaVersion: number }).schemaVersion === 1
+        ? bytes
+        : undefined;
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -214,6 +224,25 @@ export class ProjectService {
       this.diskHash
     )
       throw new Error("Projekt wurde extern geändert. Bitte erneut öffnen.");
+    if (this.legacyBytes) {
+      const backup = await safePath(this.directory, "laceframe.v1.backup.json");
+      try {
+        await fs.writeFile(backup, this.legacyBytes, {
+          flag: "wx",
+          mode: 0o444,
+        });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if (
+          !(await readLimited(backup, MAX_MANIFEST_BYTES)).equals(
+            this.legacyBytes,
+          )
+        )
+          throw new Error("Migrationssicherung existiert mit anderem Inhalt.", {
+            cause: error,
+          });
+      }
+    }
     const bytes = Buffer.from(JSON.stringify(validated, null, 2));
     if (bytes.length > MAX_MANIFEST_BYTES)
       throw new Error("Projektmanifest zu groß.");
@@ -233,6 +262,7 @@ export class ProjectService {
     } finally {
       await fs.rm(temp, { force: true });
     }
+    this.legacyBytes = undefined;
     this.project = validated;
     this.diskHash = hashBytes(bytes);
   }
@@ -245,6 +275,60 @@ export class ProjectService {
       return c;
     };
     switch (cmd.type) {
+      case "prepareAttempt": {
+        manualImportProvider.prepare(p, cmd.draft);
+        await this.preview(cmd.draft.masterId);
+        const { basePrompt, prompt, supplementaryInstructions, ...selection } =
+          cmd.draft;
+        const now = new Date().toISOString();
+        p.attempts.push({
+          ...selection,
+          id: randomUUID(),
+          createdAt: now,
+          promptRevision: {
+            id: randomUUID(),
+            compositionVersion: 1,
+            createdAt: now,
+            basePrompt,
+            prompt,
+            supplementaryInstructions,
+          },
+        });
+        break;
+      }
+      case "importResult": {
+        const attempt = p.attempts.find((a) => a.id === cmd.attemptId);
+        if (!attempt) throw new Error("Gespeicherten Versuch auswählen.");
+        if (p.assets.some((a) => a.attemptId === attempt.id))
+          throw new Error(
+            "Versuch hat bereits ein Ergebnis. Neuen Versuch anlegen; vorheriges Ergebnis bleibt erhalten.",
+          );
+        const request = manualImportProvider.prepare(
+          p,
+          draftFromAttempt(attempt),
+        );
+        await this.preview(attempt.masterId);
+        const image = await this.store("candidates", cmd.token);
+        const result = manualImportProvider.acceptImportedResult(
+          request,
+          image.file,
+        );
+        p.assets.push({
+          ...image,
+          id: randomUUID(),
+          characterId: attempt.characterId,
+          masterId: attempt.masterId,
+          masterSha256: attempt.masterSha256,
+          variantId: attempt.variantId,
+          action: attempt.action,
+          status: "candidate",
+          createdAt: result.createdAt,
+          attemptId: attempt.id,
+          promptRevisionId: attempt.promptRevision.id,
+          providerId: result.providerId,
+        });
+        break;
+      }
       case "addCharacter": {
         const id = randomUUID();
         p.characters.push({ id, name: cmd.name, profile: "portrait-artistic" });
@@ -338,9 +422,19 @@ export class ProjectService {
     }
     p.updatedAt = new Date().toISOString();
     await this.save(p);
-    if (cmd.type === "confirmMaster" || cmd.type === "importCandidate")
+    if (
+      cmd.type === "confirmMaster" ||
+      cmd.type === "importCandidate" ||
+      cmd.type === "importResult"
+    )
       this.staged = undefined;
     return this.snapshot();
+  }
+  async masterFile(id: string): Promise<string> {
+    const master = this.snapshot().project.masters.find((m) => m.id === id);
+    if (!master) throw new Error("Unbekannter Master.");
+    await this.preview(id);
+    return safePath(this.directory, master.file);
   }
   async preview(id: string): Promise<string> {
     const p = this.snapshot().project;
