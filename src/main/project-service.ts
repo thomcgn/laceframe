@@ -1111,13 +1111,6 @@ export class ProjectService {
           throw new Error(
             "Mindestens eine Rendering-Regel oder eigene Regel erforderlich.",
           );
-        if (!p.styleAnalyses.length && !this.legacyBytes) {
-          this.legacyBytes = await readLimited(
-            await safePath(this.directory, manifestName),
-            MAX_MANIFEST_BYTES,
-          );
-          this.legacyBackupName = "laceframe.v2.pre-style-analysis.backup.json";
-        }
         // Explicit adoption also binds these immutable originals as style-only references.
         const images = [];
         for (const ref of references) {

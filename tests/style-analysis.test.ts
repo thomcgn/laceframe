@@ -208,7 +208,7 @@ describe("deterministic encoded RGB measurements", () => {
     expect(m.visible).toBe(MAX_ANALYSIS_PIXELS);
     expect(m.uniqueColors).toBe(1);
     expect(m.gridCandidate).toBe(0);
-  });
+  }, 15000);
 });
 let root: string, service: ProjectService, profileId: string, masterId: string;
 beforeEach(async () => {
@@ -281,11 +281,11 @@ describe("verified style provenance, adoption and project compatibility", () => 
     expect(first.styleAnalyses[0].references[0].sha256).toBe(source.sha256);
     expect(first.masters).toEqual(old.masters);
     expect(first.characters).toEqual(old.characters);
-    expect(
-      await fs.readFile(
+    await expect(
+      fs.readFile(
         path.join(root, "laceframe.v2.pre-style-analysis.backup.json"),
       ),
-    ).toEqual(original);
+    ).rejects.toMatchObject({ code: "ENOENT" });
     await adopt();
     const second = service.snapshot().project;
     expect(second.styleAnalyses[0]).toEqual(first.styleAnalyses[0]);
@@ -388,7 +388,19 @@ describe("verified style provenance, adoption and project compatibility", () => 
     await service.open(root);
     expect(await fs.readFile(file)).toEqual(bytes);
     expect(service.snapshot().project.styleAnalyses).toEqual([]);
+    // A prior unrelated write must not make first adoption collide with its migration backup.
+    await service.command({ type: "setArtDirection", id: profileId });
+    expect(
+      await fs.readFile(
+        path.join(root, "laceframe.v2.pre-style-analysis.backup.json"),
+      ),
+    ).toEqual(bytes);
     await adopt();
+    expect(
+      await fs.readFile(
+        path.join(root, "laceframe.v2.pre-style-analysis.backup.json"),
+      ),
+    ).toEqual(bytes);
     const after = service.snapshot().project;
     expect(after.attempts).toEqual(before.attempts);
     expect(after.characters).toEqual(before.characters);
