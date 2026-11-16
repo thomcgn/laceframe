@@ -1,6 +1,6 @@
 # Codex Task 02B — Art Direction and Individual Expression Identity
 
-Read `AGENTS.md`, `docs/MVP_PLAN.md`, `docs/CHARACTER_EXPRESSIONS.md` and **`docs/ART_DIRECTION_AND_EXPRESSION_IDENTITY.md`** before changing code.
+Read `AGENTS.md`, `docs/MVP_PLAN.md`, `docs/CHARACTER_EXPRESSIONS.md` **`docs/ART_DIRECTION_AND_EXPRESSION_IDENTITY.md`** and **`docs/CODEX_02_UX_VALIDATION_2026-11-16.md`** before changing code.
 
 ## Goal
 
@@ -8,9 +8,9 @@ Create a reusable style layer for the game's look and per-character emotional pe
 
 ## Starting point and branch safety
 
-- Check current working tree and active feature branch first. The user has a working **native Codex App Server ImageGen** integration on `feat/task-02-create-workspace`, plus a possibly ongoing compact UI / comparison slider change.
-- **Do not reset, overwrite or rebase away in-progress work.** Avoid worktrees. If the UI pass is running, sequence this task after it is completed/merged. Work from latest integrated code on a new feature branch and PR.
-- Inspect actual source code and current schema before migration. Documentation on main can lag behind local feature code.
+- Check current working tree and active feature branch first. The user has a working **native Codex App Server ImageGen** integration on `feat/task-02-create-workspace`, plus the **implemented** compact Create UI, GenerationClock, sticky action bar and registered compare slider from the quality report. Do not reimplement them.
+- **Do not reset, overwrite or rebase away in-progress work.** Avoid worktrees. Verify the separate UI quality PR is integrated before implementing this task; do not build on stale main. Work from latest integrated code on a new feature branch and PR.
+- Inspect actual source and current schema (including optional timing/execution metadata on attempts) before migration. Documentation on main can lag behind local feature code.
 - No generated Ada Voss portraits or personal photos in public git.
 
 ## Deliverable A — project-wide style profiles
@@ -40,14 +40,14 @@ Create a reusable style layer for the game's look and per-character emotional pe
 ## Deliverable D — backward compatibility and UX
 
 - Migrate old projects safely and idempotently with backup on first write. Do not modify existing PNG/WebP bytes, SHA-256 hashes or review states.
-- Compact UI: project style selection under settings/character profile, expression-specific personal notes in an accordion, resolved prompt preview in Create.
+- Extend the **existing compact UI** with project style selection, expression-specific personal notes in an accordion and a resolved prompt preview. Preserve sticky Generate/Cancel, monotonic timer, registered compare slider, shared zoom/pan and overlay opacity.
 - Keep controls keyboard-accessible and working (no mock buttons).
 - Do not introduce unrelated animation/gesture generation; gestures such as hands grabbing hair are a separate future feature.
 
 ## Verification
 
-- Run lint/typecheck/unit tests and existing native + desktop smoke tests where possible.
-- Add targeted regression tests: existing Ada project migration, same style across two distinct characters, independent angry expression directions, non-overwrite, provider prompt/provenance, persisted revisions and malformed references.
+- Run lint/typecheck/unit tests and existing native + desktop smoke tests where possible. Reported baseline: 91 passed unit tests plus build, desktop/native/dev smoke. Rerun and report actual results; do not assume count stays 91.
+- Add regression tests: migrate existing Ada project with both old attempts lacking execution metadata and newer timed attempts; two characters sharing a style; independent anger performance; prompt provenance; persistence and malformed references. Retest existing GenerationClock, sticky cancellation, slider registration, shared transforms, overlay and native-provider capability gating.
 - Manual walkthrough: Ada master + Peter master, same selected style, different anger profile; generate one test per character **only upon explicit user action** (do not spend Codex image allowance in unattended automated tests).
 - PR must report exactly what passed, what was not tested and any current provider limitation.
 
