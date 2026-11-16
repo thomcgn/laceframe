@@ -138,6 +138,11 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       !p.variants.some((v) => v.id === attempt.variantId)
     )
       fail("Invalid attempt reference");
+    if (
+      attempt.execution?.status === "completed" &&
+      !p.assets.some((a) => a.attemptId === attempt.id)
+    )
+      fail("Completed generation has no result");
     if (p.assets.filter((a) => a.attemptId === attempt.id).length > 1)
       fail("An attempt has multiple results");
   }

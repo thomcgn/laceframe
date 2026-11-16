@@ -1,4 +1,5 @@
 // Protocol test double only. Never used by the application or as an AI fallback.
+import { setTimeout } from "node:timers";
 import readline from "node:readline";
 import process from "node:process";
 import fs from "node:fs";
@@ -63,22 +64,33 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
       event("error", { willRetry: true });
       return;
     }
+    event("turn/started", { turn: { id: "turn-test" } });
     if (scenario !== "missing-image") {
       event("item/started", { item: { type: "imageGeneration" } });
       if (scenario === "duplicate-image")
         event("item/started", { item: { type: "imageGeneration" } });
-      event("item/completed", {
-        item: {
-          type: "imageGeneration",
-          status: scenario === "image-failed" ? "failed" : "completed",
-          failure:
-            scenario === "image-failed" ? { type: "usageLimitExceeded" } : null,
-          savedPath:
-            scenario === "unsafe-path"
-              ? path.join(root, "private.png")
-              : path.join(root, "generated_images", thread, "result.png"),
-        },
-      });
+      const complete = () => {
+        event("item/completed", {
+          item: {
+            type: "imageGeneration",
+            status: scenario === "image-failed" ? "failed" : "completed",
+            failure:
+              scenario === "image-failed"
+                ? { type: "usageLimitExceeded" }
+                : null,
+            savedPath:
+              scenario === "unsafe-path"
+                ? path.join(root, "private.png")
+                : path.join(root, "generated_images", thread, "result.png"),
+          },
+        });
+        event("turn/completed", {
+          turn: { status: scenario === "turn-failed" ? "failed" : "completed" },
+        });
+      };
+      if (scenario === "delayed") setTimeout(complete, 1800);
+      else complete();
+      return;
     }
     event("turn/completed", {
       turn: { status: scenario === "turn-failed" ? "failed" : "completed" },

@@ -15,11 +15,60 @@ export const generationDraftSchema = z
     providerId: z.enum(["manual-import", "codex-native"]),
   })
   .strict();
+export const generationExecutionSchema = z
+  .object({
+    startedAt: z.iso.datetime(),
+    endedAt: z.iso.datetime().optional(),
+    durationMs: z.number().int().nonnegative(),
+    status: z.enum(["running", "completed", "failed", "cancelled"]),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if ((value.status === "running") === Boolean(value.endedAt))
+      ctx.addIssue({
+        code: "custom",
+        message: "Invalid execution completion metadata",
+      });
+  });
+export type GenerationExecution = z.infer<typeof generationExecutionSchema>;
+export type GenerationPhase =
+  | "preparing"
+  | "checking-account"
+  | "checking-capability"
+  | "starting-model"
+  | "processing"
+  | "generating-image"
+  | "validating-image"
+  | "importing"
+  | "stopping";
+export function formatDuration(milliseconds: number): string {
+  const seconds = Math.floor(
+    Math.max(0, Number.isFinite(milliseconds) ? milliseconds : 0) / 1000,
+  );
+  return [
+    Math.floor(seconds / 3600),
+    Math.floor(seconds / 60) % 60,
+    seconds % 60,
+  ]
+    .map((v) => String(v).padStart(2, "0"))
+    .join(":");
+}
+export function executionLabel(
+  value: GenerationExecution,
+  live = false,
+): string {
+  if (value.status === "running")
+    return live
+      ? `Laufzeit ${formatDuration(value.durationMs)}`
+      : "Nicht abgeschlossen · keine gesicherte Endzeit";
+  return `${value.status === "completed" ? "Generiert" : value.status === "failed" ? "Fehlgeschlagen" : "Abgebrochen"} in ${formatDuration(value.durationMs)}`;
+}
 export const attemptSchema = generationDraftSchema
   .omit({ basePrompt: true, prompt: true, supplementaryInstructions: true })
   .extend({
     id: z.uuid(),
     createdAt: z.iso.datetime(),
+    execution: generationExecutionSchema.optional(),
     promptRevision: z
       .object({
         id: z.uuid(),
@@ -149,8 +198,10 @@ export function draftFromAttempt(attempt: GenerationAttempt): GenerationDraft {
     id: _id,
     createdAt: _created,
     promptRevision,
+    execution: _execution,
     ...selection
   } = attempt;
+  void _execution;
   void _id;
   void _created;
   return {
@@ -183,4 +234,7 @@ export type CodexStatus = {
     | "cancelled";
   message: string;
   attemptId?: string;
+  available?: boolean;
+  phase?: GenerationPhase;
+  execution?: GenerationExecution;
 };

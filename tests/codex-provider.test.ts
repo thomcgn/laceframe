@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, it, expect, describe } from "vitest";
+import { beforeEach, afterEach, it, expect, describe, vi } from "vitest";
 import { spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
 import os from "node:os";
@@ -8,6 +8,7 @@ import { CodexImageGenerationProvider } from "../src/main/services/providers/cod
 import { type SpawnServer } from "../src/main/services/codex/app-server";
 import { readGeneratedImage } from "../src/main/services/codex/result-file";
 import { ProjectService, hashBytes } from "../src/main/project-service";
+import { GenerationClock } from "../src/main/services/generation-clock";
 import { GenerationController } from "../src/main/services/generation-controller";
 import {
   draftFromAttempt,
@@ -187,6 +188,12 @@ describe("native project ingestion", () => {
     const reopened = (await new ProjectService().open(snapshot.directory))
       .project;
     expect(reopened.assets[0].status).toBe("approved");
+    expect(reopened.attempts[0].execution).toMatchObject({
+      status: "completed",
+      endedAt: expect.any(String),
+      durationMs: expect.any(Number),
+    });
+    expect(controller.status().available).toBe(true);
     expect(draftFromAttempt(reopened.attempts[0])).toEqual(draft);
     expect(await fs.readFile(path.join(root, "exits"), "utf8")).toContain(
       "closed",
@@ -205,6 +212,11 @@ describe("native project ingestion", () => {
     await wait(c);
     expect(c.status().state).toBe("failed");
     expect(service.snapshot().project.attempts).toHaveLength(1);
+    expect(service.snapshot().project.attempts[0].execution).toMatchObject({
+      status: "failed",
+      endedAt: expect.any(String),
+    });
+    expect(c.status().available).toBe(true);
     expect(service.snapshot().project.assets).toHaveLength(0);
   });
   it("rejects concurrent jobs and cancels without importing a late result", async () => {
@@ -219,10 +231,93 @@ describe("native project ingestion", () => {
       await new Promise((r) => setTimeout(r, 10));
     }
     expect((await c.cancel()).state).toBe("cancelled");
+    expect(service.snapshot().project.attempts[0].execution).toMatchObject({
+      status: "cancelled",
+      endedAt: expect.any(String),
+    });
+    expect(c.status().available).toBe(true);
     expect(service.snapshot().project.assets).toHaveLength(0);
     expect(await fs.readFile(path.join(root, "exits"), "utf8")).toContain(
       "closed",
     );
+  });
+  it("reports live monotonic time and actual event stages, then permits explicit repeated generation", async () => {
+    let now = 100;
+    const c = new GenerationController(
+      service,
+      makeProvider("delayed", 5000),
+      () => new GenerationClock(() => now),
+    );
+    await c.start(draft);
+    for (let i = 0; i < 100 && c.status().phase !== "generating-image"; i++)
+      await new Promise((r) => setTimeout(r, 10));
+    expect(c.status().phase).toBe("generating-image");
+    now = 4100;
+    expect(c.status().execution).toMatchObject({
+      status: "running",
+      durationMs: 4000,
+    });
+    const disk = await new ProjectService().open(service.snapshot().directory);
+    expect(disk.project.attempts[0].execution).toMatchObject({
+      status: "running",
+    });
+    expect(disk.project.assets).toHaveLength(0);
+    await wait(c);
+    expect(c.status().execution).toMatchObject({
+      status: "completed",
+      durationMs: 4000,
+    });
+    now = 99999;
+    expect(c.status().execution?.durationMs).toBe(4000);
+    await fs.writeFile(path.join(root, "scenario"), "image-failed");
+    await c.start(draft);
+    await wait(c);
+    expect(c.status().state).toBe("failed");
+    expect(c.status().available).toBe(true);
+    await fs.writeFile(path.join(root, "scenario"), "hang");
+    await c.start(draft);
+    await c.cancel();
+    expect(c.status().state).toBe("cancelled");
+    await fs.writeFile(path.join(root, "scenario"), "success");
+    await c.start(draft);
+    await wait(c);
+    expect(c.status().state).toBe("completed");
+    expect(
+      service.snapshot().project.attempts.map((a) => a.execution?.status),
+    ).toEqual(["completed", "failed", "cancelled", "completed"]);
+    expect(service.snapshot().project.assets).toHaveLength(2);
+  });
+  it("does not persist success when the final import fails", async () => {
+    const c = new GenerationController(service, makeProvider());
+    vi.spyOn(service, "importGeneratedResult").mockImplementationOnce(
+      async (_id, _bytes, complete) => {
+        complete?.();
+        throw new Error("Atomic save failed");
+      },
+    );
+    await c.start(draft);
+    await wait(c);
+    expect(c.status()).toMatchObject({
+      state: "failed",
+      available: true,
+      execution: { status: "failed" },
+    });
+    const reopened = await new ProjectService().open(
+      service.snapshot().directory,
+    );
+    expect(reopened.project.attempts[0].execution?.status).toBe("failed");
+    expect(reopened.project.assets).toHaveLength(0);
+  });
+  it("rejects completed metadata without a corresponding imported image", async () => {
+    const saved = await service.command({ type: "prepareAttempt", draft });
+    await expect(
+      service.recordGeneration(saved.project.attempts[0].id, {
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        durationMs: 0,
+        status: "completed",
+      }),
+    ).rejects.toThrow();
   });
   it("does not expose native ingestion as a renderer command", async () => {
     await expect(

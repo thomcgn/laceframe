@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import type {
   Command,
@@ -9,6 +10,7 @@ import { MAX_IMAGE_BYTES } from "../../shared/domain";
 import type { Result } from "../../shared/bridge";
 import {
   CHATGPT_URL,
+  executionLabel,
   sameDraft,
   composePrompt,
   draftFromAttempt,
@@ -20,7 +22,7 @@ import {
   type ProviderDescriptor,
   type CodexStatus,
 } from "../../shared/generation";
-import { ImagePreview } from "../components/ImagePreview";
+import { MasterCandidateCompare } from "../components/MasterCandidateCompare";
 import { PromptComposer } from "../components/PromptComposer";
 
 type Perform = <T>(
@@ -37,6 +39,7 @@ export function CreateView({
   onCharacters,
   onInspect,
   onRunningChange,
+  visible,
 }: {
   snapshot: Snapshot;
   busy: boolean;
@@ -46,6 +49,7 @@ export function CreateView({
   onCharacters: () => void;
   onInspect: (id: string) => void;
   onRunningChange: (running: boolean) => void;
+  visible: boolean;
 }) {
   const p = snapshot.project;
   const character = p.characters.find((c) => c.id === p.selectedCharacterId);
@@ -106,7 +110,6 @@ export function CreateView({
   const asset = active
     ? p.assets.find((a) => a.attemptId === active.id)
     : undefined;
-  const [zoom, setZoom] = useState<number | "fit">("fit");
   const [providers, setProviders] = useState<ProviderDescriptor[]>([]);
   const [providerError, setProviderError] = useState("");
   useEffect(() => {
@@ -231,7 +234,8 @@ export function CreateView({
       : undefined;
   const valid = Boolean(
     (provider?.capabilities.canImportResult ||
-      (provider?.capabilities.canGenerate && codex.state !== "running")) &&
+      ((codex.available ?? provider?.capabilities.canGenerate) &&
+        codex.state !== "running")) &&
       draft &&
       generationDraftSchema.safeParse(draft).success &&
       composer.pendingBase === undefined,
@@ -381,6 +385,26 @@ export function CreateView({
   function command(cmd: Command, notice: string) {
     void perform(() => window.laceframe.command(cmd), onSnapshot, notice);
   }
+  const running = codex.state === "running";
+  const timing =
+    codex.attemptId === activeId
+      ? (codex.execution ?? active?.execution)
+      : active?.execution;
+  const slot = document.getElementById("create-action-slot");
+  const codexLabels = {
+    "not-installed": "Codex nicht installiert",
+    "not-authenticated": "Nicht angemeldet",
+    unavailable: "ImageGen nicht verfügbar",
+    ready: "Codex bereit",
+    running: "Generierung läuft",
+    completed: "Generierung abgeschlossen",
+    failed: "Generierung fehlgeschlagen",
+    cancelled: "Generierung abgebrochen",
+  };
+  const [promptOpen, setPromptOpen] = useState(false);
+  useEffect(() => {
+    if (composer.pendingBase !== undefined) setPromptOpen(true);
+  }, [composer.pendingBase]);
   return (
     <div
       className="create-view"
@@ -390,72 +414,81 @@ export function CreateView({
         e.stopPropagation();
       }}
     >
-      <div className="create-intro">
-        <div>
-          <p className="eyebrow">MASTER → PROMPT → BILD → FREIGABE</p>
-          <h2>Gleicher Charakter. Neuer Ausdruck.</h2>
-        </div>
-        <span className="badge">
-          {provider?.label ?? "Anbieter wird geladen …"}
-        </span>
-      </div>
-      <section className="panel codex-controls">
-        <label>
-          Anbieter
-          <select
-            aria-label="Create Anbieter"
-            value={providerId}
-            onChange={(e) => {
-              setProviderId(e.target.value as "manual-import" | "codex-native");
-              setActiveId("");
-            }}
-          >
-            <option value="manual-import">Manueller Import</option>
-            <option value="codex-native">Codex · native Bildbearbeitung</option>
-          </select>
-        </label>
-        <p role="status" aria-label="Codex Status">
-          <strong>
-            {
-              {
-                "not-installed": "Codex nicht installiert",
-                "not-authenticated": "Nicht angemeldet",
-                unavailable: "ImageGen nicht verfügbar",
-                ready: "Codex bereit",
-                running: "Generierung läuft",
-                completed: "Generierung abgeschlossen",
-                failed: "Generierung fehlgeschlagen",
-                cancelled: "Generierung abgebrochen",
-              }[codex.state]
-            }
-          </strong>{" "}
-          · {codex.message}
-        </p>
-        <div className="button-row">
-          <button onClick={checkCodex}>Codex-Verfügbarkeit prüfen</button>
-          {providerId === "codex-native" && (
-            <button
-              className="primary"
-              disabled={
-                !valid ||
-                (codex.state !== "ready" && codex.state !== "completed")
-              }
-              onClick={generate}
-            >
-              Mit Masterreferenz generieren
-            </button>
-          )}
-        </div>
-        {providerId === "codex-native" && (
-          <p className="muted">
-            Übermittelt nach deinem Klick den freigegebenen Master und diesen
-            Prompt an Codex. Nutzt dein Codex-Kontingent. Genau ein Auftrag;
-            keine automatischen Wiederholungen. Das Ergebnis wird in
-            Originalauflösung importiert und muss geprüft werden. Bestehende
-            Ergebnisse bleiben im Verlauf.
-          </p>
+      {slot &&
+        (visible || running) &&
+        createPortal(
+          <div className="create-action-bar">
+            <div className="job-status">
+              <p role="status" aria-label="Codex Status">
+                <strong>
+                  {providerId === "codex-native" || running
+                    ? codexLabels[codex.state]
+                    : "Manueller Ergebnisimport"}
+                </strong>
+                <span>
+                  {providerId === "codex-native" || running
+                    ? codex.message
+                    : "PNG/WebP ablegen oder importieren · Prompt und Master bleiben zugeordnet."}
+                </span>
+              </p>
+              {timing && (
+                <output
+                  aria-label="Generierungszeit"
+                  className="generation-time"
+                >
+                  {executionLabel(timing, running)}
+                </output>
+              )}
+              {providerId === "codex-native" && (
+                <small>
+                  Master + Prompt an Codex · nutzt dein Codex-Kontingent.
+                </small>
+              )}
+            </div>
+            <div className="button-row">
+              {providerId === "codex-native" && (
+                <button
+                  className="primary"
+                  disabled={busy || !valid || running}
+                  onClick={generate}
+                >
+                  Mit Masterreferenz generieren
+                </button>
+              )}
+              {running && (
+                <button
+                  className="danger"
+                  disabled={codex.phase === "stopping"}
+                  onClick={() =>
+                    void perform(
+                      async () => {
+                        await unwrap(window.laceframe.cancelGeneration());
+                        return window.laceframe.generationStatus();
+                      },
+                      (value) => {
+                        setCodex(value.status);
+                        onSnapshot(value.snapshot);
+                        setActiveId(value.status.attemptId ?? "");
+                      },
+                    )
+                  }
+                >
+                  Generierung abbrechen
+                </button>
+              )}
+              {providerId === "manual-import" && (
+                <button
+                  className="primary"
+                  disabled={busy || !valid || running}
+                  onClick={() => requestImport()}
+                >
+                  {asset ? "Ergebnis ersetzen …" : "Ergebnis importieren …"}
+                </button>
+              )}
+            </div>
+          </div>,
+          slot,
         )}
-      </section>
       {providerError && (
         <p role="alert" className="error">
           {providerError}
@@ -463,14 +496,11 @@ export function CreateView({
       )}
       {!character && (
         <div className="prompt-conflict">
-          <p>
-            Zuerst eine Figur anlegen und ihren freigegebenen Master
-            importieren.
-          </p>
+          <p>Figur anlegen und ihren freigegebenen Master importieren.</p>
           <button onClick={onCharacters}>Zu Characters</button>
         </div>
       )}
-      <div className="create-options">
+      <div className="create-header">
         <label>
           Figur
           <select
@@ -502,15 +532,34 @@ export function CreateView({
           </select>
         </label>
         <label>
-          Emotionsfamilie
+          Master
+          <select
+            aria-label="Create Masterversion"
+            value={master?.id ?? ""}
+            onChange={(e) => editOptions(() => setMasterId(e.target.value))}
+          >
+            <option disabled value="">
+              Master wählen
+            </option>
+            {masters.map((m) => (
+              <option key={m.id} value={m.id}>
+                V{m.version} · {m.width} × {m.height} · gesperrt
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Emotion
           <select
             aria-label="Create Familie"
             value={family?.id ?? ""}
             onChange={(e) =>
               editOptions(() => {
                 setFamilyId(e.target.value);
-                const v = p.variants.find((v) => v.familyId === e.target.value);
-                setVariantId(v?.id ?? "");
+                setVariantId(
+                  p.variants.find((v) => v.familyId === e.target.value)?.id ??
+                    "",
+                );
               })
             }
           >
@@ -548,241 +597,133 @@ export function CreateView({
           </select>
         </label>
         <label>
-          Stimmaktion
+          Anbieter
           <select
-            aria-label="Create Stimmaktion"
-            value={action}
-            onChange={(e) =>
-              editOptions(() => setAction(e.target.value as VocalAction))
-            }
+            aria-label="Create Anbieter"
+            value={providerId}
+            onChange={(e) => {
+              setProviderId(e.target.value as "manual-import" | "codex-native");
+              setActiveId("");
+            }}
           >
-            <option value="silent">Still</option>
-            <option value="speaking">Sprechend</option>
-            <option value="shouting">Rufend</option>
+            <option value="manual-import">Manueller Import</option>
+            <option value="codex-native">Codex · ImageGen</option>
           </select>
         </label>
-        <label>
-          Intensität · optional
-          <input
-            aria-label="Create Intensität"
-            type="number"
-            min="0"
-            max="1"
-            step=".05"
-            value={intensity ?? ""}
-            onChange={(e) =>
-              editOptions(() =>
-                setIntensity(
-                  e.target.value === "" ? undefined : Number(e.target.value),
-                ),
-              )
-            }
-          />
-        </label>
       </div>
-      <div className="create-images">
-        <section className="panel create-reference">
-          <div className="section-head">
-            <h2>Masterreferenz</h2>
-            <span className="badge approved">
-              {master ? "Freigegeben · gesperrt" : "Master fehlt"}
-            </span>
-          </div>
-          <label>
-            Masterversion
-            <select
-              aria-label="Create Masterversion"
-              value={master?.id ?? ""}
-              onChange={(e) => editOptions(() => setMasterId(e.target.value))}
-            >
-              <option disabled value="">
-                Master wählen
-              </option>
-              {masters.map((m) => (
-                <option key={m.id} value={m.id}>
-                  Master V{m.version} · {m.width} × {m.height}
-                </option>
-              ))}
-            </select>
-          </label>
-          <ImagePreview
-            id={master?.id}
-            caption="Create · Masterreferenz"
-            zoom={zoom}
-          />
-          {master ? (
-            <p className="image-meta">
-              {master.width} × {master.height} px ·{" "}
-              {master.format.toUpperCase()} · Originalauflösung
-            </p>
-          ) : (
-            <button onClick={onCharacters}>
-              Freigegebenen Master importieren
-            </button>
-          )}
-          {master && (
-            <button
-              onClick={() =>
-                void perform(
-                  () => window.laceframe.revealMaster(master.id),
-                  () => {},
-                  "Referenz im Dateimanager angezeigt. Das Bild manuell im Browser beifügen.",
-                )
-              }
-            >
-              Referenz im Ordner zeigen
-            </button>
-          )}
-          <p className="reference-reminder">
-            {providerId === "codex-native"
-              ? "Codex erhält beim Generieren eine unveränderte Kopie dieses Masters als tatsächliche Bildreferenz."
-              : "Das tatsächliche Masterbild in ChatGPT manuell beifügen. Dateiname oder Prompt allein reichen nicht als Referenz."}
+      <section
+        className={`create-result ${dragging ? "drag-active" : ""}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDragging(false);
+          if (busy || running) return;
+          if (e.dataTransfer.files.length !== 1) {
+            void perform(
+              async () => ({
+                ok: false,
+                error: "Bitte genau ein PNG/WebP ablegen.",
+              }),
+              () => {},
+            );
+            return;
+          }
+          requestImport(e.dataTransfer.files[0]);
+        }}
+      >
+        <div className="comparison-heading">
+          <h2>Master / Kandidat</h2>
+          <span className={`badge ${asset?.status ?? ""}`}>{status}</span>
+        </div>
+        <MasterCandidateCompare master={master} candidate={asset} />
+        {!master && (
+          <button onClick={onCharacters}>
+            Freigegebenen Master importieren
+          </button>
+        )}
+        {!asset && (
+          <p className="drop-hint">
+            PNG/WebP hier ablegen · bis 32 MiB · oder mit Masterreferenz
+            generieren
           </p>
-        </section>
-        <section
-          className={`panel create-result ${dragging ? "drag-active" : ""}`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setDragging(false);
-            if (busy) return;
-            if (e.dataTransfer.files.length !== 1) {
-              void perform(
-                async () => ({
-                  ok: false,
-                  error: "Bitte genau ein PNG/WebP ablegen.",
-                }),
-                () => {},
-              );
-              return;
-            }
-            requestImport(e.dataTransfer.files[0]);
-          }}
-        >
-          <div className="section-head">
-            <h2>Dein Ergebnis</h2>
-            <span className={`badge ${asset?.status ?? ""}`}>{status}</span>
-          </div>
-          <label>
-            Gemeinsamer Zoom
-            <select
-              aria-label="Create Zoom"
-              value={zoom}
-              onChange={(e) =>
-                setZoom(
-                  e.target.value === "fit" ? "fit" : Number(e.target.value),
-                )
-              }
-            >
-              <option value="fit">Einpassen</option>
-              {[25, 50, 100, 200, 400].map((z) => (
-                <option key={z} value={z}>
-                  {z}% · native Pixel
-                </option>
-              ))}
-            </select>
-          </label>
-          <ImagePreview
-            id={asset?.id}
-            caption="Create · Ergebnisvorschau"
-            zoom={zoom}
-          />
-          {!asset && (
-            <p className="drop-hint">PNG oder WebP hier ablegen · bis 32 MiB</p>
-          )}
-          {asset && (
-            <>
-              <p className="image-meta">
-                {asset.width} × {asset.height} px · {asset.format.toUpperCase()}{" "}
-                · Revision {active?.promptRevision.id.slice(0, 8)}
-              </p>
-              {master &&
-                (master.width !== asset.width ||
-                  master.height !== asset.height) && (
-                  <p className="warning">
-                    Abweichende Abmessungen: Master {master.width} ×{" "}
-                    {master.height}, Ergebnis {asset.width} × {asset.height}.
-                    Keine automatische Skalierung.
-                  </p>
-                )}
-              {!matches && (
-                <p className="warning">
-                  Dieses Bild gehört zur gespeicherten Revision. Neue
-                  Promptänderungen verändern seine Herkunft nicht.
-                </p>
-              )}
-            </>
-          )}
-          {replace ? (
-            <div className="prompt-conflict" role="alert">
-              <strong>Ergebnis ersetzen?</strong>
-              <p>
-                Ein neuer Versuch wird angelegt. Das bisherige Bild und seine
-                Prompt-Revision bleiben im Verlauf erhalten.
-              </p>
-              <div className="button-row">
-                <button onClick={() => setReplace(null)}>Abbrechen</button>
-                <button
-                  className="primary"
-                  disabled={!valid || providerId !== "manual-import"}
-                  onClick={() => importImage(replace.file, true)}
-                >
-                  Ersetzen bestätigen
-                </button>
-              </div>
-            </div>
-          ) : (
+        )}
+        {asset && !matches && (
+          <p className="warning">
+            Dieses Bild gehört zur gespeicherten Revision. Promptänderungen
+            verändern seine Herkunft nicht.
+          </p>
+        )}
+        {replace && (
+          <div className="prompt-conflict" role="alert">
+            <strong>Ergebnis ersetzen?</strong>
+            <p>
+              Ein neuer Versuch wird angelegt. Das bisherige Bild und seine
+              Prompt-Revision bleiben im Verlauf erhalten.
+            </p>
             <div className="button-row">
+              <button onClick={() => setReplace(null)}>Abbrechen</button>
               <button
                 className="primary"
                 disabled={!valid || providerId !== "manual-import"}
-                onClick={() => requestImport()}
+                onClick={() => importImage(replace.file, true)}
               >
-                {asset ? "Ergebnis ersetzen …" : "Ergebnis importieren …"}
+                Ersetzen bestätigen
               </button>
-              {asset && (
-                <button onClick={() => onInspect(asset.id)}>
-                  An Inspect senden
+            </div>
+          </div>
+        )}
+        {asset && (
+          <div className="comparison-review button-row">
+            <button onClick={() => onInspect(asset.id)}>
+              An Inspect senden
+            </button>
+            {asset.status === "candidate" && (
+              <>
+                <button
+                  className="danger"
+                  onClick={() =>
+                    command(
+                      { type: "review", id: asset.id, status: "rejected" },
+                      "Kandidat verworfen. Verlauf und Original bleiben erhalten.",
+                    )
+                  }
+                >
+                  Kandidat verwerfen
                 </button>
-              )}
-            </div>
-          )}
-          {asset?.status === "candidate" && (
-            <div className="button-row review-actions">
-              <button
-                className="danger"
-                onClick={() =>
-                  command(
-                    { type: "review", id: asset.id, status: "rejected" },
-                    "Kandidat verworfen. Verlauf und Original bleiben erhalten.",
-                  )
-                }
-              >
-                Kandidat verwerfen
-              </button>
-              <button
-                className="primary"
-                onClick={() =>
-                  command(
-                    { type: "review", id: asset.id, status: "approved" },
-                    "Als Expression freigegeben.",
-                  )
-                }
-              >
-                Als Expression freigeben
-              </button>
-            </div>
-          )}
-        </section>
-      </div>
-      <div className="create-bottom">
-        <section className="panel">
+                <button
+                  className="primary"
+                  onClick={() =>
+                    command(
+                      { type: "review", id: asset.id, status: "approved" },
+                      "Als Expression freigegeben.",
+                    )
+                  }
+                >
+                  Als Expression freigeben
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </section>
+      <div className="create-drawers">
+        <details
+          className="panel prompt-drawer"
+          open={promptOpen}
+          onToggle={(e) => setPromptOpen(e.currentTarget.open)}
+        >
+          <summary>
+            Prompteditor{composer.edited ? " · eigene Bearbeitung" : ""}
+            {composer.pendingBase !== undefined
+              ? " · Auswahländerung bestätigen"
+              : ""}
+          </summary>
           <label>
             Ergänzende Anweisung
             <textarea
@@ -804,40 +745,80 @@ export function CreateView({
             <button disabled={!valid} onClick={() => savePrompt(false)}>
               Prompt kopieren
             </button>
-            <button
-              className="primary"
-              disabled={!valid}
-              onClick={() => savePrompt(true)}
-            >
+            <button disabled={!valid} onClick={() => savePrompt(true)}>
               Prompt kopieren & ChatGPT öffnen
             </button>
           </div>
           <p className="muted">
-            Manueller Browser-Weg: Der Browser öffnet sich ausschließlich nach
-            deinem Klick. Referenzbild und Prompt fügst du dort selbst ein. Die
-            direkte Codex-Generierung hat einen eigenen ausdrücklichen
-            Startknopf.
+            Browser-Weg: Prompt und tatsächliches Masterbild selbst beifügen.
+            Native Codex-Generierung übermittelt beides erst nach dem
+            Generieren-Klick und nutzt dein Codex-Kontingent.
           </p>
-          {!master && (
-            <p className="warning">
-              Prompt-Aktionen und Ergebnisimport benötigen einen freigegebenen
-              Master.
-            </p>
-          )}
-          <details>
-            <summary>Erweitert · Herkunft und Varianten-Vorlage</summary>
-            <p className="mono">
-              Master-ID: {master?.id ?? "—"}
-              <br />
-              SHA-256: {master?.sha256 ?? "—"}
-              <br />
-              Anbieter: {providerId} · Masterreferenz:{" "}
-              {provider?.capabilities.supportsReferenceImages
-                ? "unterstützt"
-                : "manuell beifügen"}{" "}
-              · Masken: nicht unterstützt
-            </p>
-            {variant && (
+        </details>
+        <details className="panel create-inspector">
+          <summary>Inspector · Stimmaktion, Intensität und Herkunft</summary>
+          <div className="inspector-options">
+            <label>
+              Stimmaktion
+              <select
+                aria-label="Create Stimmaktion"
+                value={action}
+                onChange={(e) =>
+                  editOptions(() => setAction(e.target.value as VocalAction))
+                }
+              >
+                <option value="silent">Still</option>
+                <option value="speaking">Sprechend</option>
+                <option value="shouting">Rufend</option>
+              </select>
+            </label>
+            <label>
+              Intensität · optional
+              <input
+                aria-label="Create Intensität"
+                type="number"
+                min="0"
+                max="1"
+                step=".05"
+                value={intensity ?? ""}
+                onChange={(e) =>
+                  editOptions(() =>
+                    setIntensity(
+                      e.target.value === ""
+                        ? undefined
+                        : Number(e.target.value),
+                    ),
+                  )
+                }
+              />
+            </label>
+          </div>
+          <p className="mono">
+            Master-ID: {master?.id ?? "—"}
+            <br />
+            SHA-256: {master?.sha256 ?? "—"}
+            <br />
+            Anbieter: {providerId} · Masken: nicht unterstützt
+          </p>
+          <div className="button-row">
+            <button onClick={checkCodex}>Codex-Verfügbarkeit prüfen</button>
+            {master && (
+              <button
+                onClick={() =>
+                  void perform(
+                    () => window.laceframe.revealMaster(master.id),
+                    () => {},
+                    "Referenz im Dateimanager angezeigt. Das Bild manuell im Browser beifügen.",
+                  )
+                }
+              >
+                Referenz im Ordner zeigen
+              </button>
+            )}
+          </div>
+          {variant && (
+            <details>
+              <summary>Erweitert · Herkunft und Varianten-Vorlage</summary>
               <form
                 key={variant.id + variant.prompt + variant.label}
                 onSubmit={(e) => {
@@ -871,28 +852,26 @@ export function CreateView({
                     name="prompt"
                     aria-label="Create Vorlagenanweisung"
                     maxLength={8000}
-                    rows={4}
+                    rows={3}
                     defaultValue={variant.prompt}
                   />
                 </label>
                 <button type="submit">Varianten-Vorlage speichern</button>
               </form>
-            )}
-            <p className="muted">
-              Weitere Familien und Varianten lassen sich unter Expressions
-              anlegen.
+            </details>
+          )}
+          {timing && (
+            <p className="mono">
+              Start: {timing.startedAt}
+              <br />
+              Ende: {timing.endedAt ?? "nicht gesichert"}
+              <br />
+              Dauer: {timing.durationMs} ms · {timing.status}
             </p>
-          </details>
-        </section>
-        <section className="panel attempt-history">
-          <div className="section-head">
-            <h2>Versuchsverlauf</h2>
-            <span className="badge">{attempts.length}</span>
-          </div>
-          <p className="muted">
-            Jede gespeicherte Revision und jeder Import bleiben erhalten. Nach
-            Neustart wieder verfügbar.
-          </p>
+          )}
+        </details>
+        <details className="panel attempt-history">
+          <summary>Versuchsverlauf · {attempts.length}</summary>
           {!attempts.length && <p>Noch kein Versuch gespeichert.</p>}
           {[...attempts].reverse().map((a) => {
             const image = p.assets.find((image) => image.attemptId === a.id);
@@ -923,15 +902,20 @@ export function CreateView({
                         approved: "Freigegeben",
                         rejected: "Abgelehnt",
                       }[image.status]
-                    : "Bildimport ausstehend"}
+                    : a.providerId === "codex-native"
+                      ? "Kein bestätigtes Bild"
+                      : "Bildimport ausstehend"}
                 </span>
                 <small>
                   {new Date(a.createdAt).toLocaleString("de-DE")} · {a.action}
+                  {a.execution
+                    ? ` · ${executionLabel(a.execution, running && codex.attemptId === a.id)}`
+                    : ""}
                 </small>
               </button>
             );
           })}
-        </section>
+        </details>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import type {
   GenerationResult,
   ProviderDescriptor,
   CodexStatus,
+  GenerationPhase,
 } from "../../../shared/generation";
 import { manualImportProvider } from "./manualImport";
 import {
@@ -58,6 +59,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
     state: "unavailable",
     message: "Codex-Verfügbarkeit noch nicht geprüft.",
   };
+  onProgress?: (phase: GenerationPhase) => void;
   private client?: AppServerClient;
   private cancelled = false;
   private threadId?: string;
@@ -78,6 +80,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
       capabilities: { experimentalApi: true },
     });
     client.notify("initialized");
+    this.onProgress?.("checking-account");
     const { account } = accountSchema.parse(
       await client.request("account/read", { refreshToken: false }),
     );
@@ -86,6 +89,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         "not-authenticated",
         "Nicht mit ChatGPT angemeldet. Im Terminal „codex login“ ausführen; keine API-Keys verwenden.",
       );
+    this.onProgress?.("checking-capability");
     const features = featuresSchema.parse(
       await client.request("experimentalFeature/list", {}),
     );
@@ -94,9 +98,14 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         "unavailable",
         "ImageGen ist in dieser Codex-Installation nicht verfügbar oder deaktiviert.",
       );
+    this.descriptor.capabilities.canGenerate = true;
   }
   private setError(error: unknown) {
-    this.descriptor.capabilities.canGenerate = false;
+    if (
+      error instanceof CodexError &&
+      ["not-installed", "not-authenticated", "unavailable"].includes(error.kind)
+    )
+      this.descriptor.capabilities.canGenerate = false;
     this.status = {
       state: error instanceof CodexError ? error.kind : "failed",
       message:
@@ -189,6 +198,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         "master" + path.extname(request.referenceAssetPath),
       );
       await fs.writeFile(reference, source, { flag: "wx", mode: 0o444 });
+      this.onProgress?.("starting-model");
       const models = modelsSchema.parse(
         await client.request("model/list", { includeHidden: false }),
       );
@@ -248,6 +258,12 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
           if (!parsed.success) return;
           const data = parsed.data;
           if (data.threadId && data.threadId !== this.threadId) return;
+          if (method === "turn/started") this.onProgress?.("processing");
+          if (
+            method === "item/started" &&
+            data.item?.type === "imageGeneration"
+          )
+            this.onProgress?.("generating-image");
           if (method === "error") {
             finish(
               new CodexError(
@@ -310,6 +326,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
               return;
             }
             image = data.item.savedPath;
+            this.onProgress?.("validating-image");
           }
           if (method === "turn/completed")
             finish(
