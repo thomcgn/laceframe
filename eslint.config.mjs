@@ -1,0 +1,25 @@
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+export default tseslint.config(
+  { ignores: ["node_modules/**", "out/**", ".vite/**", "artifacts/**"] },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ["scripts/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+    languageOptions: {
+      globals: {
+        require: "readonly",
+        process: "readonly",
+        console: "readonly",
+        setTimeout: "readonly",
+        Buffer: "readonly",
+        window: "readonly",
+        document: "readonly",
+        DataTransfer: "readonly",
+        File: "readonly",
+        DragEvent: "readonly",
+      },
+    },
+  },
+);

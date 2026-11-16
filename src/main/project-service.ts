@@ -1,0 +1,357 @@
+import { createHash, randomUUID } from "node:crypto";
+import * as fs from "node:fs/promises";
+import path from "node:path";
+import { imageSize } from "image-size";
+import {
+  assetFile,
+  commandSchema,
+  MAX_IMAGE_BYTES,
+  projectSchema,
+  review,
+  type Project,
+  type Snapshot,
+  type StagedImage,
+} from "../shared/domain";
+import { createPresets } from "../shared/presets";
+
+export const hashBytes = (bytes: Uint8Array) =>
+  createHash("sha256").update(bytes).digest("hex");
+const manifestName = "laceframe.json";
+const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
+const exists = async (p: string) =>
+  fs.lstat(p).then(
+    () => true,
+    (e: NodeJS.ErrnoException) => {
+      if (e.code === "ENOENT") return false;
+      throw e;
+    },
+  );
+
+// Reject symlinks at EVERY component, including the final file; never accept renderer paths.
+export async function safePath(
+  root: string,
+  relative: string,
+): Promise<string> {
+  if (
+    !relative ||
+    relative.includes("\\") ||
+    path.posix.isAbsolute(relative) ||
+    relative
+      .split("/")
+      .some((x) => !x || x === ".." || x === "." || x.includes(":"))
+  )
+    throw new Error("Unsicherer Projektpfad.");
+  let current = root;
+  if ((await fs.lstat(root)).isSymbolicLink())
+    throw new Error("Projektpfad ist ein Symlink.");
+  for (const part of relative.split("/")) {
+    current = path.join(current, part);
+    if ((await exists(current)) && (await fs.lstat(current)).isSymbolicLink())
+      throw new Error("Symlinks im Projekt sind nicht erlaubt.");
+  }
+  return current;
+}
+async function readLimited(file: string, max: number): Promise<Buffer> {
+  const stat = await fs.lstat(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > max)
+    throw new Error("Datei fehlt, ist unsicher oder zu groß.");
+  const bytes = await fs.readFile(file);
+  if (bytes.length > max) throw new Error("Datei zu groß.");
+  return bytes;
+}
+export function inspectImage(bytes: Uint8Array): {
+  width: number;
+  height: number;
+  format: "png" | "webp";
+} {
+  if (!bytes.length || bytes.length > MAX_IMAGE_BYTES)
+    throw new Error("Bilder dürfen höchstens 32 MiB groß sein.");
+  const info = imageSize(bytes);
+  if (
+    (info.type !== "png" && info.type !== "webp") ||
+    !info.width ||
+    !info.height ||
+    info.width > 16384 ||
+    info.height > 16384 ||
+    info.width * info.height > 64_000_000
+  )
+    throw new Error(
+      "Nur PNG/WebP bis 16.384 Pixel Kantenlänge und 64 Megapixel sind erlaubt.",
+    );
+  return { width: info.width, height: info.height, format: info.type };
+}
+function preview(bytes: Uint8Array, format: string) {
+  return `data:image/${format};base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
+export class ProjectService {
+  private directory = "";
+  private project?: Project;
+  private diskHash = "";
+  private staged?: { image: StagedImage; bytes: Buffer };
+  constructor(
+    private readonly decode: (
+      bytes: Uint8Array,
+      width: number,
+      height: number,
+      format: "png" | "webp",
+    ) => void | Promise<void> = () => {},
+  ) {}
+  snapshot(): Snapshot {
+    if (!this.project) throw new Error("Bitte zuerst ein Projekt öffnen.");
+    return {
+      directory: this.directory,
+      project: structuredClone(this.project),
+    };
+  }
+  async create(directory: string, name: string): Promise<Snapshot> {
+    const root = await fs.realpath(directory);
+    if ((await fs.readdir(root)).length)
+      throw new Error("Bitte einen leeren Projektordner auswählen.");
+    const now = new Date().toISOString();
+    const project = projectSchema.parse({
+      schemaVersion: 1,
+      id: randomUUID(),
+      name,
+      createdAt: now,
+      updatedAt: now,
+      characters: [],
+      masters: [],
+      assets: [],
+      ...createPresets(randomUUID),
+    });
+    await fs.mkdir(path.join(root, "assets", "originals"), { recursive: true });
+    await fs.mkdir(path.join(root, "assets", "candidates"), {
+      recursive: true,
+    });
+    // Exclusive initial creation; never replace an existing project.
+    await fs.writeFile(
+      path.join(root, manifestName),
+      JSON.stringify(project, null, 2),
+      { flag: "wx" },
+    );
+    return this.open(root);
+  }
+  async open(directory: string): Promise<Snapshot> {
+    const root = await fs.realpath(directory);
+    const bytes = await readLimited(
+      await safePath(root, manifestName),
+      MAX_MANIFEST_BYTES,
+    );
+    const project = projectSchema.parse(JSON.parse(bytes.toString("utf8")));
+    for (const image of [...project.masters, ...project.assets]) {
+      const contents = await readLimited(
+        await safePath(root, image.file),
+        MAX_IMAGE_BYTES,
+      );
+      if (hashBytes(contents) !== image.sha256)
+        throw new Error(
+          "Bildintegrität verletzt. Projekt wurde nicht geöffnet.",
+        );
+      const info = inspectImage(contents);
+      if (
+        info.width !== image.width ||
+        info.height !== image.height ||
+        info.format !== image.format
+      )
+        throw new Error("Bildmetadaten stimmen nicht überein.");
+    }
+    this.directory = root;
+    this.project = project;
+    this.diskHash = hashBytes(bytes);
+    this.staged = undefined;
+    return this.snapshot();
+  }
+  async stage(bytes: Uint8Array, name: string): Promise<StagedImage> {
+    this.snapshot();
+    const owned = Buffer.from(bytes);
+    const info = inspectImage(owned);
+    await this.decode(owned, info.width, info.height, info.format);
+    const image = {
+      ...info,
+      token: randomUUID(),
+      name,
+      sha256: hashBytes(owned),
+      preview: preview(owned, info.format),
+    };
+    this.staged = { image, bytes: owned };
+    return image;
+  }
+  discard(token: string) {
+    if (this.staged?.image.token === token) this.staged = undefined;
+  }
+  private pending(token: string) {
+    if (!this.staged || this.staged.image.token !== token)
+      throw new Error("Importvorschau abgelaufen. Bild erneut wählen.");
+    return this.staged;
+  }
+  private async store(kind: "originals" | "candidates", token: string) {
+    const { image, bytes } = this.pending(token);
+    const relative = assetFile(kind, image.sha256, image.format);
+    const file = await safePath(this.directory, relative);
+    try {
+      await fs.writeFile(file, bytes, { flag: "wx", mode: 0o444 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (!(await readLimited(file, MAX_IMAGE_BYTES)).equals(bytes))
+        throw new Error("Asset-Kollision oder beschädigte Datei.", {
+          cause: error,
+        });
+    }
+    return {
+      sha256: image.sha256,
+      file: relative,
+      width: image.width,
+      height: image.height,
+      format: image.format,
+    };
+  }
+  private async save(project: Project) {
+    const validated = projectSchema.parse(project);
+    const destination = await safePath(this.directory, manifestName);
+    if (
+      hashBytes(await readLimited(destination, MAX_MANIFEST_BYTES)) !==
+      this.diskHash
+    )
+      throw new Error("Projekt wurde extern geändert. Bitte erneut öffnen.");
+    const bytes = Buffer.from(JSON.stringify(validated, null, 2));
+    if (bytes.length > MAX_MANIFEST_BYTES)
+      throw new Error("Projektmanifest zu groß.");
+    const temp = await safePath(
+      this.directory,
+      `.laceframe-${randomUUID()}.tmp`,
+    );
+    try {
+      const handle = await fs.open(temp, "wx", 0o600);
+      try {
+        await handle.writeFile(bytes);
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await fs.rename(temp, destination);
+    } finally {
+      await fs.rm(temp, { force: true });
+    }
+    this.project = validated;
+    this.diskHash = hashBytes(bytes);
+  }
+  async command(input: unknown): Promise<Snapshot> {
+    const cmd = commandSchema.parse(input);
+    const p = this.snapshot().project;
+    const character = (id: string) => {
+      const c = p.characters.find((c) => c.id === id);
+      if (!c) throw new Error("Figur fehlt.");
+      return c;
+    };
+    switch (cmd.type) {
+      case "addCharacter": {
+        const id = randomUUID();
+        p.characters.push({ id, name: cmd.name, profile: "portrait-artistic" });
+        p.selectedCharacterId = id;
+        break;
+      }
+      case "renameCharacter":
+        character(cmd.id).name = cmd.name;
+        break;
+      case "selectCharacter":
+        character(cmd.id);
+        p.selectedCharacterId = cmd.id;
+        break;
+      case "addFamily":
+        p.families.push({
+          id: randomUUID(),
+          label: cmd.label,
+          slug: cmd.slug,
+          order: p.families.length,
+        });
+        break;
+      case "editFamily": {
+        const f = p.families.find((f) => f.id === cmd.id);
+        if (!f) throw new Error("Familie fehlt.");
+        Object.assign(f, { label: cmd.label, slug: cmd.slug });
+        break;
+      }
+      case "addVariant":
+        p.variants.push({
+          id: randomUUID(),
+          familyId: cmd.familyId,
+          label: cmd.label,
+          slug: cmd.slug,
+          prompt: "",
+          suggestedAction: "silent",
+        });
+        break;
+      case "editVariant": {
+        const index = p.variants.findIndex((v) => v.id === cmd.variant.id);
+        if (index < 0) throw new Error("Variante fehlt.");
+        p.variants[index] = cmd.variant;
+        break;
+      }
+      case "confirmMaster": {
+        const c = character(cmd.characterId);
+        if (c.masterId)
+          throw new Error(
+            "Master V1 ist gesperrt und kann nicht ersetzt werden.",
+          );
+        const image = await this.store("originals", cmd.token),
+          id = randomUUID();
+        p.masters.push({
+          ...image,
+          id,
+          characterId: c.id,
+          version: 1,
+          locked: true,
+          approvedAt: new Date().toISOString(),
+        });
+        c.masterId = id;
+        break;
+      }
+      case "importCandidate": {
+        const c = character(cmd.characterId),
+          master = p.masters.find((m) => m.id === c.masterId);
+        if (!master) throw new Error("Zuerst einen Master bestätigen.");
+        if (!p.variants.some((v) => v.id === cmd.variantId))
+          throw new Error("Variante fehlt.");
+        if (this.pending(cmd.token).image.format !== "png")
+          throw new Error("Kandidaten müssen PNG-Dateien sein.");
+        const image = await this.store("candidates", cmd.token);
+        p.assets.push({
+          ...image,
+          id: randomUUID(),
+          characterId: c.id,
+          masterId: master.id,
+          masterSha256: master.sha256,
+          variantId: cmd.variantId,
+          action: cmd.action,
+          status: "candidate",
+          createdAt: new Date().toISOString(),
+        });
+        break;
+      }
+      case "review": {
+        const index = p.assets.findIndex((a) => a.id === cmd.id);
+        if (index < 0) throw new Error("Kandidat fehlt.");
+        p.assets[index] = review(p.assets[index], cmd.status);
+        break;
+      }
+    }
+    p.updatedAt = new Date().toISOString();
+    await this.save(p);
+    if (cmd.type === "confirmMaster" || cmd.type === "importCandidate")
+      this.staged = undefined;
+    return this.snapshot();
+  }
+  async preview(id: string): Promise<string> {
+    const p = this.snapshot().project;
+    const image = [...p.masters, ...p.assets].find((a) => a.id === id);
+    if (!image) throw new Error("Unbekanntes Bild.");
+    const bytes = await readLimited(
+      await safePath(this.directory, image.file),
+      MAX_IMAGE_BYTES,
+    );
+    if (hashBytes(bytes) !== image.sha256)
+      throw new Error("Bildintegrität verletzt.");
+    return preview(bytes, image.format);
+  }
+}
