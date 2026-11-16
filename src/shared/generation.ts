@@ -7,6 +7,9 @@ export const generationDraftSchema = z
     masterId: z.uuid(),
     masterSha256: z.string().regex(/^[a-f0-9]{64}$/),
     variantId: z.uuid(),
+    artDirectionId: z.uuid().optional(),
+    artDirectionRevision: z.number().int().positive().optional(),
+    expressionPerformance: z.string().max(8000).optional(),
     action: z.enum(["silent", "speaking", "shouting"]),
     intensity: z.number().min(0).max(1).optional(),
     supplementaryInstructions: z.string().max(8000),
@@ -138,21 +141,28 @@ export function composePrompt(input: {
   master: Master;
   familyLabel: string;
   variant: Variant;
+  artDirection?: { name: string; renderRules: string; lightingRules?: string; colorRules?: string; framingRules?: string };
+  expressionPerformance?: string;
   action: VocalAction;
   intensity?: number;
   supplementaryInstructions: string;
 }): string {
   const { master, variant } = input;
   return [
+    input.artDirection
+      ? `STYLE LOCK — ${input.artDirection.name}\nRendering: ${input.artDirection.renderRules}\nLighting: ${input.artDirection.lightingRules ?? "Follow the master"}\nColor: ${input.artDirection.colorRules ?? "Follow the master"}\nFraming: ${input.artDirection.framingRules ?? "Follow the master"}\nThis is the project's illustration style, NOT an instruction to copy another character's face, clothes or personality.`
+      : "",
     "CHARACTER LOCK — EDIT THE PROVIDED APPROVED MASTER IMAGE",
     `Attach the actual approved master image as the reference. A filename, ID or hash alone is NOT an image reference. Use the PROVIDED IMAGE of ${input.characterName}; do not invent or redesign the character.`,
     `Master V${master.version} | ID: ${master.id} | SHA-256: ${master.sha256}`,
     `Preserve the original ${master.width} × ${master.height} pixel canvas, framing, camera, art style, palette, background and transparency. Do not resample, crop, quantize or convert to a 64×64 sprite.`,
     "Keep facial identity, hair, freckles/skin details, clothes and accessories unchanged. Change only the facial features needed for the requested expression. If an edit mask is provided, edit only inside it; no mask is supplied automatically. These instructions do not guarantee pixel or identity preservation: manual review is required.",
     `EMOTION: ${input.familyLabel} / ${variant.label} (${variant.slug}).`,
-    variant.prompt
-      ? `EXPRESSION DIRECTION: ${variant.prompt}`
-      : "EXPRESSION DIRECTION: Follow the selected expression; keep changes restrained and identity consistent.",
+    input.expressionPerformance?.trim()
+      ? `PERSONAL EXPRESSION PERFORMANCE for ${input.characterName}: ${input.expressionPerformance.trim()}\nThis character-specific direction overrides the shared expression template; it does not change other characters.`
+      : variant.prompt
+        ? `EXPRESSION DIRECTION: ${variant.prompt}`
+        : "EXPRESSION DIRECTION: Follow the selected expression; keep changes restrained and identity consistent.",
     input.intensity === undefined
       ? "INTENSITY: unspecified; do not assume a calibrated visual continuum."
       : `INTENSITY: ${input.intensity} (organizational guidance, not a calibrated visual continuum).`,
