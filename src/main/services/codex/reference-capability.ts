@@ -33,7 +33,7 @@ export function supportsMultipleLocalImages(input: unknown) {
   if (!parsed.success) return false;
   const p = parsed.data;
   return (
-    (p.properties.input.maxItems ?? 8) >= 8 &&
+    (p.properties.input.maxItems ?? 9) >= 9 &&
     p.definitions.UserInput.oneOf.some(
       (v) =>
         v.properties.type.enum.includes("localImage") &&

@@ -5,6 +5,10 @@ import {
   encodePixels,
   maskWeights,
 } from "./mask-composite";
+import {
+  validateCreatorSelection,
+  type CharacterCreationDraft,
+} from "../shared/character-creation";
 import { constants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -21,6 +25,7 @@ import {
   type Project,
   type Snapshot,
   type StagedImage,
+  type StagedIdentityImage,
 } from "../shared/domain";
 import { manualImportProvider } from "./services/providers/manualImport";
 import {
@@ -103,6 +108,28 @@ export async function readLimited(file: string, max: number): Promise<Buffer> {
     await handle.close();
   }
 }
+export function inspectIdentityImage(bytes: Uint8Array) {
+  if (!bytes.length || bytes.length > 16 * 1024 * 1024)
+    throw new Error("Identitätsbilder dürfen höchstens 16 MiB groß sein.");
+  const info = imageSize(bytes);
+  if (
+    !["png", "webp", "jpg"].includes(info.type ?? "") ||
+    !info.width ||
+    !info.height ||
+    info.width > 16384 ||
+    info.height > 16384 ||
+    info.width * info.height > 16_000_000
+  )
+    throw new Error("Identitätsbilder: PNG/JPEG/WebP bis 16 Megapixel.");
+  // Match Chromium's oriented JPEG preview dimensions; retain every original byte.
+  const rotated =
+    info.type === "jpg" && [5, 6, 7, 8].includes(info.orientation ?? 1);
+  return {
+    width: rotated ? info.height : info.width,
+    height: rotated ? info.width : info.height,
+    format: info.type as "png" | "webp" | "jpg",
+  };
+}
 export function inspectImage(bytes: Uint8Array): {
   width: number;
   height: number;
@@ -125,7 +152,7 @@ export function inspectImage(bytes: Uint8Array): {
   return { width: info.width, height: info.height, format: info.type };
 }
 function preview(bytes: Uint8Array, format: string) {
-  return `data:image/${format};base64,${Buffer.from(bytes).toString("base64")}`;
+  return `data:image/${format === "jpg" ? "jpeg" : format};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
 export class ProjectService {
@@ -134,13 +161,13 @@ export class ProjectService {
   private diskHash = "";
   private legacyBytes?: Buffer;
   private legacyBackupName = "laceframe.v1.backup.json";
-  private staged?: { image: StagedImage; bytes: Buffer };
+  private staged?: { image: StagedIdentityImage; bytes: Buffer };
   constructor(
     private readonly decode: (
       bytes: Uint8Array,
       width: number,
       height: number,
-      format: "png" | "webp",
+      format: "png" | "webp" | "jpg",
     ) => void | Promise<void> = () => {},
   ) {}
   snapshot(): Snapshot {
@@ -159,6 +186,10 @@ export class ProjectService {
       schemaVersion: 2,
       visualStyleVersion: 1,
       maskingVersion: 1,
+      characterCreationVersion: 1,
+      identityAssets: [],
+      masterAttempts: [],
+      masterCandidates: [],
       masks: [],
       styleAssets: [],
       artDirectionRevisions: [],
@@ -200,6 +231,8 @@ export class ProjectService {
       ...project.assets,
       ...project.styleAssets,
       ...project.masks,
+      ...project.identityAssets,
+      ...project.masterCandidates,
     ]) {
       const contents = await readLimited(
         await safePath(root, image.file),
@@ -209,13 +242,18 @@ export class ProjectService {
         throw new Error(
           "Bildintegrität verletzt. Projekt wurde nicht geöffnet.",
         );
-      const info = inspectImage(contents);
+      const identity = project.identityAssets.some((a) => a.id === image.id);
+      const info = identity
+        ? inspectIdentityImage(contents)
+        : inspectImage(contents);
       if (
         info.width !== image.width ||
         info.height !== image.height ||
         info.format !== image.format
       )
         throw new Error("Bildmetadaten stimmen nicht überein.");
+      if (identity)
+        await this.decode(contents, info.width, info.height, info.format);
       if (project.masks.some((m) => m.id === image.id))
         maskWeights(decodePixels(contents));
       if (project.styleAssets.some((a) => a.id === image.id)) {
@@ -233,7 +271,8 @@ export class ProjectService {
       versionOne ||
       needsArtMigration ||
       source.visualStyleVersion !== 1 ||
-      source.maskingVersion !== 1
+      source.maskingVersion !== 1 ||
+      source.characterCreationVersion !== 1
         ? bytes
         : undefined;
     this.legacyBackupName = versionOne
@@ -242,7 +281,9 @@ export class ProjectService {
         ? "laceframe.v2.pre-art-direction.backup.json"
         : source.visualStyleVersion !== 1
           ? "laceframe.v2.pre-visual-style.backup.json"
-          : "laceframe.v2.pre-masking.backup.json";
+          : source.maskingVersion !== 1
+            ? "laceframe.v2.pre-masking.backup.json"
+            : "laceframe.v2.pre-character-creation.backup.json";
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -264,6 +305,24 @@ export class ProjectService {
     this.staged = { image, bytes: owned };
     return image;
   }
+  async stageIdentity(
+    bytes: Uint8Array,
+    name: string,
+  ): Promise<StagedIdentityImage> {
+    this.snapshot();
+    const owned = Buffer.from(bytes),
+      info = inspectIdentityImage(owned);
+    await this.decode(owned, info.width, info.height, info.format);
+    const image = {
+      ...info,
+      token: randomUUID(),
+      name,
+      sha256: hashBytes(owned),
+      preview: preview(owned, info.format),
+    };
+    this.staged = { image, bytes: owned };
+    return image;
+  }
   discard(token: string) {
     if (this.staged?.image.token === token) this.staged = undefined;
   }
@@ -273,12 +332,14 @@ export class ProjectService {
     return this.staged;
   }
   private async store(
-    kind: "originals" | "candidates" | "styles" | "masks",
+    kind: "originals" | "candidates" | "styles" | "masks" | "master-candidates",
     token: string,
   ) {
     const { image, bytes } = this.pending(token);
+    if (image.format === "jpg")
+      throw new Error("JPEG ist nur als Identitätsreferenz erlaubt.");
     const relative = assetFile(kind, image.sha256, image.format);
-    if (kind === "styles" || kind === "masks")
+    if (kind === "styles" || kind === "masks" || kind === "master-candidates")
       await fs.mkdir(await safePath(this.directory, `assets/${kind}`), {
         recursive: true,
       });
@@ -301,7 +362,11 @@ export class ProjectService {
     };
   }
   private async save(project: Project) {
-    const validated = projectSchema.parse({ ...project, maskingVersion: 1 });
+    const validated = projectSchema.parse({
+      ...project,
+      maskingVersion: 1,
+      characterCreationVersion: 1,
+    });
     const destination = await safePath(this.directory, manifestName);
     if (
       hashBytes(await readLimited(destination, MAX_MANIFEST_BYTES)) !==
@@ -358,7 +423,149 @@ export class ProjectService {
       if (!c) throw new Error("Figur fehlt.");
       return c;
     };
+    let removeFile: { file: string; sha256: string } | undefined;
     switch (cmd.type) {
+      case "importIdentityReference": {
+        const c = character(cmd.characterId);
+        if (c.masterId)
+          throw new Error(
+            "Master ist gesperrt. Für eine neue Identität eine neue Entwurfsfigur erstellen.",
+          );
+        if (
+          p.identityAssets.filter((a) => a.characterId === c.id && !a.removedAt)
+            .length >= 3
+        )
+          throw new Error("Maximal drei aktive Identitätsreferenzen.");
+        const { image, bytes } = this.pending(cmd.token);
+        inspectIdentityImage(bytes);
+        await this.decode(bytes, image.width, image.height, image.format);
+        if (
+          p.identityAssets.some(
+            (a) =>
+              a.characterId === c.id &&
+              a.sha256 === image.sha256 &&
+              !a.removedAt,
+          )
+        )
+          throw new Error("Identitätsbild bereits vorhanden.");
+        const file = `assets/identities/${image.sha256}.${image.format}`;
+        await fs.mkdir(await safePath(this.directory, "assets/identities"), {
+          recursive: true,
+        });
+        const destination = await safePath(this.directory, file);
+        try {
+          await fs.writeFile(destination, bytes, { flag: "wx", mode: 0o444 });
+        } catch (e) {
+          if (
+            (e as NodeJS.ErrnoException).code !== "EEXIST" ||
+            !(await readLimited(destination, MAX_IMAGE_BYTES)).equals(bytes)
+          )
+            throw new Error(
+              "Identitätsdatei kollidiert oder wurde verändert.",
+              { cause: e },
+            );
+        }
+        p.identityAssets.push({
+          id: randomUUID(),
+          file,
+          characterId: c.id,
+          sha256: image.sha256,
+          width: image.width,
+          height: image.height,
+          format: image.format,
+          createdAt: new Date().toISOString(),
+        });
+        break;
+      }
+      case "removeIdentityReference": {
+        const asset = p.identityAssets.find(
+          (a) => a.id === cmd.id && !a.removedAt,
+        );
+        if (!asset) throw new Error("Aktive Identitätsreferenz fehlt.");
+        await this.preview(asset.id);
+        const referenced = p.masterAttempts.some((a) =>
+          a.identityReferences.some((r) => r.id === asset.id),
+        );
+        if (referenced) asset.removedAt = new Date().toISOString();
+        else {
+          p.identityAssets = p.identityAssets.filter((a) => a.id !== asset.id);
+          if (!p.identityAssets.some((a) => a.file === asset.file))
+            removeFile = { file: asset.file, sha256: asset.sha256 };
+        }
+        break;
+      }
+      case "prepareCharacterMaster": {
+        validateCreatorSelection(p, cmd.draft);
+        for (const r of [
+          ...cmd.draft.identityReferences,
+          ...cmd.draft.styleReferences,
+        ])
+          await this.preview(r.id);
+        const { operation: _, prompt, ...selection } = cmd.draft;
+        void _;
+        const now = new Date().toISOString();
+        p.masterAttempts.push({
+          ...selection,
+          id: randomUUID(),
+          providerId: "codex-native",
+          createdAt: now,
+          promptRevision: {
+            id: randomUUID(),
+            createdAt: now,
+            compositionVersion: 1,
+            prompt,
+          },
+        });
+        break;
+      }
+      case "reviewMasterCandidate": {
+        const candidate = p.masterCandidates.find((a) => a.id === cmd.id);
+        if (!candidate || candidate.status !== "candidate")
+          throw new Error("Ungeprüften Masterkandidaten auswählen.");
+        const c = character(candidate.characterId);
+        await this.preview(candidate.id);
+        if (cmd.status === "approved") {
+          if (c.masterId)
+            throw new Error(
+              "Master V1 ist gesperrt und kann nicht ersetzt werden.",
+            );
+          const bytes = await this.verifiedBytes(candidate.id);
+          if (this.staged)
+            throw new Error("Zuerst den ausstehenden Import abschließen.");
+          const image = await this.stage(bytes, "approved-master");
+          try {
+            const id = randomUUID();
+            p.masters.push({
+              ...(await this.store("originals", image.token)),
+              id,
+              characterId: c.id,
+              version: 1,
+              locked: true,
+              approvedAt: new Date().toISOString(),
+            });
+            c.masterId = id;
+            candidate.approvedMasterId = id;
+            const attempt = p.masterAttempts.find(
+              (a) => a.id === candidate.attemptId,
+            )!;
+            c.profile = attempt.composition.profile;
+            c.styleSelection = attempt.artDirectionId
+              ? { mode: "profile", profileId: attempt.artDirectionId }
+              : { mode: "master" };
+            p.outfits.push({
+              id: randomUUID(),
+              characterId: c.id,
+              name: "Master V1 outfit",
+              notes: attempt.outfit,
+            });
+          } finally {
+            this.discard(image.token);
+          }
+        }
+        candidate.status = cmd.status;
+        candidate.reviewedAt = new Date().toISOString();
+        break;
+      }
       case "saveMask": {
         const master = p.masters.find((m) => m.id === cmd.masterId);
         const previous = p.masks.find((m) => m.id === cmd.previousId);
@@ -729,7 +936,20 @@ export class ProjectService {
     }
     p.updatedAt = new Date().toISOString();
     await this.save(p);
+    if (removeFile) {
+      const file = await safePath(this.directory, removeFile.file);
+      if (
+        hashBytes(await readLimited(file, MAX_IMAGE_BYTES)) !==
+        removeFile.sha256
+      )
+        throw new Error(
+          "Referenz entfernt, aber veränderte Datei nicht gelöscht.",
+        );
+      if (process.platform === "win32") await fs.chmod(file, 0o600);
+      await fs.unlink(file);
+    }
     if (
+      cmd.type === "importIdentityReference" ||
       cmd.type === "confirmMaster" ||
       cmd.type === "importCandidate" ||
       cmd.type === "importResult" ||
@@ -815,7 +1035,7 @@ export class ProjectService {
     execution: GenerationExecution,
   ): Promise<void> {
     const p = this.snapshot().project,
-      attempt = p.attempts.find(
+      attempt = [...p.attempts, ...p.masterAttempts].find(
         (a) => a.id === attemptId && a.providerId === "codex-native",
       );
     if (!attempt || attempt.execution?.endedAt)
@@ -825,6 +1045,78 @@ export class ProjectService {
     attempt.execution = generationExecutionSchema.parse(execution);
     p.updatedAt = new Date().toISOString();
     await this.save(p);
+  }
+  async creatorRequest(draft: CharacterCreationDraft) {
+    const p = this.snapshot().project;
+    validateCreatorSelection(p, draft);
+    const files = async (refs: { id: string; sha256: string }[]) =>
+      Promise.all(
+        refs.map(async (r) => {
+          await this.preview(r.id);
+          const a = [...p.identityAssets, ...p.styleAssets].find(
+            (a) => a.id === r.id && a.sha256 === r.sha256,
+          )!;
+          return { ...r, path: await safePath(this.directory, a.file) };
+        }),
+      );
+    return {
+      ...draft,
+      identityFiles: await files(draft.identityReferences),
+      styleFiles: await files(draft.styleReferences),
+    };
+  }
+  async importMasterGeneration(
+    attemptId: string,
+    bytes: Uint8Array,
+    complete: () => GenerationExecution,
+  ) {
+    const p = this.snapshot().project,
+      attempt = p.masterAttempts.find((a) => a.id === attemptId);
+    if (
+      !attempt ||
+      attempt.execution?.status !== "running" ||
+      p.masterCandidates.some((c) => c.attemptId === attemptId)
+    )
+      throw new Error("Kein offener Masterauftrag.");
+    const staged = await this.stage(bytes, "master-candidate");
+    try {
+      p.masterCandidates.push({
+        ...(await this.store("master-candidates", staged.token)),
+        id: randomUUID(),
+        characterId: attempt.characterId,
+        attemptId,
+        status: "candidate",
+        createdAt: new Date().toISOString(),
+      });
+      const execution = generationExecutionSchema.parse(complete());
+      if (execution.status !== "completed")
+        throw new Error("Kein erfolgreich abgeschlossenes Masterergebnis.");
+      attempt.execution = execution;
+      p.updatedAt = new Date().toISOString();
+      await this.save(p);
+      return this.snapshot();
+    } finally {
+      this.discard(staged.token);
+    }
+  }
+  private async verifiedBytes(id: string) {
+    const p = this.snapshot().project;
+    const image = [
+      ...p.masters,
+      ...p.assets,
+      ...p.styleAssets,
+      ...p.masks,
+      ...p.identityAssets,
+      ...p.masterCandidates,
+    ].find((a) => a.id === id);
+    if (!image) throw new Error("Unbekanntes Bild.");
+    const bytes = await readLimited(
+      await safePath(this.directory, image.file),
+      MAX_IMAGE_BYTES,
+    );
+    if (hashBytes(bytes) !== image.sha256)
+      throw new Error("Bildintegrität verletzt.");
+    return bytes;
   }
   async masterFile(id: string): Promise<string> {
     const master = this.snapshot().project.masters.find((m) => m.id === id);
@@ -839,6 +1131,8 @@ export class ProjectService {
       ...p.assets,
       ...p.styleAssets,
       ...p.masks,
+      ...p.identityAssets,
+      ...p.masterCandidates,
     ].find((a) => a.id === id);
     if (!image) throw new Error("Unbekanntes Bild.");
     const bytes = await readLimited(
@@ -847,13 +1141,17 @@ export class ProjectService {
     );
     if (hashBytes(bytes) !== image.sha256)
       throw new Error("Bildintegrität verletzt.");
-    const info = inspectImage(bytes);
+    const info = p.identityAssets.some((a) => a.id === id)
+      ? inspectIdentityImage(bytes)
+      : inspectImage(bytes);
     if (
       info.width !== image.width ||
       info.height !== image.height ||
       info.format !== image.format
     )
       throw new Error("Bildmetadaten stimmen nicht überein.");
+    if (p.identityAssets.some((a) => a.id === id))
+      await this.decode(bytes, info.width, info.height, info.format);
     if (p.masks.some((m) => m.id === id)) maskWeights(decodePixels(bytes));
     if (p.styleAssets.some((a) => a.id === id))
       await this.decode(bytes, info.width, info.height, info.format);

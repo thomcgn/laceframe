@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { characterCreationDraftSchema } from "../../shared/character-creation";
 import {
   generationDraftSchema,
   type CodexStatus,
@@ -60,8 +62,11 @@ export class GenerationController {
   }
   async start(input: unknown) {
     if (this.running) throw new Error("Es läuft bereits ein Bildauftrag.");
-    const draft = generationDraftSchema.parse(input);
-    if (draft.providerId !== "codex-native")
+    const draft = z
+      .union([characterCreationDraftSchema, generationDraftSchema])
+      .parse(input);
+    const creation = "operation" in draft;
+    if (!creation && draft.providerId !== "codex-native")
       throw new Error("Codex-Anbieter auswählen.");
     this.cancelled = false;
     this.importing = false;
@@ -72,37 +77,55 @@ export class GenerationController {
       message: phases.preparing,
     };
     try {
-      const saved = await this.service.command({
-        type: "prepareAttempt",
-        draft,
-      });
-      const attempt = saved.project.attempts.at(-1)!;
+      const saved = await this.service.command(
+        creation
+          ? { type: "prepareCharacterMaster", draft }
+          : { type: "prepareAttempt", draft },
+      );
+      const attempt = creation
+        ? saved.project.masterAttempts.at(-1)!
+        : saved.project.attempts.at(-1)!;
       this.state.attemptId = attempt.id;
       await this.service.recordGeneration(attempt.id, this.clock.snapshot());
-      const request = this.provider.prepare(saved.project, draft);
-      request.referenceAssetPath = await this.service.masterFile(
-        draft.masterId,
-      );
-      request.styleReferenceFiles = await Promise.all(
-        (draft.styleReferences ?? []).map(async (r) => ({
-          ...r,
-          path: await this.service.styleFile(r.id, r.sha256),
-        })),
-      );
+      const request = creation
+        ? await this.service.creatorRequest(draft)
+        : this.provider.prepare(saved.project, draft);
+      if (!creation && "referenceAssetPath" in request) {
+        request.referenceAssetPath = await this.service.masterFile(
+          draft.masterId,
+        );
+        request.styleReferenceFiles = await Promise.all(
+          (draft.styleReferences ?? []).map(async (r) => ({
+            ...r,
+            path: await this.service.styleFile(r.id, r.sha256),
+          })),
+        );
+      }
       this.task = (async () => {
         try {
-          const result = await this.provider.editImage(request);
+          const result =
+            "operation" in request
+              ? await this.provider.createCharacterMaster(request)
+              : await this.provider.editImage(request);
           if (this.cancelled) throw new Error("Cancelled");
           const bytes = await this.provider.resultBytes(result);
           if (this.cancelled) throw new Error("Cancelled");
           this.importing = true;
           this.phase("importing");
           let completion: GenerationExecution | undefined;
-          await this.service.importGeneratedResult(
-            attempt.id,
-            bytes,
-            () => (completion = this.clock!.stamp("completed")),
-          );
+          const complete = () => (completion = this.clock!.stamp("completed"));
+          if (creation)
+            await this.service.importMasterGeneration(
+              attempt.id,
+              bytes,
+              complete,
+            );
+          else
+            await this.service.importGeneratedResult(
+              attempt.id,
+              bytes,
+              complete,
+            );
           this.clock!.seal(completion!);
           this.state = {
             state: "completed",

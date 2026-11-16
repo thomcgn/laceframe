@@ -37,7 +37,11 @@ export function MasterCandidateCompare({
   master,
   candidate,
   mask,
+  beforeLabel = "Master",
+  previewPrefix = "Create",
 }: {
+  beforeLabel?: string;
+  previewPrefix?: string;
   master?: Image;
   candidate?: Image;
   mask?: Image;
@@ -86,11 +90,15 @@ export function MasterCandidateCompare({
   return (
     <section
       className="master-compare"
-      aria-label="Master und Kandidat vergleichen"
+      aria-label={
+        beforeLabel === "Master"
+          ? "Master und Kandidat vergleichen"
+          : "Identität und Masterkandidat vergleichen"
+      }
     >
       <div className="compare-toolbar">
         <span className="compare-legend">
-          <b>Master</b>
+          <b>{beforeLabel}</b>
           <span>↔</span>
           <b>Kandidat</b>
         </span>
@@ -227,7 +235,7 @@ export function MasterCandidateCompare({
             {before.src && master && (
               <img
                 draggable={false}
-                alt="Create · Masterreferenz"
+                alt={`${previewPrefix} · ${beforeLabel === "Master" ? "Masterreferenz" : "Identitätsreferenz"}`}
                 src={before.src}
                 width={master.width}
                 height={master.height}
@@ -247,7 +255,7 @@ export function MasterCandidateCompare({
               {after.src && candidate && (
                 <img
                   draggable={false}
-                  alt="Create · Ergebnisvorschau"
+                  alt={`${previewPrefix} · Ergebnisvorschau`}
                   src={after.src}
                   width={normalized && master ? master.width : candidate.width}
                   height={
@@ -339,7 +347,7 @@ export function MasterCandidateCompare({
       )}
       <div className="compare-caption">
         <span>
-          Master {master ? `${master.width} × ${master.height}` : "—"}
+          {beforeLabel} {master ? `${master.width} × ${master.height}` : "—"}
         </span>
         <span>
           Kandidat{" "}

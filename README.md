@@ -89,3 +89,11 @@ In Create, choose **Hard Pixel Lock**, create/select a mask and explicitly save 
 Hard Lock currently processes non-animated PNG up to 8 bits/channel and 16 megapixels. It copies every protected decoded RGBA8 channel exactly and never scales mismatched inputs. WebP/16-bit images remain importable but cannot be hard-composited. **Soft Lock is unavailable:** the checked Codex App Server input schema has no confirmed explicit inpainting-mask route. Masks are used locally, never advertised as an AI boundary. Inspect reuses the registered comparison; its optional visual normalization changes presentation only and cannot enable compositing.
 
 See [02D implementation, actual tests and limitations](docs/CODEX_02D_VALIDATION.md).
+
+### Character Creator / Photo-to-Master (02E)
+
+Under **Characters → Neuen Charakter erstellen**, create a draft character without a master. Import up to three identity photos/illustrations (PNG/JPEG/WebP), choose an existing Art Direction, describe an independent outfit and review the neutral portrait composition. Identity images appear separately from style-only references; the UI lists the actual ordered image inputs. Only **Neutralen Masterkandidaten generieren** sends these images to the native Codex provider and consumes Codex allowance.
+
+Each completed job creates an unapproved master candidate with immutable prompt, references, style revision, outfit, composition and execution provenance. Reject and regenerate, or manually approve one candidate as locked Master V1. The selected style and outfit are retained; **Expressions mit diesem Master erstellen** opens the existing expression workflow. Actual output dimensions are preserved; requested dimensions and facial likeness are not guaranteed. Text-only identity creation is not offered.
+
+Identity originals are immutable local project copies (16 MiB / 16 MP each). Unused copies can be removed; historically referenced images are archived out of the active selection, retaining their dependencies. External originals and Codex-managed files are not deleted. JPEG EXIF orientation is reflected in preview dimensions without rotating/re-encoding the source; embedded original metadata is retained. See [02E actual validation and limits](docs/CODEX_02E_VALIDATION.md).

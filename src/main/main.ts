@@ -155,17 +155,31 @@ function registerIPC() {
     service.command(commandSchema.parse(input)),
   );
   handle("image:choose", async (input) => {
-    z.undefined().parse(input);
+    const identity =
+      z.literal("identity").optional().parse(input) === "identity";
     service.snapshot();
     const selected = await dialog.showOpenDialog(window, {
-      title: "PNG/WebP importieren",
+      title: identity
+        ? "Private Identitätsreferenz importieren"
+        : "PNG/WebP importieren",
       properties: ["openFile"],
-      filters: [{ name: "Portrait", extensions: ["png", "webp"] }],
+      filters: [
+        {
+          name: "Portrait",
+          extensions: identity
+            ? ["png", "jpg", "jpeg", "webp"]
+            : ["png", "webp"],
+        },
+      ],
     });
     if (selected.canceled) return null;
     const file = selected.filePaths[0];
-    return service.stage(
-      await readLimited(file, MAX_IMAGE_BYTES),
+    return (
+      identity
+        ? service.stageIdentity.bind(service)
+        : service.stage.bind(service)
+    )(
+      await readLimited(file, identity ? 16 * 1024 * 1024 : MAX_IMAGE_BYTES),
       path.basename(file),
     );
   });
@@ -176,10 +190,13 @@ function registerIPC() {
           .instanceof(Uint8Array)
           .refine((b) => b.length > 0 && b.length <= MAX_IMAGE_BYTES),
         name: z.string().min(1).max(255),
+        purpose: z.literal("identity").optional(),
       })
       .strict()
       .parse(input);
-    return service.stage(data.bytes, data.name);
+    return data.purpose === "identity"
+      ? service.stageIdentity(data.bytes, data.name)
+      : service.stage(data.bytes, data.name);
   });
   handle("image:discard", (input) => {
     service.discard(idSchema.parse(input));

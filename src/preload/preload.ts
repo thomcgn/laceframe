@@ -14,9 +14,14 @@ const bridge: LaceframeBridge = {
   createProject: (name) => ipcRenderer.invoke("project:create", name),
   openProject: () => ipcRenderer.invoke("project:open"),
   command: (command) => ipcRenderer.invoke("project:command", command),
-  chooseImage: () => ipcRenderer.invoke("image:choose"),
-  stageImage: (bytes, name) =>
-    ipcRenderer.invoke("image:stage", { bytes, name }),
+  chooseImage: (purpose?: "identity") =>
+    ipcRenderer.invoke("image:choose", purpose),
+  stageImage: (bytes: Uint8Array, name: string, purpose?: "identity") =>
+    ipcRenderer.invoke("image:stage", {
+      bytes,
+      name,
+      ...(purpose ? { purpose } : {}),
+    }),
   discardImage: (token) => ipcRenderer.invoke("image:discard", token),
   preview: (id) => ipcRenderer.invoke("image:preview", id),
 };
