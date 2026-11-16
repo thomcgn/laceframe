@@ -6,6 +6,8 @@ import {
   session,
   protocol,
   net,
+  clipboard,
+  shell,
 } from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 import path from "node:path";
@@ -14,6 +16,11 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { commandSchema, idSchema, MAX_IMAGE_BYTES } from "../shared/domain";
 import { ProjectService } from "./project-service";
+import { validateExternalURL } from "../shared/generation";
+import { chatgptPlanProvider } from "./services/providers/chatgptPlan";
+import { manualImportProvider } from "./services/providers/manualImport";
+import { CodexImageGenerationProvider } from "./services/providers/codexImageGeneration";
+import { GenerationController } from "./services/generation-controller";
 import { decodeImage } from "./decode-image";
 import type { Result } from "../shared/bridge";
 
@@ -32,6 +39,10 @@ protocol.registerSchemesAsPrivileged([
 ]);
 let window: BrowserWindow;
 const service = new ProjectService(decodeImage);
+const generation = new GenerationController(
+  service,
+  new CodexImageGenerationProvider(),
+);
 let queue: Promise<unknown> = Promise.resolve();
 function handle<T>(
   channel: string,
@@ -49,6 +60,18 @@ function handle<T>(
             event.senderFrame.url !== rendererURL()
           )
             throw new Error("Unzulässiger IPC-Absender.");
+          if (
+            generation.running &&
+            ![
+              "generation:status",
+              "generation:cancel",
+              "generation:providers",
+              "image:preview",
+            ].includes(channel)
+          )
+            throw new Error(
+              "Während der Generierung ist das Projekt gesperrt. Erst abbrechen oder auf das Ergebnis warten.",
+            );
           return { ok: true, value: await operation(input) };
         } catch (error) {
           return {
@@ -73,6 +96,44 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC() {
+  handle("generation:check", (input) => {
+    z.undefined().parse(input);
+    return generation.check();
+  });
+  handle("generation:start", (input) => generation.start(input));
+  handle("generation:status", (input) => {
+    z.undefined().parse(input);
+    return { status: generation.status(), snapshot: service.snapshot() };
+  });
+  handle("generation:cancel", (input) => {
+    z.undefined().parse(input);
+    return generation.cancel();
+  });
+  handle("generation:reveal-master", async (input) => {
+    shell.showItemInFolder(await service.masterFile(idSchema.parse(input)));
+    return null;
+  });
+  handle("generation:providers", (input) => {
+    z.undefined().parse(input);
+    return [
+      generation.provider.descriptor,
+      chatgptPlanProvider.descriptor,
+      manualImportProvider.descriptor,
+    ];
+  });
+  handle("generation:copy-prompt", (input) => {
+    const id = idSchema.parse(input);
+    const attempt = service
+      .snapshot()
+      .project.attempts.find((a) => a.id === id);
+    if (!attempt) throw new Error("Gespeicherten Versuch auswählen.");
+    clipboard.writeText(attempt.promptRevision.prompt);
+    return null;
+  });
+  handle("generation:open-external", async (input) => {
+    await shell.openExternal(validateExternalURL(input));
+    return null;
+  });
   handle("project:create", async (input) => {
     const name = z.string().trim().min(1).max(120).parse(input);
     const selected = await dialog.showOpenDialog(window, {
@@ -146,7 +207,11 @@ function createWindow() {
   });
   window.setMenuBarVisibility(false);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  window.webContents.on("will-navigate", (event) => event.preventDefault());
+  window.webContents.on("will-navigate", (event) => {
+    // Vite can navigate to its own entry URL while preparing dependencies.
+    if (!MAIN_WINDOW_VITE_DEV_SERVER_URL || event.url !== rendererURL())
+      event.preventDefault();
+  });
   window.webContents.on("will-redirect", (event) => event.preventDefault());
   void window.loadURL(rendererURL());
 }
@@ -190,6 +255,14 @@ else {
     app.on("activate", () => {
       if (!BrowserWindow.getAllWindows().length) createWindow();
     });
+  });
+  let shuttingDown = false;
+  app.on("before-quit", (event) => {
+    if (!shuttingDown) {
+      event.preventDefault();
+      shuttingDown = true;
+      void generation.close().finally(() => app.quit());
+    }
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();

@@ -1,0 +1,186 @@
+import { z } from "zod";
+import type { Master, Variant, VocalAction, Project } from "./domain";
+
+export const generationDraftSchema = z
+  .object({
+    characterId: z.uuid(),
+    masterId: z.uuid(),
+    masterSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    variantId: z.uuid(),
+    action: z.enum(["silent", "speaking", "shouting"]),
+    intensity: z.number().min(0).max(1).optional(),
+    supplementaryInstructions: z.string().max(8000),
+    basePrompt: z.string().min(1).max(24000),
+    prompt: z.string().trim().min(1).max(24000),
+    providerId: z.enum(["manual-import", "codex-native"]),
+  })
+  .strict();
+export const attemptSchema = generationDraftSchema
+  .omit({ basePrompt: true, prompt: true, supplementaryInstructions: true })
+  .extend({
+    id: z.uuid(),
+    createdAt: z.iso.datetime(),
+    promptRevision: z
+      .object({
+        id: z.uuid(),
+        compositionVersion: z.literal(1),
+        createdAt: z.iso.datetime(),
+        basePrompt: z.string().min(1).max(24000),
+        prompt: z.string().min(1).max(24000),
+        supplementaryInstructions: z.string().max(8000),
+      })
+      .strict(),
+  })
+  .strict();
+export type GenerationDraft = z.infer<typeof generationDraftSchema>;
+export type GenerationAttempt = z.infer<typeof attemptSchema>;
+export type GenerationCapability = {
+  canGenerate: boolean;
+  supportsReferenceImages: boolean;
+  supportsEditingMasks: boolean;
+  canImportResult: boolean;
+};
+export type ProviderDescriptor = {
+  id: string;
+  label: string;
+  capabilities: GenerationCapability;
+  unavailableReason?: string;
+};
+// Paths stay in the main process. The renderer submits IDs, never paths.
+export type GenerationRequest = GenerationDraft & {
+  projectId: string;
+  referenceAssetPath: string;
+  selectionContext?: string;
+};
+export type GenerationResult = {
+  providerId: string;
+  outputAssetPath: string;
+  prompt: string;
+  createdAt: string;
+};
+export type ProviderAuthentication =
+  | { status: "authenticated"; accountLabel: string }
+  | { status: "not-required" | "unavailable"; reason: string };
+export interface ImageGenerationProvider {
+  descriptor: ProviderDescriptor;
+  prepare(project: Project, draft: GenerationDraft): GenerationRequest;
+  acceptImportedResult(
+    request: GenerationRequest,
+    storedPath: string,
+  ): GenerationResult;
+  authenticate(): Promise<ProviderAuthentication>;
+  getCapabilities(): GenerationCapability;
+  generateImage(request: GenerationRequest): Promise<GenerationResult>;
+  editImage(request: GenerationRequest): Promise<GenerationResult>;
+  cancelGeneration(attemptId: string): Promise<void>;
+  getGenerationResult(
+    project: Project,
+    attemptId: string,
+  ): Promise<GenerationResult | null>;
+}
+export const CHATGPT_URL = "https://chatgpt.com/";
+export function validateExternalURL(input: unknown): string {
+  if (input !== CHATGPT_URL)
+    throw new Error("Nur https://chatgpt.com/ darf extern geöffnet werden.");
+  return CHATGPT_URL;
+}
+export function composePrompt(input: {
+  characterName: string;
+  master: Master;
+  familyLabel: string;
+  variant: Variant;
+  action: VocalAction;
+  intensity?: number;
+  supplementaryInstructions: string;
+}): string {
+  const { master, variant } = input;
+  return [
+    "CHARACTER LOCK — EDIT THE PROVIDED APPROVED MASTER IMAGE",
+    `Attach the actual approved master image as the reference. A filename, ID or hash alone is NOT an image reference. Use the PROVIDED IMAGE of ${input.characterName}; do not invent or redesign the character.`,
+    `Master V${master.version} | ID: ${master.id} | SHA-256: ${master.sha256}`,
+    `Preserve the original ${master.width} × ${master.height} pixel canvas, framing, camera, art style, palette, background and transparency. Do not resample, crop, quantize or convert to a 64×64 sprite.`,
+    "Keep facial identity, hair, freckles/skin details, clothes and accessories unchanged. Change only the facial features needed for the requested expression. If an edit mask is provided, edit only inside it; no mask is supplied automatically. These instructions do not guarantee pixel or identity preservation: manual review is required.",
+    `EMOTION: ${input.familyLabel} / ${variant.label} (${variant.slug}).`,
+    variant.prompt
+      ? `EXPRESSION DIRECTION: ${variant.prompt}`
+      : "EXPRESSION DIRECTION: Follow the selected expression; keep changes restrained and identity consistent.",
+    input.intensity === undefined
+      ? "INTENSITY: unspecified; do not assume a calibrated visual continuum."
+      : `INTENSITY: ${input.intensity} (organizational guidance, not a calibrated visual continuum).`,
+    `VOCAL ACTION (independent of emotion): ${input.action}. ${input.action === "silent" ? "No speech or shouting; keep the mouth pose consistent with a silent expression." : input.action === "speaking" ? "Use a speaking mouth pose, without implying a different emotion or synthesizing animation." : "Use an open shouting mouth and tense jaw while preserving the selected emotion and character identity."}`,
+    input.supplementaryInstructions.trim()
+      ? `ADDITIONAL USER INSTRUCTIONS:\n${input.supplementaryInstructions.trim()}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+export type ComposerState = {
+  base: string;
+  text: string;
+  edited: boolean;
+  pendingBase?: string;
+};
+export const newComposer = (base: string): ComposerState => ({
+  base,
+  text: base,
+  edited: false,
+});
+export function updateComposer(
+  state: ComposerState,
+  base: string,
+): ComposerState {
+  if (base === state.base) return { ...state, pendingBase: undefined };
+  return state.edited ? { ...state, pendingBase: base } : newComposer(base);
+}
+export const editComposer = (
+  state: ComposerState,
+  text: string,
+): ComposerState => ({ ...state, text, edited: text !== state.base });
+export const resetComposer = (state: ComposerState): ComposerState =>
+  newComposer(state.pendingBase ?? state.base);
+export const keepComposer = (state: ComposerState): ComposerState => ({
+  base: state.pendingBase ?? state.base,
+  text: state.text,
+  edited: true,
+});
+export function draftFromAttempt(attempt: GenerationAttempt): GenerationDraft {
+  const {
+    id: _id,
+    createdAt: _created,
+    promptRevision,
+    ...selection
+  } = attempt;
+  void _id;
+  void _created;
+  return {
+    ...selection,
+    basePrompt: promptRevision.basePrompt,
+    prompt: promptRevision.prompt,
+    supplementaryInstructions: promptRevision.supplementaryInstructions,
+  };
+}
+
+export function sameDraft(a: GenerationDraft, b: GenerationDraft): boolean {
+  const left = generationDraftSchema.safeParse(a),
+    right = generationDraftSchema.safeParse(b);
+  return (
+    left.success &&
+    right.success &&
+    JSON.stringify(left.data) === JSON.stringify(right.data)
+  );
+}
+
+export type CodexStatus = {
+  state:
+    | "not-installed"
+    | "not-authenticated"
+    | "unavailable"
+    | "ready"
+    | "running"
+    | "completed"
+    | "failed"
+    | "cancelled";
+  message: string;
+  attemptId?: string;
+};
