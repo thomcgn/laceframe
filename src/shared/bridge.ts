@@ -1,13 +1,21 @@
+import type { CharacterCreationDraft } from "./character-creation";
 import type {
   ProviderDescriptor,
   CodexStatus,
   GenerationDraft,
 } from "./generation";
-import type { Command, Snapshot, StagedImage } from "./domain";
+import type {
+  Command,
+  Snapshot,
+  StagedImage,
+  StagedIdentityImage,
+} from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
   checkCodex(): Promise<Result<CodexStatus>>;
-  startGeneration(draft: GenerationDraft): Promise<Result<CodexStatus>>;
+  startGeneration(
+    draft: GenerationDraft | CharacterCreationDraft,
+  ): Promise<Result<CodexStatus>>;
   generationStatus(): Promise<
     Result<{ status: CodexStatus; snapshot: Snapshot }>
   >;
@@ -20,7 +28,13 @@ export interface LaceframeBridge {
   openProject(): Promise<Result<Snapshot | null>>;
   command(command: Command): Promise<Result<Snapshot>>;
   chooseImage(): Promise<Result<StagedImage | null>>;
+  chooseImage(purpose: "identity"): Promise<Result<StagedIdentityImage | null>>;
   stageImage(bytes: Uint8Array, name: string): Promise<Result<StagedImage>>;
+  stageImage(
+    bytes: Uint8Array,
+    name: string,
+    purpose: "identity",
+  ): Promise<Result<StagedIdentityImage>>;
   discardImage(token: string): Promise<Result<null>>;
   preview(id: string): Promise<Result<string>>;
 }

@@ -1,7 +1,7 @@
 import { MaskEditor } from "../components/MaskEditor";
 import { MAX_MASK_PIXELS } from "../../shared/masking";
 import { createPortal } from "react-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type {
   Command,
   Snapshot,
@@ -205,9 +205,12 @@ export function CreateView({
       live = false;
     };
   }, []);
+  const wasRunning = useRef(false);
   useEffect(() => {
-    onRunningChange(codex.state === "running");
-  }, [codex.state, onRunningChange]);
+    const running = codex.state === "running";
+    if (visible || running || wasRunning.current) onRunningChange(running);
+    wasRunning.current = running;
+  }, [codex.state, onRunningChange, visible]);
   useEffect(() => {
     if (codex.state !== "running") return;
     let live = true;

@@ -1,3 +1,4 @@
+import { CharacterCreator } from "./views/CharacterCreator";
 import { MasterCandidateCompare } from "./components/MasterCandidateCompare";
 import { ImagePreview } from "./components/ImagePreview";
 import { CreateView } from "./views/CreateView";
@@ -177,7 +178,9 @@ function VariantEditor({
 export function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [view, setView] = useState<View>("Characters");
-  const [generationRunning, setGenerationRunning] = useState(false);
+  const [expressionRunning, setExpressionRunning] = useState(false);
+  const [creatorRunning, setCreatorRunning] = useState(false);
+  const generationRunning = expressionRunning || creatorRunning;
   const [createDirty, setCreateDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -187,6 +190,7 @@ export function App() {
   const [familyId, setFamilyId] = useState("");
   const [variantId, setVariantId] = useState("");
   const [newVariant, setNewVariant] = useState("");
+  const [creatorOpen, setCreatorOpen] = useState(false);
   const [assetId, setAssetId] = useState("");
   const [action, setAction] = useState<VocalAction>("silent");
   const [zoom, setZoom] = useState(100);
@@ -263,6 +267,7 @@ export function App() {
   function changedProject(value: Snapshot | null) {
     if (!value) return;
     setSnapshot(value);
+    setCreatorOpen(false);
     setStaged(undefined);
     setAssetId("");
     setFamilyId("");
@@ -363,7 +368,11 @@ export function App() {
           </p>
         </div>
       </div>
-      <MasterCandidateCompare master={master} candidate={asset} />
+      <MasterCandidateCompare
+        master={master}
+        candidate={asset}
+        previewPrefix="Inspect"
+      />
       {asset && (
         <div className="review">
           <div>
@@ -429,7 +438,10 @@ export function App() {
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        if (p && (view === "Characters" || view === "Expressions"))
+        if (
+          p &&
+          ((view === "Characters" && !creatorOpen) || view === "Expressions")
+        )
           void drop(e.dataTransfer.files);
       }}
     >
@@ -500,13 +512,20 @@ export function App() {
         )}
         <div
           id="create-action-slot"
-          hidden={view !== "Create" && !generationRunning}
+          hidden={
+            view !== "Create" &&
+            !(view === "Characters" && creatorOpen) &&
+            !generationRunning
+          }
         />
         <fieldset
           disabled={busy || Boolean(staged) || generationRunning}
           className="workspace"
         >
-          <details className="project-management" open={view !== "Create"}>
+          <details
+            className="project-management"
+            open={view !== "Create" && !creatorOpen}
+          >
             <summary>
               Projektverwaltung · {p?.name ?? "Projekt auswählen"}
             </summary>
@@ -556,17 +575,37 @@ export function App() {
             <div hidden={view !== "Create"}>
               <CreateView
                 key={`${p.id}:${p.selectedCharacterId ?? ""}`}
-                visible={view === "Create"}
+                visible={view === "Create" && !creatorRunning}
                 snapshot={snapshot!}
-                busy={busy}
+                busy={busy || creatorRunning}
                 perform={run}
                 onSnapshot={setSnapshot}
                 onDirtyChange={setCreateDirty}
-                onRunningChange={setGenerationRunning}
+                onRunningChange={setExpressionRunning}
                 onCharacters={() => setView("Characters")}
                 onInspect={(id) => {
                   setAssetId(id);
                   setView("Inspect");
+                }}
+              />
+            </div>
+          )}
+          {p && (
+            <div hidden={view !== "Characters" || !creatorOpen}>
+              <CharacterCreator
+                key={`${p.id}:${p.selectedCharacterId ?? ""}`}
+                snapshot={snapshot!}
+                visible={
+                  view === "Characters" && creatorOpen && !expressionRunning
+                }
+                busy={busy || expressionRunning}
+                perform={run}
+                onSnapshot={setSnapshot}
+                onRunningChange={setCreatorRunning}
+                onClose={() => setCreatorOpen(false)}
+                onExpressions={() => {
+                  setCreatorOpen(false);
+                  setView("Create");
                 }}
               />
             </div>
@@ -588,7 +627,12 @@ export function App() {
             </section>
           ) : (
             <>
-              <section className="character-bar" hidden={view === "Create"}>
+              <section
+                className="character-bar"
+                hidden={
+                  view === "Create" || (view === "Characters" && creatorOpen)
+                }
+              >
                 <label>
                   Aktive Figur
                   <select
@@ -633,7 +677,15 @@ export function App() {
                   <button type="submit">Figur erstellen</button>
                 </form>
               </section>
-              {view === "Characters" && (
+              {view === "Characters" && !creatorOpen && (
+                <button
+                  className="primary"
+                  onClick={() => setCreatorOpen(true)}
+                >
+                  Neuen Charakter erstellen
+                </button>
+              )}
+              {view === "Characters" && !creatorOpen && (
                 <section className="panel">
                   <div className="section-head">
                     <div>

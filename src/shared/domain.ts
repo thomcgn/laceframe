@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  masterAttemptSchema,
+  characterCreationDraftSchema,
+} from "./character-creation";
 import { compositeSchema, MAX_MASK_PIXELS } from "./masking";
 import {
   styleRules,
@@ -20,6 +24,27 @@ const imageFields = {
   height: z.number().int().positive().max(16384),
   format: z.enum(["png", "webp"]),
 };
+export const identityAssetSchema = z
+  .object({
+    ...imageFields,
+    format: z.enum(["png", "webp", "jpg"]),
+    characterId: idSchema,
+    createdAt: z.iso.datetime(),
+    removedAt: z.iso.datetime().optional(),
+  })
+  .strict()
+  .refine((a) => a.width * a.height <= 16_000_000, "Identity image too large");
+export const masterCandidateSchema = z
+  .object({
+    ...imageFields,
+    characterId: idSchema,
+    attemptId: idSchema,
+    status: z.enum(["candidate", "approved", "rejected"]),
+    createdAt: z.iso.datetime(),
+    reviewedAt: z.iso.datetime().optional(),
+    approvedMasterId: idSchema.optional(),
+  })
+  .strict();
 export const masterSchema = z
   .object({
     ...imageFields,
@@ -124,6 +149,10 @@ const projectObject = z
     attempts: z.array(attemptSchema).max(10000),
     artDirections: z.array(artDirectionSchema).max(100).default([]),
     defaultArtDirectionId: idSchema.optional(),
+    characterCreationVersion: z.literal(1).optional(),
+    identityAssets: z.array(identityAssetSchema).max(3000).default([]),
+    masterAttempts: z.array(masterAttemptSchema).max(10000).default([]),
+    masterCandidates: z.array(masterCandidateSchema).max(10000).default([]),
     maskingVersion: z.literal(1).optional(),
     masks: z.array(maskSchema).max(1000).default([]),
     visualStyleVersion: z.literal(1).optional(),
@@ -174,6 +203,10 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       ...p.artDirections,
       ...p.styleAssets,
       ...p.masks,
+      ...p.identityAssets,
+      ...p.masterAttempts,
+      ...p.masterCandidates,
+      ...p.masterAttempts.map((a) => a.promptRevision),
       ...p.outfits,
     ].map((x) => x.id),
   ];
@@ -286,6 +319,85 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       (!series.some((a) => a.revision === m.revision - 1) && m.revision !== 1)
     )
       fail("Invalid mask series");
+  }
+  for (const a of p.identityAssets) {
+    if (
+      !p.characters.some((c) => c.id === a.characterId) ||
+      a.file !== `assets/identities/${a.sha256}.${a.format}`
+    )
+      fail("Invalid identity asset");
+  }
+  for (const c of p.characters)
+    if (
+      p.identityAssets.filter((a) => a.characterId === c.id && !a.removedAt)
+        .length > 3
+    )
+      fail("Too many identity photos");
+  for (const a of p.masterAttempts) {
+    if (
+      !p.characters.some((c) => c.id === a.characterId) ||
+      new Set(a.identityReferences.map((r) => r.id)).size !==
+        a.identityReferences.length ||
+      a.identityReferences.some(
+        (r) =>
+          !p.identityAssets.some(
+            (i) =>
+              i.id === r.id &&
+              i.sha256 === r.sha256 &&
+              i.characterId === a.characterId,
+          ),
+      )
+    )
+      fail("Invalid master attempt identity");
+    const revision = p.artDirectionRevisions.find(
+      (r) =>
+        r.profileId === a.artDirectionId &&
+        r.revision === a.artDirectionRevision,
+    );
+    if (
+      (a.artDirectionId === undefined) !==
+        (a.artDirectionRevision === undefined) ||
+      (a.artDirectionId &&
+        (!revision ||
+          JSON.stringify(revision.styleReferenceIds ?? []) !==
+            JSON.stringify(a.styleReferences.map((r) => r.id)))) ||
+      (!a.artDirectionId && a.styleReferences.length) ||
+      new Set(a.styleReferences.map((r) => r.id)).size !==
+        a.styleReferences.length ||
+      a.styleReferences.some(
+        (r) =>
+          !p.styleAssets.some((i) => i.id === r.id && i.sha256 === r.sha256),
+      )
+    )
+      fail("Invalid master attempt style");
+    const results = p.masterCandidates.filter((c) => c.attemptId === a.id);
+    if (
+      results.length > 1 ||
+      (a.execution?.status === "completed" && !results.length)
+    )
+      fail("Invalid master generation result");
+  }
+  for (const a of p.masterCandidates) {
+    const attempt = p.masterAttempts.find((t) => t.id === a.attemptId);
+    if (
+      !attempt ||
+      attempt.execution?.status !== "completed" ||
+      attempt.characterId !== a.characterId ||
+      a.file !== assetFile("master-candidates", a.sha256, a.format) ||
+      (a.status === "candidate") === Boolean(a.reviewedAt)
+    )
+      fail("Invalid master candidate");
+    const master = p.masters.find((m) => m.id === a.approvedMasterId);
+    if (
+      a.status === "approved"
+        ? !master ||
+          master.characterId !== a.characterId ||
+          master.sha256 !== a.sha256 ||
+          master.width !== a.width ||
+          master.height !== a.height
+        : Boolean(a.approvedMasterId)
+    )
+      fail("Invalid master candidate approval");
   }
   for (const v of p.variants)
     if (!p.families.some((f) => f.id === v.familyId))
@@ -468,13 +580,39 @@ export type StagedImage = {
   format: "png" | "webp";
   preview: string;
 };
+export type StagedIdentityImage = Omit<StagedImage, "format"> & {
+  format: "png" | "webp" | "jpg";
+};
 export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 export const assetFile = (
-  kind: "originals" | "candidates" | "styles" | "masks",
+  kind: "originals" | "candidates" | "styles" | "masks" | "master-candidates",
   hash: string,
   format: "png" | "webp",
 ) => `assets/${kind}/${hash}.${format}`;
 export const commandSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("importIdentityReference"),
+      characterId: idSchema,
+      token: idSchema,
+    })
+    .strict(),
+  z
+    .object({ type: z.literal("removeIdentityReference"), id: idSchema })
+    .strict(),
+  z
+    .object({
+      type: z.literal("prepareCharacterMaster"),
+      draft: characterCreationDraftSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("reviewMasterCandidate"),
+      id: idSchema,
+      status: z.enum(["approved", "rejected"]),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("saveMask"),

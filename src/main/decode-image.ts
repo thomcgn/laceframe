@@ -5,13 +5,19 @@ export async function decodeImage(
   bytes: Uint8Array,
   width: number,
   height: number,
-  format: "png" | "webp",
+  format: "png" | "webp" | "jpg",
 ): Promise<void> {
-  if (format === "png") {
+  if (format === "png" || format === "jpg") {
     const image = nativeImage.createFromBuffer(Buffer.from(bytes));
     const size = image.getSize();
-    if (image.isEmpty() || size.width !== width || size.height !== height)
-      throw new Error("Das PNG kann nicht vollständig dekodiert werden.");
+    if (
+      image.isEmpty() ||
+      !(
+        (size.width === width && size.height === height) ||
+        (format === "jpg" && size.width === height && size.height === width)
+      )
+    )
+      throw new Error("Das PNG/JPEG kann nicht vollständig dekodiert werden.");
     return;
   }
   // nativeImage only supports PNG/JPEG buffers on Linux. Use Chromium's built-in

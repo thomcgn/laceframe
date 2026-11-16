@@ -16,3 +16,6 @@ artifacts/
 **/laceframe.*.backup.json
 **/assets/masks/
 **/laceframe.v2.pre-masking.backup.json
+**/assets/identities/
+**/assets/master-candidates/
+**/laceframe.v2.pre-character-creation.backup.json

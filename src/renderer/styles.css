@@ -990,3 +990,50 @@ footer span {
   mix-blend-mode: screen;
   pointer-events: none;
 }
+.character-creator {
+  display: grid;
+  gap: 0.7rem;
+}
+.creator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  min-width: 0;
+}
+.creator-grid .panel {
+  min-width: 0;
+}
+.creator-references {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+}
+.creator-references > * {
+  flex: 1;
+  min-width: 100px;
+  max-width: 220px;
+}
+.creator-references figure {
+  margin: 0;
+}
+.creator-references .preview {
+  height: 145px;
+  min-height: 0;
+}
+.creator-references small {
+  display: block;
+}
+.creator-references button {
+  margin: 0.25rem 0.25rem 0 0;
+}
+.saved-master-prompt {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+@media (max-width: 1100px) {
+  .creator-grid {
+    grid-template-columns: 1fr;
+  }
+}

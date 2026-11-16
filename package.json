@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:desktop": "node scripts/desktop-smoke.cjs",
-    "test:desktop:native": "node scripts/native-smoke.cjs",
+    "test:desktop:native": "node scripts/native-smoke.cjs && node scripts/creator-smoke.cjs",
     "test:dev": "node scripts/dev-smoke.cjs"
   },
   "config": {

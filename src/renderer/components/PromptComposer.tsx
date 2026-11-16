@@ -7,7 +7,9 @@ import {
 export function PromptComposer({
   state,
   onChange,
+  labelPrefix,
 }: {
+  labelPrefix?: string;
   state: ComposerState;
   onChange: (state: ComposerState) => void;
 }) {
@@ -44,7 +46,9 @@ export function PromptComposer({
       <label>
         Arbeits-Prompt
         <textarea
-          aria-label="Arbeits-Prompt"
+          aria-label={
+            labelPrefix ? `${labelPrefix} Arbeits-Prompt` : "Arbeits-Prompt"
+          }
           rows={12}
           maxLength={24000}
           value={state.text}

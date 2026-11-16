@@ -2,6 +2,8 @@
 
 **Status per developer report (2026-11-16):** Task 01, Task 02 Create and native Codex App Server ImageGen implemented. Quality pass reports a compact Create UI, monotonic timer, registered Before/After slider and 91 passed unit tests. See `docs/CODEX_02_UX_VALIDATION_2026-11-16.md`; this report is not a fresh rerun of tests.
 
+**02E follow-up:** Character Creator / Photo-to-Master adds draft identities, explicit native master generation and manual Master V1 approval, preserving expressions/styles/masks. See `docs/CODEX_02E_VALIDATION.md` for actual current checks and limitations; the phase list below retains the original plan.
+
 ## Product decisions
 
 - Standalone cross-platform app, not embedded in Ada Voss game.
