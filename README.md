@@ -70,4 +70,8 @@ A live controlled reference test changed only the pot color of a test image and 
 
 Run `npm run test:desktop:native` after building for the deterministic packaged native-provider UI smoke test. Its explicitly labelled protocol fixture exercises success, failure and cancellation without additional live generations; the application has no simulated-generation fallback.
 
+In Create, **Art Direction · gemeinsamer Spielstil** creates, revises and selects project-wide text rendering profiles; **Weiteren Stil anlegen** adds another profile. **Expression Identity** saves a personal direction for only the selected character/variant; clearing it restores the shared template. New attempts save the style ID/revision and personal direction alongside the exact prompt. The approved master remains the identity reference; no extra style image is sent. Existing prompt revisions remain immutable, and changed settings require explicit prompt adoption when reviewing a saved revision.
+
+Older v2 projects without profile collections remain unchanged on open. Their first explicit save creates the byte-exact `laceframe.v2.pre-art-direction.backup.json`; conflicting backups are never replaced. See [PR #8 review, tests and remaining scope](docs/PR_08_VALIDATION.md).
+
 See [UX quality validation and comparison controls](docs/UX_QUALITY_VALIDATION.md) and [Task 02 implementation, official integration findings and validation](docs/TASK_02_VALIDATION.md). Motion playback/export remains Task 03.

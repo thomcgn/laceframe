@@ -18,7 +18,6 @@ import {
   type GenerationAttempt,
   type GenerationExecution,
   generationExecutionSchema,
-  draftFromAttempt,
 } from "../shared/generation";
 import { createPresets } from "../shared/presets";
 
@@ -97,6 +96,7 @@ export class ProjectService {
   private project?: Project;
   private diskHash = "";
   private legacyBytes?: Buffer;
+  private legacyBackupName = "laceframe.v1.backup.json";
   private staged?: { image: StagedImage; bytes: Buffer };
   constructor(
     private readonly decode: (
@@ -169,10 +169,15 @@ export class ProjectService {
       )
         throw new Error("Bildmetadaten stimmen nicht überein.");
     }
-    this.legacyBytes =
-      (raw as { schemaVersion: number }).schemaVersion === 1
-        ? bytes
-        : undefined;
+    const source = raw as Record<string, unknown>;
+    const versionOne = source.schemaVersion === 1;
+    const needsArtMigration =
+      !Object.hasOwn(source, "artDirections") ||
+      !Object.hasOwn(source, "expressionPerformances");
+    this.legacyBytes = versionOne || needsArtMigration ? bytes : undefined;
+    this.legacyBackupName = versionOne
+      ? "laceframe.v1.backup.json"
+      : "laceframe.v2.pre-art-direction.backup.json";
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -232,7 +237,7 @@ export class ProjectService {
     )
       throw new Error("Projekt wurde extern geändert. Bitte erneut öffnen.");
     if (this.legacyBytes) {
-      const backup = await safePath(this.directory, "laceframe.v1.backup.json");
+      const backup = await safePath(this.directory, this.legacyBackupName);
       try {
         await fs.writeFile(backup, this.legacyBytes, {
           flag: "wx",
@@ -347,7 +352,8 @@ export class ProjectService {
         if (!p.variants.some((v) => v.id === cmd.variantId))
           throw new Error("Emotionsvariante fehlt.");
         const index = p.expressionPerformances.findIndex(
-          (e) => e.characterId === cmd.characterId && e.variantId === cmd.variantId,
+          (e) =>
+            e.characterId === cmd.characterId && e.variantId === cmd.variantId,
         );
         const direction = cmd.direction.trim();
         if (!direction) {
@@ -471,7 +477,18 @@ export class ProjectService {
   ) {
     if (p.assets.some((a) => a.attemptId === attempt.id))
       throw new Error("Versuch hat bereits ein Ergebnis.");
-    manualImportProvider.prepare(p, draftFromAttempt(attempt));
+    // An imported result belongs to the saved immutable attempt, even after
+    // the project's active style/performance has changed. New drafts are
+    // validated against live settings in prepareAttempt, not retroactively here.
+    const master = p.masters.find(
+      (m) =>
+        m.id === attempt.masterId &&
+        m.characterId === attempt.characterId &&
+        m.sha256 === attempt.masterSha256 &&
+        m.locked,
+    );
+    if (!master || !p.variants.some((v) => v.id === attempt.variantId))
+      throw new Error("Ungültige gespeicherte Master- oder Variantenreferenz.");
     await this.preview(attempt.masterId);
     const image = await this.store("candidates", token);
     p.assets.push({

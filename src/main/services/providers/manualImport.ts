@@ -57,6 +57,22 @@ export const manualImportProvider: ImageGenerationProvider = {
     );
     if (!master || !project.variants.some((v) => v.id === draft.variantId))
       throw new Error("Freigegebenen Master und gültige Variante auswählen.");
+    const style = project.artDirections.find(
+      (a) => a.id === project.defaultArtDirectionId,
+    );
+    if (
+      draft.artDirectionId !== style?.id ||
+      draft.artDirectionRevision !== style?.revision
+    )
+      throw new Error("Art Direction wurde geändert. Prompt erneut aufbauen.");
+    const personal = project.expressionPerformances.find(
+      (e) =>
+        e.characterId === draft.characterId && e.variantId === draft.variantId,
+    );
+    if (draft.expressionPerformance !== personal?.direction)
+      throw new Error(
+        "Persönlicher Ausdruck wurde geändert. Prompt erneut aufbauen.",
+      );
     return { ...draft, projectId: project.id, referenceAssetPath: master.file };
   },
   acceptImportedResult(request, storedPath) {

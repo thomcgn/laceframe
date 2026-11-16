@@ -16,7 +16,11 @@ export function PromptComposer({
       <div className="section-head">
         <h2>Character-Lock-Prompt</h2>
         <span className="badge">
-          {state.edited ? "Eigene Bearbeitung" : "Automatische Vorlage"}
+          {state.edited
+            ? "Eigene Bearbeitung"
+            : state.saved
+              ? "Gespeicherte Revision"
+              : "Automatische Vorlage"}
         </span>
       </div>
       {state.pendingBase !== undefined && (
