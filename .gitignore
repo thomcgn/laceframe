@@ -1,0 +1,13 @@
+node_modules/
+.vite/
+out/
+coverage/
+*.log
+*.tsbuildinfo
+# Keep local projects and all private artwork outside public git.
+*.laceframe/
+projects/
+artifacts/
+**/laceframe.json
+**/assets/originals/
+**/assets/candidates/
