@@ -1,7 +1,16 @@
+import { GenerationRequirements } from "../components/GenerationRequirements";
+import {
+  updateStudioPrompt,
+  promptRequirements,
+  type PromptMode,
+  type StudioIntent,
+  type Requirement,
+} from "../../shared/studio";
 import { AssetQuality } from "../components/AssetQuality";
 import { RESOLUTION_PROFILES } from "../../shared/asset-quality";
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
+import { effectiveStyle } from "../../shared/domain";
 import type { Snapshot, Command } from "../../shared/domain";
 import {
   characterCreationDraftSchema,
@@ -13,7 +22,6 @@ import {
 import {
   executionLabel,
   newComposer,
-  updateComposer,
   type CodexStatus,
 } from "../../shared/generation";
 import type { Result } from "../../shared/bridge";
@@ -34,7 +42,17 @@ export function CharacterCreator({
   onRunningChange,
   onClose,
   onExpressions,
+  onLibrary,
+  onArtDirection,
+  onDirtyChange,
+  intent,
+  contextControlled = false,
 }: {
+  onLibrary: (id: string) => void;
+  onArtDirection: (id?: string) => void;
+  onDirtyChange: (dirty: boolean) => void;
+  intent?: StudioIntent;
+  contextControlled?: boolean;
   snapshot: Snapshot;
   visible: boolean;
   busy: boolean;
@@ -54,9 +72,21 @@ export function CharacterCreator({
     (a) => a.characterId === character?.id && !a.removedAt,
   );
   const [name, setName] = useState("");
-  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(true);
+  const [promptMode, setPromptMode] = useState<PromptMode>("automatic");
+  const [creative, setCreative] = useState("");
   const [styleId, setStyleId] = useState(
-    latest?.artDirectionId ?? p.defaultArtDirectionId ?? "",
+    effectiveStyle(p, character?.id)?.id ?? "",
+  );
+  useEffect(
+    () => setStyleId(effectiveStyle(p, character?.id)?.id ?? ""),
+    [
+      character?.styleSelection?.mode,
+      character?.styleSelection?.mode === "profile"
+        ? character.styleSelection.profileId
+        : undefined,
+      p.defaultArtDirectionId,
+    ],
   );
   const style = p.artDirections.find((s) => s.id === styleId);
   const styleRefs = (style?.styleReferenceIds ?? []).map((id) => {
@@ -105,16 +135,66 @@ export function CharacterCreator({
     characterCreationDraftSchema
       .omit({ operation: true, prompt: true })
       .safeParse(settings).success
-      ? composeCharacterPrompt(p, settings)
+      ? composeCharacterPrompt(p, settings) +
+        (promptMode !== "automatic" && creative.trim()
+          ? `\n\nADDITIONAL CREATIVE INSTRUCTIONS: ${creative.trim()}`
+          : "")
       : "";
   const [composer, setComposer] = useState(() => newComposer(base));
   useEffect(
-    () => setComposer((old) => updateComposer(old, base)),
-    [base, composer.base],
+    () => setComposer((old) => updateStudioPrompt(old, base, promptMode)),
+    [base, promptMode],
   );
   useEffect(() => {
     if (composer.pendingBase !== undefined) setPromptOpen(true);
   }, [composer.pendingBase]);
+  function changePromptMode(mode: PromptMode) {
+    if (
+      promptMode === "expert" &&
+      composer.edited &&
+      mode !== "expert" &&
+      !window.confirm(
+        "Eigenen Expert Override verwerfen und zur strukturierten Vorlage wechseln?",
+      )
+    )
+      return;
+    setPromptMode(mode);
+    if (mode !== "expert") setComposer(newComposer(base));
+  }
+  useEffect(() => {
+    if (
+      intent?.mode === "master" &&
+      intent.characterId === character?.id &&
+      intent.candidateId
+    ) {
+      const candidate = p.masterCandidates.find(
+        (c) => c.id === intent.candidateId && c.characterId === character.id,
+      );
+      if (candidate) setActiveId(candidate.attemptId);
+    }
+    if (
+      intent?.mode === "master" &&
+      intent.characterId === character?.id &&
+      intent.styleId
+    )
+      setStyleId(intent.styleId);
+  }, [intent?.serial]);
+  const formSignature = JSON.stringify({
+    settings,
+    creative,
+    promptMode,
+    prompt: composer.text,
+    name,
+  });
+  const initialSignature = useRef(formSignature),
+    savedSignature = useRef<string | undefined>(undefined);
+  useEffect(
+    () =>
+      onDirtyChange(
+        formSignature !== (savedSignature.current ?? initialSignature.current),
+      ),
+    [formSignature, onDirtyChange],
+  );
   const draft = settings
     ? {
         ...settings,
@@ -128,6 +208,7 @@ export function CharacterCreator({
       draft &&
       characterCreationDraftSchema.safeParse(draft).success &&
       composer.pendingBase === undefined &&
+      (promptMode === "expert" || composer.base === base) &&
       codex.available &&
       (identities.length + styleRefs.length <= 1 || codex.multipleReferences),
   );
@@ -137,7 +218,7 @@ export function CharacterCreator({
     wasRunning.current = running;
   }, [visible, running, onRunningChange]);
   useEffect(() => {
-    if (!visible || running) return;
+    if (!visible || running || codex.attemptId) return;
     let live = true;
     void window.laceframe.checkCodex().then((r) => {
       if (live && r.ok) setCodex(r.value);
@@ -217,6 +298,8 @@ export function CharacterCreator({
     void perform(
       () => window.laceframe.startGeneration(draft as CharacterCreationDraft),
       (s) => {
+        savedSignature.current = formSignature;
+        onDirtyChange(false);
         setCodex(s);
         setActiveId(s.attemptId ?? "");
         setComposer((c) => ({ ...c, saved: true }));
@@ -224,6 +307,67 @@ export function CharacterCreator({
       },
     );
   }
+  const requirements: Requirement[] = [];
+  if (busy && !running)
+    requirements.push({
+      message: "Eine andere Aktion oder Generierung läuft.",
+    });
+  if (!character)
+    requirements.push({
+      message: "Figur fehlt. Einen Figurenentwurf anlegen.",
+      target: "creator-identity",
+    });
+  if (character?.masterId)
+    requirements.push({
+      message:
+        "Dieser Master ist bereits gesperrt. Für weitere Ausdrücke den Expression-Modus verwenden.",
+    });
+  if (!identities.length)
+    requirements.push({
+      message: "Identitätsbild fehlt.",
+      target: "creator-identity",
+    });
+  if (!outfit.trim())
+    requirements.push({
+      message: "Outfit ist unvollständig.",
+      target: "creator-outfit",
+    });
+  if (
+    !composition.pose.trim() ||
+    !composition.framing.trim() ||
+    !composition.profile.trim() ||
+    !Number.isInteger(composition.targetWidth) ||
+    !Number.isInteger(composition.targetHeight) ||
+    composition.targetWidth < 64 ||
+    composition.targetHeight < 64 ||
+    composition.targetWidth > 4096 ||
+    composition.targetHeight > 4096
+  )
+    requirements.push({
+      message:
+        "Komposition oder Zielabmessungen unvollständig (64–4096 Pixel).",
+      target: "creator-composition",
+    });
+  if (!codex.available && !running)
+    requirements.push({ message: codex.message });
+  if (identities.length + styleRefs.length > 1 && !codex.multipleReferences)
+    requirements.push({
+      message:
+        "Mehrfachreferenzen nicht bestätigt. Provider-Verfügbarkeit prüfen.",
+    });
+  if (!running)
+    requirements.push(
+      ...promptRequirements(promptMode, composer, base).map((r) => ({
+        ...r,
+        target: "creator-prompt-builder",
+      })),
+    );
+  if (!valid && !running && !requirements.length)
+    requirements.push({
+      message:
+        "Einstellungen oder Prompt überschreiten die erlaubten Grenzen. Eingaben im Prompt Builder prüfen.",
+      target: "creator-prompt-builder",
+    });
   const slot = document.getElementById("create-action-slot");
   const timing =
     codex.attemptId === activeId
@@ -258,6 +402,7 @@ export function CharacterCreator({
                   {executionLabel(timing, running)}
                 </output>
               )}
+              {!running && <GenerationRequirements items={requirements} />}
               <small>
                 Nur dieser Klick übermittelt die unten aufgeführten Identitäts-
                 und Stilbilder an Codex und nutzt dein Codex-Kontingent.
@@ -302,50 +447,62 @@ export function CharacterCreator({
         </div>
         <button onClick={onClose}>Zur Charakterbibliothek</button>
       </div>
-      <label>
-        Aktive Figur
-        <select
-          aria-label="Creator Figur"
-          value={character?.id ?? ""}
-          onChange={(e) =>
-            command({ type: "selectCharacter", id: e.target.value })
-          }
-        >
-          <option value="" disabled>
-            Entwurfsfigur anlegen
-          </option>
-          {p.characters.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.masterId ? " · Master gesperrt" : " · Entwurf"}
-            </option>
-          ))}
-        </select>
-      </label>
-      <form
-        className="inline-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          command({ type: "addCharacter", name }, "Figurenentwurf angelegt.");
-        }}
+      {!contextControlled && (
+        <>
+          <label>
+            Aktive Figur
+            <select
+              aria-label="Creator Figur"
+              value={character?.id ?? ""}
+              onChange={(e) =>
+                command({ type: "selectCharacter", id: e.target.value })
+              }
+            >
+              <option value="" disabled>
+                Entwurfsfigur anlegen
+              </option>
+              {p.characters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.masterId ? " · Master gesperrt" : " · Entwurf"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
+      <details
+        className="creator-new-character"
+        open={!character || Boolean(character.masterId)}
       >
-        <label>
-          Neue Entwurfsfigur
-          <input
-            aria-label="Name der Entwurfsfigur"
-            required
-            maxLength={120}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
-        <button>Figurenentwurf anlegen</button>
-      </form>
+        <summary>Neue Figur anlegen</summary>
+        <form
+          className="inline-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            command({ type: "addCharacter", name }, "Figurenentwurf angelegt.");
+          }}
+        >
+          <label>
+            Neue Entwurfsfigur
+            <input
+              aria-label="Name der Entwurfsfigur"
+              required
+              maxLength={120}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          <button>Figurenentwurf anlegen</button>
+        </form>
+      </details>
       {character && (
         <>
           <p>
             Aktive Figur: <strong>{character.name}</strong> ·{" "}
-            {character.masterId ? "Master V1 gesperrt" : "Entwurf ohne Master"}
+            {character.masterId
+              ? `Master V${p.masters.find((m) => m.id === character.masterId)?.version ?? "—"} gesperrt`
+              : "Entwurf ohne Master"}
           </p>
           {character.masterId && (
             <p className="warning">
@@ -369,7 +526,9 @@ export function CharacterCreator({
                   importIdentity(e.dataTransfer.files[0]);
               }}
             >
-              <h3>1 · Identität</h3>
+              <h3 data-focus-target="creator-identity">
+                Identity Lock · Identitätsquellen
+              </h3>
               <p>
                 Bis zu drei Fotos derselben Person oder Illustrationen.
                 PNG/JPEG/WebP, je 16 MiB / 16 MP. Originale bleiben lokal, bis
@@ -441,13 +600,29 @@ export function CharacterCreator({
               </label>
             </section>
             <section className="panel">
-              <h3>2 · Art Direction</h3>
+              <h3>Art Direction / Style Lock</h3>
+              <button
+                className="text-link"
+                onClick={() => onArtDirection(style?.id)}
+              >
+                Art Direction bearbeiten
+              </button>
               <label>
                 Darstellungsstil
                 <select
                   aria-label="Creator Art Direction"
                   value={style?.id ?? ""}
-                  onChange={(e) => setStyleId(e.target.value)}
+                  onChange={(e) => {
+                    setStyleId(e.target.value);
+                    if (character)
+                      command({
+                        type: "setCharacterStyle",
+                        characterId: character.id,
+                        selection: e.target.value
+                          ? { mode: "profile", profileId: e.target.value }
+                          : { mode: "master" },
+                      });
+                  }}
                 >
                   <option value="">Ohne zusätzliches Stilprofil</option>
                   {p.artDirections.map((s) => (
@@ -473,11 +648,11 @@ export function CharacterCreator({
               </div>
               {!style && (
                 <small>
-                  Stilprofile und Stilbilder lassen sich in Create → Art
-                  Direction anlegen.
+                  Stilprofile und Stilbilder lassen sich unter Art Direction
+                  anlegen.
                 </small>
               )}
-              <h3>3 · Outfit</h3>
+              <h3 data-focus-target="creator-outfit">Outfit</h3>
               <label>
                 Individuelle Kleidung
                 <textarea
@@ -489,8 +664,10 @@ export function CharacterCreator({
                   onChange={(e) => setOutfit(e.target.value)}
                 />
               </label>
-              <details>
-                <summary>4 · Master Composition</summary>
+              <details data-focus-target="creator-composition">
+                <summary>
+                  Composition · Pose, Ausschnitt & Zielauflösung
+                </summary>
                 <p>
                   Hintergrund: echte Alpha-Transparenz, keine Kulisse. Das
                   tatsächliche Ergebnis wird vor dem Review geprüft.
@@ -601,28 +778,8 @@ export function CharacterCreator({
                 </p>
               )}
           </div>
-          <details
-            className="panel"
-            open={promptOpen}
-            onToggle={(e) => setPromptOpen(e.currentTarget.open)}
-          >
-            <summary>5 · Prompt und Generierungsdetails</summary>
-            <PromptComposer
-              labelPrefix="Creator"
-              state={composer}
-              onChange={setComposer}
-            />
-            <button
-              disabled={running || busy}
-              onClick={() =>
-                void perform(() => window.laceframe.checkCodex(), setCodex)
-              }
-            >
-              Creator-Verfügbarkeit prüfen
-            </button>
-          </details>
           <section className="panel">
-            <h3>6 · Masterkandidaten prüfen</h3>
+            <h3>Masterkandidaten prüfen</h3>
             <label>
               Masterversuch
               <select
@@ -641,6 +798,9 @@ export function CharacterCreator({
             </label>
             {candidate ? (
               <>
+                <button onClick={() => onLibrary(candidate.id)}>
+                  In Library prüfen
+                </button>
                 <p className={`badge ${candidate.status}`}>
                   Masterkandidat ·{" "}
                   {candidate.status === "approved"
@@ -738,6 +898,30 @@ export function CharacterCreator({
               </details>
             )}
           </section>
+          <details
+            className="panel"
+            open={promptOpen}
+            onToggle={(e) => setPromptOpen(e.currentTarget.open)}
+          >
+            <summary>Prompt Builder & Generierungsdetails</summary>
+            <PromptComposer
+              labelPrefix="Creator"
+              state={composer}
+              onChange={setComposer}
+              mode={promptMode}
+              onModeChange={changePromptMode}
+              extraInstructions={creative}
+              onExtraChange={setCreative}
+            />
+            <button
+              disabled={running || busy}
+              onClick={() =>
+                void perform(() => window.laceframe.checkCodex(), setCodex)
+              }
+            >
+              Creator-Verfügbarkeit prüfen
+            </button>
+          </details>
         </>
       )}
     </div>

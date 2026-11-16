@@ -1,3 +1,4 @@
+const { field, image, text, nav } = require("./smoke-ui.cjs");
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -27,7 +28,7 @@ const { createHash } = require("node:crypto");
       page.getByRole("heading", { name: "Characters", exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByText("Ein sicherer Ort für deine Charaktere."),
+      text(page, "Ein sicherer Ort für deine Charaktere."),
     ).toBeVisible();
     return page;
   };
@@ -122,14 +123,12 @@ const { createHash } = require("node:crypto");
       .update(Buffer.from(bytes))
       .digest("hex");
     await setDialog(project);
-    await page.getByLabel("Projektname", { exact: true }).fill("Desktop Smoke");
+    await field(page, "Projektname", { exact: true }).fill("Desktop Smoke");
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })
       .click();
-    await expect(
-      page.getByText("Desktop Smoke", { exact: true }),
-    ).toBeVisible();
-    await page.getByLabel("Neue Figur", { exact: true }).fill("Ada Voss");
+    await expect(text(page, "Desktop Smoke", { exact: true })).toBeVisible();
+    await field(page, "Neue Figur", { exact: true }).fill("Ada Voss");
     await page
       .getByRole("button", { name: "Figur erstellen", exact: true })
       .click();
@@ -166,19 +165,19 @@ const { createHash } = require("node:crypto");
       })
       .click();
     await expect(
-      page.getByText("Master V1 · gesperrt", { exact: true }),
+      text(page, "Master V1 · gesperrt", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByAltText("Freigegebener Master V1")).toBeVisible();
-    await page.getByRole("button", { name: /Expressions$/ }).click();
-    await page
-      .getByLabel("Emotionsfamilie", { exact: true })
-      .selectOption({ label: "Wütend" });
-    await page
-      .getByLabel("Variante", { exact: true })
-      .selectOption({ label: "Anbrüllen / shouting" });
-    await page
-      .getByLabel("Bildanweisung · nur lokale Notiz", { exact: true })
-      .fill("Manuell geprüfte kontrollierte Wut.");
+    await expect(image(page, "Freigegebener Master V1")).toBeVisible();
+    await nav(page, "Library", true);
+    await field(page, "Emotionsfamilie", { exact: true }).selectOption({
+      label: "Wütend",
+    });
+    await field(page, "Variante", { exact: true }).selectOption({
+      label: "Anbrüllen / shouting",
+    });
+    await field(page, "Bildanweisung · nur lokale Notiz", { exact: true }).fill(
+      "Manuell geprüfte kontrollierte Wut.",
+    );
     await page
       .getByRole("button", { name: "Variante speichern", exact: true })
       .click();
@@ -191,39 +190,45 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Kandidat importieren", exact: true })
       .click();
     await expect(
-      page.getByRole("button", { name: "Freigeben", exact: true }),
+      page.getByRole("button", { name: "Asset freigeben", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Freigeben", exact: true }).click();
-    await expect(page.locator(".notice")).toHaveText("Ausdruck freigegeben.");
+    await page
+      .getByRole("button", { name: "Asset freigeben", exact: true })
+      .click();
+    await expect(page.locator(".notice")).toHaveText("Expression freigegeben.");
     await page
       .getByRole("button", { name: "Kandidaten-PNG auswählen …", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Kandidat importieren", exact: true })
       .click();
-    await page.getByRole("button", { name: "Ablehnen", exact: true }).click();
-    await expect(page.locator(".notice")).toHaveText("Ausdruck abgelehnt.");
-    await page.getByText("Eigene Familie hinzufügen", { exact: true }).click();
-    await page.getByLabel("Neue Familie", { exact: true }).fill("Erleichtert");
     await page
-      .locator("details")
+      .getByRole("button", { name: "Asset ablehnen", exact: true })
+      .click();
+    await expect(page.locator(".notice")).toHaveText("Kandidat abgelehnt.");
+    await text(page, "Eigene Familie hinzufügen", { exact: true }).click();
+    await field(page, "Neue Familie", { exact: true }).fill("Erleichtert");
+    await page
+      .locator("form")
+      .filter({ has: page.getByLabel("Neue Familie", { exact: true }) })
       .getByLabel("Kennung", { exact: true })
       .fill("relieved");
     await page
       .getByRole("button", { name: "Familie hinzufügen", exact: true })
       .click();
     await expect(page.locator(".notice")).toHaveText("Gespeichert.");
-    await page
-      .getByLabel("Emotionsfamilie", { exact: true })
-      .selectOption({ label: "Erleichtert" });
-    await page.getByLabel("Neue Variante", { exact: true }).fill("Aufatmen");
+    await field(page, "Emotionsfamilie", { exact: true }).selectOption({
+      label: "Erleichtert",
+    });
+    await field(page, "Neue Variante", { exact: true }).fill("Aufatmen");
     await page
       .getByRole("button", { name: "Variante hinzufügen", exact: true })
       .click();
-    await expect(page.getByLabel("Variante", { exact: true })).toContainText(
+    await expect(field(page, "Variante", { exact: true })).toContainText(
       "Aufatmen",
     );
-    await page.getByLabel("Neue Figur", { exact: true }).fill("WebP Probe");
+    await nav(page, "Characters");
+    await field(page, "Neue Figur", { exact: true }).fill("WebP Probe");
     await page
       .getByRole("button", { name: "Figur erstellen", exact: true })
       .click();
@@ -258,20 +263,21 @@ const { createHash } = require("node:crypto");
       .click();
     await expect(page.getByRole("dialog")).not.toBeVisible();
     await expect(
-      page.getByText("8 × 10 px · WEBP · bestätigt", { exact: false }),
+      text(page, "8 × 10 px · WEBP · bestätigt", { exact: false }),
     ).toBeVisible();
-    await page
-      .getByLabel("Aktive Figur", { exact: true })
-      .selectOption({ label: "Ada Voss" });
+    await field(page, "Aktive Figur", { exact: true }).selectOption({
+      label: "Ada Voss",
+    });
     await expect(
       page.getByRole("heading", { name: "Ada Voss", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: /Create$/ }).click();
-    await expect(page.getByAltText("Create · Masterreferenz")).toBeVisible();
-    await expect(
-      page.getByLabel("Create Anbieter", { exact: true }),
-    ).toBeVisible();
-    await expect(page.getByAltText("Create · Ergebnisvorschau")).toHaveCount(0);
+    await nav(page, "Studio");
+    await page
+      .getByRole("button", { name: "Expression erstellen", exact: true })
+      .click();
+    await expect(image(page, "Create · Masterreferenz")).toBeVisible();
+    await expect(field(page, "Create Anbieter", { exact: true })).toBeVisible();
+    await expect(image(page, "Create · Ergebnisvorschau")).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Ergebnis importieren …", exact: true }),
     ).toBeEnabled();
@@ -281,7 +287,7 @@ const { createHash } = require("node:crypto");
         new File(["invalid image bytes"], "bad.png", { type: "image/png" }),
       );
       document
-        .querySelector(".create-result")
+        .querySelector(".studio-editor:not([hidden]) .create-result")
         .dispatchEvent(
           new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
         );
@@ -302,18 +308,21 @@ const { createHash } = require("node:crypto");
       ["chatgpt-plan", false],
       ["manual-import", false],
     ]);
-    await page
-      .getByLabel("Create Familie", { exact: true })
-      .selectOption({ label: "Amüsiert" });
-    await page
-      .getByLabel("Create Variante", { exact: true })
-      .selectOption({ label: "half-smile / half-smile" });
-    await page.getByText("Prompteditor", { exact: true }).click();
-    await page
-      .getByLabel("Ergänzende Anweisung", { exact: true })
-      .fill("Keep the original framing.");
-    const prompt = page.getByLabel("Arbeits-Prompt", { exact: true });
+    await field(page, "Create Familie", { exact: true }).selectOption({
+      label: "Amüsiert",
+    });
+    await field(page, "Create Variante", { exact: true }).selectOption({
+      label: "half-smile / half-smile",
+    });
+    await field(page, "Promptmodus", { exact: true }).selectOption(
+      "supplement",
+    );
+    await field(page, "Ergänzende Anweisung", { exact: true }).fill(
+      "Keep the original framing.",
+    );
+    const prompt = field(page, "Arbeits-Prompt", { exact: true });
     await expect(prompt).toHaveValue(/Keep the original framing/);
+    await field(page, "Promptmodus", { exact: true }).selectOption("expert");
     await prompt.fill((await prompt.inputValue()) + "\nMy reviewed prompt.");
     // Substitute the OS shell boundary only; real bridge validation, clipboard,
     // storage and renderer interactions remain in use.
@@ -344,11 +353,9 @@ const { createHash } = require("node:crypto");
     );
     expect(blocked.ok).toBe(false);
     expect(await app.evaluate(() => globalThis.__opened)).toHaveLength(1);
-    await page
-      .getByText("Inspector · Stimmaktion, Intensität und Herkunft", {
-        exact: true,
-      })
-      .click();
+    await text(page, "Inspector · Stimmaktion, Intensität und Herkunft", {
+      exact: true,
+    }).click();
     await page
       .getByRole("button", { name: "Referenz im Ordner zeigen", exact: true })
       .click();
@@ -378,7 +385,7 @@ const { createHash } = require("node:crypto");
             }),
           );
           document
-            .querySelector(".create-result")
+            .querySelector(".studio-editor:not([hidden]) .create-result")
             .dispatchEvent(
               new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
             );
@@ -386,21 +393,21 @@ const { createHash } = require("node:crypto");
         { bytes, webp },
       );
     await dropResult();
-    await expect(page.getByAltText("Create · Ergebnisvorschau")).toBeVisible();
+    await expect(image(page, "Create · Ergebnisvorschau")).toBeVisible();
     await page
       .getByRole("button", { name: "Als Expression freigeben", exact: true })
       .click();
     await expect(page.locator(".notice")).toHaveText(
       "Als Expression freigegeben.",
     );
-    await page.getByRole("button", { name: /Expressions$/ }).click();
+    await nav(page, "Library", true);
     await expect(
-      page.getByText("Importierte Ausdrücke (3)", { exact: true }),
+      text(page, "Importierte Ausdrücke (3)", { exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: /Create$/ }).click();
-    await page
-      .getByLabel("Create Familie", { exact: true })
-      .selectOption({ label: "Wütend" });
+    await nav(page, "Studio");
+    await field(page, "Create Familie", { exact: true }).selectOption({
+      label: "Wütend",
+    });
     await expect(
       page.getByRole("button", {
         name: "Eigenen Prompt behalten",
@@ -410,16 +417,14 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
       .click();
-    await page
-      .getByLabel("Create Variante", { exact: true })
-      .selectOption({ label: "Anbrüllen / shouting" });
+    await field(page, "Create Variante", { exact: true }).selectOption({
+      label: "Anbrüllen / shouting",
+    });
     await expect(prompt).toHaveValue(/VOCAL ACTION .*: shouting/);
     await expect(prompt).toHaveValue(/Manuell geprüfte kontrollierte Wut/);
     await dropResult(true);
     await expect(
-      page.getByText(
-        /Abweichende Abmessungen: Master 24 × 32, Ergebnis 8 × 10/,
-      ),
+      text(page, /Abweichende Abmessungen: Master 24 × 32, Ergebnis 8 × 10/),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "Kandidat verwerfen", exact: true })
@@ -427,7 +432,7 @@ const { createHash } = require("node:crypto");
     await expect(page.locator(".notice")).toContainText("Kandidat verworfen.");
     await dropResult();
     await expect(
-      page.getByText("Ergebnis ersetzen?", { exact: true }),
+      text(page, "Ergebnis ersetzen?", { exact: true }),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "Ersetzen bestätigen", exact: true })
@@ -462,7 +467,7 @@ const { createHash } = require("node:crypto");
       fullPage: true,
     });
     await page
-      .getByRole("button", { name: "An Inspect senden", exact: true })
+      .getByRole("button", { name: "In Library prüfen", exact: true })
       .click();
 
     await fs.mkdir("artifacts", { recursive: true });
@@ -502,15 +507,15 @@ const { createHash } = require("node:crypto");
     await expect(
       page.getByRole("heading", { name: "Ada Voss", exact: true }),
     ).toBeVisible();
-    await expect(page.getByAltText("Freigegebener Master V1")).toBeVisible();
-    await page.getByRole("button", { name: /Expressions$/ }).click();
+    await expect(image(page, "Freigegebener Master V1")).toBeVisible();
+    await nav(page, "Library", true);
     await expect(
-      page.getByText("Importierte Ausdrücke (5)", { exact: true }),
+      text(page, "Importierte Ausdrücke (5)", { exact: true }),
     ).toBeVisible();
-    await page
-      .getByLabel("Emotionsfamilie", { exact: true })
-      .selectOption({ label: "Erleichtert" });
-    await expect(page.getByLabel("Variante", { exact: true })).toContainText(
+    await field(page, "Emotionsfamilie", { exact: true }).selectOption({
+      label: "Erleichtert",
+    });
+    await expect(field(page, "Variante", { exact: true })).toContainText(
       "Aufatmen",
     );
     expect(
@@ -518,11 +523,11 @@ const { createHash } = require("node:crypto");
         await fs.readFile(path.join(project, "laceframe.json"), "utf8"),
       ),
     ).toEqual(before);
-    await page.getByRole("button", { name: /Create$/ }).click();
-    await expect(page.getByAltText("Create · Ergebnisvorschau")).toBeVisible();
-    await expect(
-      page.getByLabel("Arbeits-Prompt", { exact: true }),
-    ).toHaveValue(/VOCAL ACTION .*: shouting/);
+    await nav(page, "Studio");
+    await expect(image(page, "Create · Ergebnisvorschau")).toBeVisible();
+    await expect(field(page, "Arbeits-Prompt", { exact: true })).toHaveValue(
+      /VOCAL ACTION .*: shouting/,
+    );
     expect(before.attempts).toHaveLength(3);
     expect(
       before.assets
@@ -536,11 +541,11 @@ const { createHash } = require("node:crypto");
     ).toBe(true);
     await page.getByRole("button", { name: /Motion$/ }).click();
     await expect(
-      page.getByRole("heading", { name: "Motion kommt in Task 03." }),
+      page.getByRole("heading", { name: "Motion · späterer Meilenstein." }),
     ).toBeVisible();
     expect(rendererErrors).toEqual([]);
     console.log(
-      "PASS Linux packaged Electron: sandbox/preload, create, character, drop, immutable master, editable expressions, WebP master, PNG candidate, protocol/IPC rejection, approve/reject, source hash, close/relaunch/reopen. Create prompt/copy/browser allowlist, real PNG/WebP result drops, replace history, approval, dimension warning, Inspect, responsive layout and provider capabilities. No renderer exceptions.",
+      "PASS Linux packaged Electron: sandbox/preload, create, character, drop, immutable master, editable expressions, WebP master, PNG candidate, protocol/IPC rejection, approve/reject, source hash, close/relaunch/reopen. Create prompt/copy/browser allowlist, real PNG/WebP result drops, replace history, approval, dimension warning, Library, responsive layout and provider capabilities. No renderer exceptions.",
     );
   } catch (error) {
     if (app) {

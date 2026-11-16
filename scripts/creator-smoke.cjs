@@ -1,3 +1,4 @@
+const { field, image, nav } = require("./smoke-ui.cjs");
 // Packaged Character Creator with synthetic images and explicit Codex protocol double only.
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises"),
@@ -77,9 +78,7 @@ const { createHash } = require("node:crypto");
   try {
     await launch();
     await chooser(project);
-    await page
-      .getByLabel("Projektname", { exact: true })
-      .fill("Cameo synthetic");
+    await field(page, "Projektname", { exact: true }).fill("Cameo synthetic");
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })
       .click();
@@ -125,18 +124,17 @@ const { createHash } = require("node:crypto");
     await fs.mkdir(output, { recursive: true });
     await fs.writeFile(path.join(output, "result.png"), Buffer.from(result));
     // Populate a real project style through the existing editor; no identity character yet.
-    await page.getByRole("button", { name: /Create$/ }).click();
-    await page
-      .getByText("Art Direction · gemeinsamer Spielstil", { exact: true })
-      .click();
-    await page
-      .getByLabel("Stilname", { exact: true })
-      .fill("Ada Voss · Illustrated Noir");
-    await page
-      .getByLabel("Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)", {
+    await nav(page, "Art Direction");
+    await field(page, "Stilname", { exact: true }).fill(
+      "Ada Voss · Illustrated Noir",
+    );
+    await field(
+      page,
+      "Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)",
+      {
         exact: true,
-      })
-      .fill("Illustrated noir, graphic contours, restrained pixel clusters.");
+      },
+    ).fill("Illustrated noir, graphic contours, restrained pixel clusters.");
     await page
       .getByRole("button", { name: "Stil anlegen und auswählen", exact: true })
       .click();
@@ -145,7 +143,7 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Stilbild importieren …", exact: true })
       .click();
     await expect(
-      page.getByAltText("Stil 1 · synthetic-style.png", { exact: true }),
+      image(page, "Stil 1 · synthetic-style.png", { exact: true }),
     ).toBeVisible();
     await page
       .getByRole("navigation", { name: "Hauptnavigation" })
@@ -154,17 +152,34 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Neuen Charakter erstellen", exact: true })
       .click();
-    await page
-      .getByLabel("Name der Entwurfsfigur", { exact: true })
-      .fill("Synthetic Cameo");
+    await field(page, "Name der Entwurfsfigur", { exact: true }).fill(
+      "Synthetic Cameo",
+    );
     await page
       .getByRole("button", { name: "Figurenentwurf anlegen", exact: true })
       .click();
     await expect(
       page
-        .locator(".character-creator")
+        .locator(".studio-editor:visible .character-creator")
         .getByText("Synthetic Cameo", { exact: true }),
     ).toBeVisible();
+    // UX-01: missing prerequisites explain the disabled action and focus the fix.
+    await expect(
+      page.getByRole("button", {
+        name: "Neutralen Masterkandidaten generieren",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await expect(page.locator(".generation-requirements")).toContainText(
+      "Identitätsbild fehlt",
+    );
+    await expect(page.locator(".generation-requirements")).toContainText(
+      "Outfit ist unvollständig",
+    );
+    await page
+      .getByRole("button", { name: "Outfit ist unvollständig.", exact: true })
+      .click();
+    await expect(field(page, "Creator Outfit", { exact: true })).toBeFocused();
     await chooser(selfiePath);
     await page
       .getByRole("button", {
@@ -172,27 +187,21 @@ const { createHash } = require("node:crypto");
         exact: true,
       })
       .click();
-    await expect(
-      page.getByAltText("Identität 1", { exact: true }),
-    ).toBeVisible();
+    await expect(image(page, "Identität 1", { exact: true })).toBeVisible();
     expect((await manifest()).identityAssets[0].format).toBe("jpg");
     expect((await manifest()).identityAssets[0]).toMatchObject({
       width: 96,
       height: 72,
     });
     expect(
-      await page
-        .getByAltText("Identität 1", { exact: true })
-        .evaluate((img) => ({
-          width: img.naturalWidth,
-          height: img.naturalHeight,
-        })),
+      await image(page, "Identität 1", { exact: true }).evaluate((img) => ({
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      })),
     ).toEqual({ width: 96, height: 72 });
     expect((await manifest()).identityAssets[0].sha256).toBe(sourceHash);
     await drop(".creator-identity", other, "identity.png", "image/png");
-    await expect(
-      page.getByAltText("Identität 2", { exact: true }),
-    ).toBeVisible();
+    await expect(image(page, "Identität 2", { exact: true })).toBeVisible();
     const webp = await page.evaluate(() => {
       const c = document.createElement("canvas");
       c.width = 72;
@@ -208,9 +217,7 @@ const { createHash } = require("node:crypto");
       ];
     });
     await drop(".creator-identity", webp, "identity.webp", "image/webp");
-    await expect(
-      page.getByAltText("Identität 3", { exact: true }),
-    ).toBeVisible();
+    await expect(image(page, "Identität 3", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("button", {
         name: "Identitätsbild importieren …",
@@ -225,21 +232,148 @@ const { createHash } = require("node:crypto");
         .getByRole("button", { name: "Vergleichen", exact: true })
         .first(),
     ).toBeDisabled();
-    await page
-      .getByLabel("Creator Outfit", { exact: true })
-      .fill("Blue jacket and plain white shirt, no pendant or plaid.");
-    await page
-      .getByLabel("Creator Identitätsmerkmale", { exact: true })
-      .fill("Use only the individual in the identity photos.");
-    await page
-      .getByText("5 · Prompt und Generierungsdetails", { exact: true })
-      .click();
+    await field(page, "Creator Outfit", { exact: true }).fill(
+      "Blue jacket and plain white shirt, no pendant or plaid.",
+    );
+    await field(page, "Creator Identitätsmerkmale", { exact: true }).fill(
+      "Use only the individual in the identity photos.",
+    );
     await expect(
-      page.getByLabel("Creator Arbeits-Prompt", { exact: true }),
+      field(page, "Creator Promptmodus", { exact: true }),
+    ).toHaveValue("automatic");
+    await expect(
+      field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/IDENTITY REFERENCE/);
     await expect(
-      page.getByLabel("Creator Arbeits-Prompt", { exact: true }),
+      field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/Images 4–4 are STYLE ONLY/);
+    // A retained draft survives style editing, mode changes and Library round trips.
+    const originalOutfit = await field(page, "Creator Outfit", {
+      exact: true,
+    }).inputValue();
+    await expect(
+      field(page, "Creator Arbeits-Prompt", { exact: true }),
+    ).toBeHidden();
+    await page
+      .getByRole("button", { name: "Art Direction bearbeiten", exact: true })
+      .click();
+    await field(page, "Licht und Schattierung", { exact: true }).fill(
+      "Soft directional light, retained draft R3.",
+    );
+    await page
+      .getByRole("button", { name: "Stilrevision speichern", exact: true })
+      .click();
+    await expect(page.locator(".notice")).toContainText("aktualisiert");
+    await fs.mkdir("artifacts", { recursive: true });
+    for (const [width, height] of [
+      [1440, 900],
+      [960, 720],
+    ]) {
+      await app.evaluate(
+        ({ BrowserWindow }, { width, height }) =>
+          BrowserWindow.getAllWindows()[0].setSize(width, height),
+        { width, height },
+      );
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth <= window.innerWidth,
+          ),
+        )
+        .toBe(true);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: `artifacts/ux01-art-direction-${width}.png`,
+        fullPage: true,
+      });
+    }
+    await page
+      .getByRole("button", { name: "Zurück zum Studio", exact: true })
+      .click();
+    await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
+      originalOutfit,
+    );
+    await expect(
+      field(page, "Creator Arbeits-Prompt", { exact: true }),
+    ).toHaveValue(/retained draft R3/);
+    await expect(
+      page.getByRole("button", {
+        name: "Neue Vorlage übernehmen",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await field(page, "Creator Promptmodus", { exact: true }).selectOption(
+      "supplement",
+    );
+    await field(page, "Creator Ergänzende Anweisung", { exact: true }).fill(
+      "A calm confident presence.",
+    );
+    await expect(
+      field(page, "Creator Arbeits-Prompt", { exact: true }),
+    ).toHaveValue(/calm confident presence/);
+    await field(page, "Creator Promptmodus", { exact: true }).selectOption(
+      "expert",
+    );
+    const expertText =
+      (await field(page, "Creator Arbeits-Prompt", {
+        exact: true,
+      }).inputValue()) + "\nReviewed expert instruction.";
+    await field(page, "Creator Arbeits-Prompt", { exact: true }).fill(
+      expertText,
+    );
+    await nav(page, "Library");
+    await nav(page, "Characters");
+    await nav(page, "Studio");
+    await expect(
+      field(page, "Creator Arbeits-Prompt", { exact: true }),
+    ).toHaveValue(expertText);
+    await page
+      .getByRole("button", { name: "Art Direction bearbeiten", exact: true })
+      .click();
+    await field(page, "Licht und Schattierung", { exact: true }).fill(
+      "Soft directional light, expert conflict R4.",
+    );
+    await page
+      .getByRole("button", { name: "Stilrevision speichern", exact: true })
+      .click();
+    await expect(page.locator(".notice")).toContainText("aktualisiert");
+    await page
+      .getByRole("button", { name: "Zurück zum Studio", exact: true })
+      .click();
+    await expect(
+      field(page, "Creator Arbeits-Prompt", { exact: true }),
+    ).toHaveValue(expertText);
+    await expect(
+      page.getByRole("button", {
+        name: "Neutralen Masterkandidaten generieren",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await page
+      .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
+      .click();
+    await expect(
+      field(page, "Creator Arbeits-Prompt", { exact: true }),
+    ).toHaveValue(/expert conflict R4/);
+    await field(page, "Creator Promptmodus", { exact: true }).selectOption(
+      "automatic",
+    );
+    await expect(
+      field(page, "Creator Arbeits-Prompt", { exact: true }),
+    ).not.toHaveValue(/calm confident presence/);
+    await page
+      .getByRole("button", { name: "Expression erstellen", exact: true })
+      .click();
+    await expect(page.locator(".generation-requirements")).toContainText(
+      "Kein freigegebener Master",
+    );
+    await page
+      .getByRole("button", { name: "Master erstellen", exact: true })
+      .click();
+    await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
+      originalOutfit,
+    );
+    expect(await turns()).toEqual([]);
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()[0].setSize(960, 720),
     );
@@ -256,8 +390,19 @@ const { createHash } = require("node:crypto");
       fullPage: true,
     });
     await app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()[0].setSize(1440, 1000),
+      BrowserWindow.getAllWindows()[0].setSize(1440, 900),
     );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+    await page.screenshot({
+      path: "artifacts/ux01-master-1440.png",
+      fullPage: true,
+    });
     const generate = page.getByRole("button", {
       name: "Neutralen Masterkandidaten generieren",
       exact: true,
@@ -286,7 +431,7 @@ const { createHash } = require("node:crypto");
     expect(lock.ok).toBe(false);
     await page
       .getByRole("navigation", { name: "Hauptnavigation" })
-      .getByRole("button", { name: /Create$/ })
+      .getByRole("button", { name: /Studio$/ })
       .click();
     await expect(
       page.getByRole("button", {
@@ -300,7 +445,7 @@ const { createHash } = require("node:crypto");
     await expect(page.locator("main > fieldset.workspace")).toBeEnabled();
     await page
       .getByRole("navigation", { name: "Hauptnavigation" })
-      .getByRole("button", { name: /Characters$/ })
+      .getByRole("button", { name: /Studio$/ })
       .click();
     await expect(
       page.getByRole("status", {
@@ -309,12 +454,12 @@ const { createHash } = require("node:crypto");
       }),
     ).toContainText("Mastergenerierung abgeschlossen");
     await expect(
-      page.getByAltText("Character Creator · Ergebnisvorschau", {
+      image(page, "Character Creator · Ergebnisvorschau", {
         exact: true,
       }),
     ).toBeVisible();
     await expect(
-      page.getByLabel("Mastergenerierungszeit", { exact: true }),
+      field(page, "Mastergenerierungszeit", { exact: true }),
     ).toContainText("Generiert in");
     const rpc = (await turns()).at(-1);
     expect(
@@ -348,9 +493,27 @@ const { createHash } = require("node:crypto");
         exact: true,
       }),
     ).toBeVisible();
+    for (const workspace of ["Characters", "Art Direction", "Library"]) {
+      await nav(page, workspace);
+      await expect(
+        page.getByRole("button", {
+          name: "Mastergenerierung abbrechen",
+          exact: true,
+        }),
+      ).toBeInViewport();
+      await expect(
+        page.getByRole("status", { name: "Character Creator Status" }),
+      ).toContainText("Mastergenerierung läuft");
+    }
     await page
       .getByRole("button", { name: "Mastergenerierung abbrechen", exact: true })
       .click();
+    await expect
+      .poll(
+        async () => (await manifest()).masterAttempts.at(-1).execution.status,
+      )
+      .toBe("cancelled");
+    await nav(page, "Studio");
     await expect(
       page.getByRole("status", { name: "Character Creator Status" }),
     ).toContainText("abgebrochen");
@@ -363,6 +526,22 @@ const { createHash } = require("node:crypto");
     await expect(
       page.getByRole("status", { name: "Character Creator Status" }),
     ).toContainText("Mastergenerierung abgeschlossen");
+    await page
+      .getByRole("button", { name: "In Library prüfen", exact: true })
+      .click();
+    const latestCandidate = (await manifest()).masterCandidates.at(-1);
+    await expect(field(page, "Library Asset", { exact: true })).toHaveValue(
+      latestCandidate.id,
+    );
+    await page
+      .getByRole("button", {
+        name: "Im Studio prüfen und bearbeiten",
+        exact: true,
+      })
+      .click();
+    await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
+      originalOutfit,
+    );
     page.once("dialog", (d) => d.accept());
     await page
       .getByRole("button", {
@@ -408,11 +587,11 @@ const { createHash } = require("node:crypto");
       })
       .click();
     await expect(
-      page.getByLabel("Create Masterversion", { exact: true }),
+      field(page, "Create Masterversion", { exact: true }),
     ).toHaveValue(master.id);
-    await page
-      .getByLabel("Create Anbieter", { exact: true })
-      .selectOption("codex-native");
+    await field(page, "Create Anbieter", { exact: true }).selectOption(
+      "codex-native",
+    );
     const expression = page.getByRole("button", {
       name: "Mit Masterreferenz generieren",
       exact: true,
@@ -432,6 +611,49 @@ const { createHash } = require("node:crypto");
     await expect(page.locator(".notice")).toContainText(
       "Als Expression freigegeben",
     );
+    await page
+      .getByRole("button", { name: "In Library prüfen", exact: true })
+      .click();
+    const expressionAsset = (await manifest()).assets[0];
+    await expect(field(page, "Library Asset", { exact: true })).toHaveValue(
+      expressionAsset.id,
+    );
+    const exportDir = path.join(root, "exports");
+    await fs.mkdir(exportDir);
+    await chooser(exportDir);
+    const quality = page.locator('[data-testid="asset-quality"]:visible');
+    await quality.locator("summary").first().click();
+    await quality
+      .getByRole("button", {
+        name: "Ausdrücklich Rohbild exportieren",
+        exact: true,
+      })
+      .click();
+    await expect(quality).toContainText("Exportiert:");
+    const files = await fs.readdir(exportDir);
+    expect(files.some((f) => f.endsWith(".png"))).toBe(true);
+    expect(files.some((f) => f.endsWith(".json"))).toBe(true);
+    expect(
+      createHash("sha256")
+        .update(
+          await fs.readFile(
+            path.join(
+              exportDir,
+              files.find((f) => f.endsWith(".png")),
+            ),
+          ),
+        )
+        .digest("hex"),
+    ).toBe(expressionAsset.sha256);
+    await page
+      .getByRole("button", {
+        name: "Mit demselben Master weitere Expression erstellen",
+        exact: true,
+      })
+      .click();
+    await expect(
+      field(page, "Create Masterversion", { exact: true }),
+    ).toHaveValue(master.id);
     // Returning to creator never replaces the locked master. Referenced photo removal retains history.
     await page
       .getByRole("navigation", { name: "Hauptnavigation" })
@@ -455,14 +677,14 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();
     await expect(
-      page.getByAltText("Freigegebener Master V1", { exact: true }),
+      image(page, "Freigegebener Master V1", { exact: true }),
     ).toBeVisible();
     expect(await manifest()).toEqual(saved);
     await page
       .getByRole("button", { name: "Neuen Charakter erstellen", exact: true })
       .click();
     await expect(
-      page.getByAltText("Character Creator · Ergebnisvorschau", {
+      image(page, "Character Creator · Ergebnisvorschau", {
         exact: true,
       }),
     ).toBeVisible();
@@ -474,7 +696,7 @@ const { createHash } = require("node:crypto");
     ).toBeDisabled();
     expect(errors).toEqual([]);
     console.log(
-      "PASS Character Creator: JPEG chooser + PNG/WebP drops, three identity/one style input order, no-master generation, neutral/outfit prompt, single-job lock, timer/failure/cancel/retry, rejected/approved candidates, immutable Master V1, native Expression handoff, archived private sources, close/relaunch/reopen, 960px layout and secure typed IPC. Explicit protocol fixture only; no live AI calls.",
+      "PASS Character Creator: JPEG chooser + PNG/WebP drops, three identity/one style input order, no-master generation, neutral/outfit prompt, single-job lock, timer/failure/cancel/retry, rejected/approved candidates, immutable Master V1, native Expression handoff, archived private sources, close/relaunch/reopen, 960px layout and secure typed IPC. UX-01: missing prerequisites/focus, retained master draft across mode/workspace/style revisions, automatic/supplement/expert conflict, sticky cancel across Characters/Art Direction/Library, exact candidate handoff, Library raw PNG+JSON export and same-master return, 960x720/1440x900 layout. Explicit protocol fixture only; no live AI calls.",
     );
   } catch (e) {
     if (page && !page.isClosed()) {

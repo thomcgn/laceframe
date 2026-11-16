@@ -1,3 +1,4 @@
+const { field, image, text, nav } = require("./smoke-ui.cjs");
 // Packaged Electron integration with a protocol fixture. No live AI calls.
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises");
@@ -49,13 +50,11 @@ const path = require("node:path");
         filePaths: [directory],
       });
     }, project);
-    await page.getByLabel("Projektname", { exact: true }).fill("Native smoke");
+    await field(page, "Projektname", { exact: true }).fill("Native smoke");
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })
       .click();
-    await page
-      .getByLabel("Neue Figur", { exact: true })
-      .fill("Synthetic Native");
+    await field(page, "Neue Figur", { exact: true }).fill("Synthetic Native");
     await page
       .getByRole("button", { name: "Figur erstellen", exact: true })
       .click();
@@ -102,47 +101,58 @@ const path = require("node:path");
       path.join(output, "result.png"),
       Buffer.from(resultBytes),
     );
-    await page.getByRole("button", { name: /Create$/ }).click();
+    await nav(page, "Studio");
     await page
-      .getByLabel("Create Anbieter", { exact: true })
-      .selectOption("codex-native");
+      .getByRole("button", { name: "Expression erstellen", exact: true })
+      .click();
+    await field(page, "Create Anbieter", { exact: true }).selectOption(
+      "codex-native",
+    );
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Codex bereit");
     // Exercise actual style/profile UI before the explicit fixture generation.
-    await page
-      .getByText("Art Direction · gemeinsamer Spielstil", { exact: true })
-      .click();
-    await page.getByLabel("Stilname", { exact: true }).fill("Shared Noir");
-    await page
-      .getByLabel("Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)", {
+    await nav(page, "Art Direction");
+    await field(page, "Stilname", { exact: true }).fill("Shared Noir");
+    await field(
+      page,
+      "Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)",
+      {
         exact: true,
-      })
-      .fill("Shared crisp contours only.");
+      },
+    ).fill("Shared crisp contours only.");
     await page
       .getByRole("button", { name: "Stil anlegen und auswählen", exact: true })
       .click();
     await expect(
-      page.getByLabel("Create Art Direction", { exact: true }),
+      field(page, "Stilbibliothek Profil", { exact: true }),
     ).toContainText("Shared Noir");
     await page
       .getByRole("button", { name: "Weiteren Stil anlegen", exact: true })
       .click();
-    await page.getByLabel("Stilname", { exact: true }).fill("Alternate Ink");
-    await page
-      .getByLabel("Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)", {
+    await field(page, "Stilname", { exact: true }).fill("Alternate Ink");
+    await field(
+      page,
+      "Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)",
+      {
         exact: true,
-      })
-      .fill("Alternate fine ink contours.");
+      },
+    ).fill("Alternate fine ink contours.");
     await page
       .getByRole("button", { name: "Stil anlegen und auswählen", exact: true })
       .click();
     await expect(
-      page.getByLabel("Create Art Direction", { exact: true }),
+      field(page, "Stilbibliothek Profil", { exact: true }),
     ).toContainText("Alternate Ink");
+    await field(page, "Stilbibliothek Profil", { exact: true }).selectOption({
+      label: "Shared Noir",
+    });
     await page
-      .getByLabel("Create Art Direction", { exact: true })
-      .selectOption({ label: "Shared Noir · V1" });
+      .getByRole("button", {
+        name: "Als Projektstandard festlegen",
+        exact: true,
+      })
+      .click();
     // Real file chooser and WebP drop into the style library; no portrait data.
     const styleSource = path.join(root, "style-a.png");
     await fs.writeFile(styleSource, Buffer.from(bytes));
@@ -156,7 +166,7 @@ const path = require("node:path");
       .getByRole("button", { name: "Stilbild importieren …", exact: true })
       .click();
     await expect(
-      page.getByAltText("Stil 1 · style-a.png", { exact: true }),
+      image(page, "Stil 1 · style-a.png", { exact: true }),
     ).toBeVisible();
     await page.evaluate(async (bytes) => {
       const bitmap = await window.createImageBitmap(
@@ -180,15 +190,15 @@ const path = require("node:path");
         );
     }, resultBytes);
     await expect(
-      page.getByAltText("Stil 2 · style-b.webp", { exact: true }),
+      image(page, "Stil 2 · style-b.webp", { exact: true }),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "Stilreferenz 1 entfernen", exact: true })
       .click();
     await expect(
-      page.getByAltText("Stil 1 · style-b.webp", { exact: true }),
+      image(page, "Stil 1 · style-b.webp", { exact: true }),
     ).toBeVisible();
-    const reuse = page.getByLabel("Stilreferenz wiederverwenden", {
+    const reuse = field(page, "Stilreferenz wiederverwenden", {
       exact: true,
     });
     await reuse.selectOption(
@@ -198,23 +208,23 @@ const path = require("node:path");
         .getAttribute("value"),
     );
     await expect(
-      page.getByAltText("Stil 2 · style-a.png", { exact: true }),
+      image(page, "Stil 2 · style-a.png", { exact: true }),
     ).toBeVisible();
     const styleRevision = JSON.parse(
       await fs.readFile(path.join(project, "laceframe.json"), "utf8"),
     ).artDirections.find((a) => a.name === "Shared Noir").revision;
-    await page
-      .getByLabel("Stilrevision ansehen", { exact: true })
-      .selectOption("2");
+    await field(page, "Stilrevision ansehen", { exact: true }).selectOption(
+      "2",
+    );
     await expect(
       page.getByRole("button", { name: "Stilrevision speichern", exact: true }),
     ).toBeDisabled();
     await expect(
-      page.getByAltText("Stil 1 · style-a.png", { exact: true }),
+      image(page, "Stil 1 · style-a.png", { exact: true }),
     ).toBeVisible();
-    await page
-      .getByLabel("Stilrevision ansehen", { exact: true })
-      .selectOption(String(styleRevision));
+    await field(page, "Stilrevision ansehen", { exact: true }).selectOption(
+      String(styleRevision),
+    );
     await expect(
       page.getByRole("button", { name: "Stilrevision speichern", exact: true }),
     ).toBeEnabled();
@@ -224,23 +234,39 @@ const path = require("node:path");
         filePaths: [directory],
       });
     }, project);
-    await page
-      .locator("summary")
-      .filter({ hasText: /^Expression Identity/ })
-      .click();
-    await page
-      .getByLabel("Persönlicher Ausdruck", { exact: true })
-      .fill("Direct unwavering gaze for first character.");
+    await nav(page, "Studio");
+    {
+      const performance = page
+        .locator(".studio-editor:not([hidden]) details")
+        .filter({
+          has: page
+            .locator("summary")
+            .filter({ hasText: /^Expression Performance/ }),
+        });
+      await expect(performance).toBeVisible();
+      if ((await performance.getAttribute("open")) === null)
+        await performance.locator("summary").first().click();
+    }
+    await field(page, "Persönlicher Ausdruck", { exact: true }).fill(
+      "Direct unwavering gaze for first character.",
+    );
     await page
       .getByRole("button", {
         name: "Persönlichen Ausdruck speichern",
         exact: true,
       })
       .click();
-    await page.getByText("Prompteditor", { exact: true }).click();
-    await page
-      .getByLabel("Ergänzende Anweisung", { exact: true })
-      .fill("Native pipeline assertion.");
+    await field(page, "Promptmodus", { exact: true }).selectOption(
+      "supplement",
+    );
+    await field(page, "Ergänzende Anweisung", { exact: true }).fill(
+      "Native pipeline assertion.",
+    );
+    await field(page, "Promptmodus", { exact: true }).selectOption("expert");
+    await field(page, "Arbeits-Prompt", { exact: true }).fill(
+      (await field(page, "Arbeits-Prompt", { exact: true }).inputValue()) +
+        "\nReviewed expert override.",
+    );
     const generate = page.getByRole("button", {
       name: "Mit Masterreferenz generieren",
       exact: true,
@@ -252,15 +278,15 @@ const path = require("node:path");
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Bildwerkzeug arbeitet");
     await expect(
-      page.getByLabel("Generierungszeit", { exact: true }),
+      field(page, "Generierungszeit", { exact: true }),
     ).toContainText(/Laufzeit 00:00:0[1-9]/);
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Generierung abgeschlossen", { timeout: 15000 });
-    await expect(page.getByAltText("Create · Ergebnisvorschau")).toBeVisible();
+    await expect(image(page, "Create · Ergebnisvorschau")).toBeVisible();
     await expect(generate).toBeEnabled();
     await expect(
-      page.getByLabel("Generierungszeit", { exact: true }),
+      field(page, "Generierungszeit", { exact: true }),
     ).toContainText(/Generiert in 00:00:0[1-9]/);
     // Actual registered canvas, native dimensions, keyboard/mouse/touch and shared zoom/pan.
     const slider = page.getByRole("slider", {
@@ -314,7 +340,7 @@ const path = require("node:path");
     await expect(slider).toHaveAttribute("aria-valuenow", /2[45]/);
     await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
     await cdp.detach();
-    await page.getByLabel("Create Zoom", { exact: true }).selectOption("100");
+    await field(page, "Create Zoom", { exact: true }).selectOption("100");
     const rects = () =>
       page.locator(".compare-stage:visible img").evaluateAll((images) =>
         images.map((img) => {
@@ -344,17 +370,15 @@ const path = require("node:path");
     registered = await rects();
     expect(registered[0].x).toBe(panned[0].x + 30);
     expect(registered[1].y).toBe(registered[0].y);
-    await page
-      .getByLabel("Vergleichsmodus", { exact: true })
-      .selectOption("overlay");
-    await page.getByLabel("Overlay-Deckkraft", { exact: true }).fill("25");
-    await expect(page.getByAltText("Create · Ergebnisvorschau")).toHaveCSS(
+    await field(page, "Vergleichsmodus", { exact: true }).selectOption(
+      "overlay",
+    );
+    await field(page, "Overlay-Deckkraft", { exact: true }).fill("25");
+    await expect(image(page, "Create · Ergebnisvorschau")).toHaveCSS(
       "opacity",
       "0.25",
     );
-    await expect(
-      page.getByText(/Abweichende Abmessungen: Master/),
-    ).toBeVisible();
+    await expect(text(page, /Abweichende Abmessungen: Master/)).toBeVisible();
     await page
       .getByRole("button", { name: "Ansicht zurücksetzen", exact: true })
       .click();
@@ -369,14 +393,16 @@ const path = require("node:path");
       )
       .toBe(true);
     await fs.mkdir("artifacts", { recursive: true });
-    await page.getByText("Prompteditor", { exact: true }).click();
+    await page
+      .locator(".studio-editor:not([hidden]) .prompt-drawer > summary")
+      .click();
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: "artifacts/create-quality-960.png",
       fullPage: true,
     });
     await app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()[0].setSize(1440, 1000),
+      BrowserWindow.getAllWindows()[0].setSize(1440, 900),
     );
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
@@ -451,7 +477,7 @@ const path = require("node:path");
     });
     expect(p.attempts[1].execution.status).toBe("failed");
     await expect(
-      page.getByLabel("Generierungszeit", { exact: true }),
+      field(page, "Generierungszeit", { exact: true }),
     ).toContainText("Fehlgeschlagen in");
     await expect(generate).toBeEnabled();
     await fs.writeFile(path.join(root, "scenario"), "hang");
@@ -460,6 +486,7 @@ const path = require("node:path");
     await expect(
       page.getByRole("button", { name: "Generierung abbrechen", exact: true }),
     ).toBeVisible();
+    await nav(page, "Library");
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const cancel = page.getByRole("button", {
       name: "Generierung abbrechen",
@@ -478,17 +505,24 @@ const path = require("node:path");
     await page
       .getByRole("button", { name: "Generierung abbrechen", exact: true })
       .click();
+    await expect
+      .poll(async () => (await manifest()).attempts[2].execution.status)
+      .toBe("cancelled");
+    await nav(page, "Studio");
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("abgebrochen", { timeout: 15000 });
     expect((await manifest()).assets).toHaveLength(1);
     expect((await manifest()).attempts[2].execution.status).toBe("cancelled");
     await expect(
-      page.getByLabel("Generierungszeit", { exact: true }),
+      field(page, "Generierungszeit", { exact: true }),
     ).toContainText("Abgebrochen in");
     await expect(generate).toBeEnabled();
     await fs.writeFile(path.join(root, "scenario"), "success");
     await generate.click();
+    await expect(
+      page.getByRole("status", { name: "Codex Status" }),
+    ).toContainText("Generierung läuft");
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Generierung abgeschlossen");
@@ -496,18 +530,22 @@ const path = require("node:path");
     expect((await manifest()).assets).toHaveLength(2);
     expect((await manifest()).attempts[3].execution.status).toBe("completed");
     // Editing style creates a new revision without rewriting saved attempts.
+    await nav(page, "Art Direction");
     const historical = (await manifest()).attempts;
-    await page
-      .getByLabel("Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)", {
+    await field(
+      page,
+      "Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)",
+      {
         exact: true,
-      })
-      .fill("Revised crisp contours only.");
+      },
+    ).fill("Revised crisp contours only.");
     await page
       .getByRole("button", { name: "Stilrevision speichern", exact: true })
       .click();
     await expect(
-      page.getByLabel("Stilrevision ansehen", { exact: true }),
+      field(page, "Stilrevision ansehen", { exact: true }),
     ).toHaveValue(String(styleRevision + 1));
+    await nav(page, "Studio");
     await expect(
       page.getByRole("button", {
         name: "Neue Vorlage übernehmen",
@@ -520,12 +558,35 @@ const path = require("node:path");
       .click();
     await expect(generate).toBeEnabled();
     expect((await manifest()).attempts).toEqual(historical);
+    // Inspect history without replacing the current working prompt or settings.
+    const workingText = await field(page, "Arbeits-Prompt", {
+      exact: true,
+    }).inputValue();
+    const workingMaster = await field(page, "Create Masterversion", {
+      exact: true,
+    }).inputValue();
+    const history = page.locator(
+      ".studio-editor:not([hidden]) .attempt-history",
+    );
+    await history.locator("summary").first().click();
+    await history.locator(":scope > button").last().click();
+    await expect(field(page, "Arbeits-Prompt", { exact: true })).toHaveValue(
+      workingText,
+    );
+    await expect(
+      field(page, "Create Masterversion", { exact: true }),
+    ).toHaveValue(workingMaster);
+    await history
+      .getByText("Historischen Prompt ansehen", { exact: true })
+      .click();
+    await expect(
+      history.getByLabel("Historischer Expression-Prompt", { exact: true }),
+    ).toHaveText(historical[0].promptRevision.prompt);
+    expect((await manifest()).attempts).toEqual(historical);
+
     // A second identity uses its own immutable master and personal direction.
     await page.getByRole("button", { name: /Characters$/ }).click();
-    await page
-      .getByLabel("Neue Figur", { exact: true })
-      .fill("Synthetic Other");
-    page.once("dialog", (dialog) => dialog.accept());
+    await field(page, "Neue Figur", { exact: true }).fill("Synthetic Other");
     await page
       .getByRole("button", { name: "Figur erstellen", exact: true })
       .click();
@@ -549,20 +610,28 @@ const path = require("node:path");
         exact: true,
       })
       .click();
-    await page.getByRole("button", { name: /Create$/ }).click();
-    await page
-      .getByLabel("Create Anbieter", { exact: true })
-      .selectOption("codex-native");
-    await page
-      .locator("summary")
-      .filter({ hasText: /^Expression Identity/ })
-      .click();
+    await nav(page, "Studio");
+    await field(page, "Create Anbieter", { exact: true }).selectOption(
+      "codex-native",
+    );
+    {
+      const performance = page
+        .locator(".studio-editor:not([hidden]) details")
+        .filter({
+          has: page
+            .locator("summary")
+            .filter({ hasText: /^Expression Performance/ }),
+        });
+      await expect(performance).toBeVisible();
+      if ((await performance.getAttribute("open")) === null)
+        await performance.locator("summary").first().click();
+    }
     await expect(
-      page.getByLabel("Persönlicher Ausdruck", { exact: true }),
+      field(page, "Persönlicher Ausdruck", { exact: true }),
     ).toHaveValue("");
-    await page
-      .getByLabel("Persönlicher Ausdruck", { exact: true })
-      .fill("Lowered gaze for second character.");
+    await field(page, "Persönlicher Ausdruck", { exact: true }).fill(
+      "Lowered gaze for second character.",
+    );
     await page
       .getByRole("button", {
         name: "Persönlichen Ausdruck speichern",
@@ -571,6 +640,9 @@ const path = require("node:path");
       .click();
     await expect(generate).toBeEnabled();
     await generate.click();
+    await expect(
+      page.getByRole("status", { name: "Codex Status" }),
+    ).toContainText("Generierung läuft");
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Generierung abgeschlossen");
@@ -587,36 +659,46 @@ const path = require("node:path");
     );
     expect(second.masterId).toBe(two.masters[1].id);
     expect(two.assets.at(-1).masterId).toBe(two.masters[1].id);
-    await page
-      .getByLabel("Create Figur", { exact: true })
-      .selectOption({ label: "Synthetic Native" });
-    await page
-      .locator("summary")
-      .filter({ hasText: /^Expression Identity/ })
-      .click();
+    await field(page, "Studio Figur", { exact: true }).selectOption(
+      two.masters[0].characterId,
+    );
+    {
+      const performance = page
+        .locator(".studio-editor:not([hidden]) details")
+        .filter({
+          has: page
+            .locator("summary")
+            .filter({ hasText: /^Expression Performance/ }),
+        });
+      await expect(performance).toBeVisible();
+      if ((await performance.getAttribute("open")) === null)
+        await performance.locator("summary").first().click();
+    }
     await expect(
-      page.getByLabel("Persönlicher Ausdruck", { exact: true }),
+      field(page, "Persönlicher Ausdruck", { exact: true }),
     ).toHaveValue("Direct unwavering gaze for first character.");
     // Latest historical prompt still needs explicit adoption after style revision.
     const adopt = page.getByRole("button", {
       name: "Neue Vorlage übernehmen",
       exact: true,
     });
-    await expect(adopt).toBeVisible();
-    await adopt.click();
-    await page
-      .getByLabel("Charakter Stilzuordnung", { exact: true })
-      .selectOption("master");
+    if (await adopt.isVisible()) await adopt.click();
+    await field(page, "Charakter Stilzuordnung", { exact: true }).selectOption(
+      "master",
+    );
     await expect(
-      page.getByText("Codex erhält nur den Identitäts-Master.", {
+      text(page, "Codex erhält nur den Identitäts-Master.", {
         exact: true,
       }),
     ).toBeVisible();
     await expect(
-      page.getByLabel("Arbeits-Prompt", { exact: true }),
+      field(page, "Arbeits-Prompt", { exact: true }),
     ).not.toHaveValue(/STYLE LOCK —/);
     await expect(generate).toBeEnabled();
     await generate.click();
+    await expect(
+      page.getByRole("status", { name: "Codex Status" }),
+    ).toContainText("Generierung läuft");
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Generierung abgeschlossen");
@@ -635,9 +717,9 @@ const path = require("node:path");
     {
       // 02D: actual editor -> persisted mask -> fixture raw -> deterministic composite.
       const { PNG } = require("pngjs");
-      await page
-        .getByLabel("Bearbeitungsmodus", { exact: true })
-        .selectOption("hard");
+      await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
+        "hard",
+      );
       await expect(generate).toBeDisabled();
       await page
         .getByRole("button", { name: "Maske erstellen", exact: true })
@@ -680,7 +762,7 @@ const path = require("node:path");
       await fs.mkdir("artifacts", { recursive: true });
       await page.screenshot({ path: "artifacts/mask-editor-960.png" });
       await app.evaluate(({ BrowserWindow }) =>
-        BrowserWindow.getAllWindows()[0].setSize(1440, 1000),
+        BrowserWindow.getAllWindows()[0].setSize(1440, 900),
       );
 
       await editor
@@ -778,7 +860,7 @@ const path = require("node:path");
         page.getByRole("status", { name: "Codex Status" }),
       ).toContainText("Generierung abgeschlossen");
       await expect(
-        page.getByText(/Hard Lock blockiert: unterschiedliche Abmessungen/),
+        text(page, /Hard Lock blockiert: unterschiedliche Abmessungen/),
       ).toBeVisible();
       await expect(
         page.getByRole("button", {
@@ -793,7 +875,7 @@ const path = require("node:path");
         })
         .getByLabel("Vergleichsregistrierung", { exact: true })
         .selectOption("visual");
-      await expect(page.getByText(/Nur visuelle Normalisierung/)).toBeVisible();
+      await expect(text(page, /Nur visuelle Normalisierung/)).toBeVisible();
       await page
         .getByRole("region", {
           name: "Master und Kandidat vergleichen",
@@ -876,28 +958,28 @@ const path = require("node:path");
         path: "artifacts/hard-pixel-composite.png",
         fullPage: true,
       });
-      await page
-        .getByLabel("Rohkandidat oder Composite", { exact: true })
-        .selectOption("raw");
+      await field(page, "Rohkandidat oder Composite", {
+        exact: true,
+      }).selectOption("raw");
       await expect(
         page.getByRole("button", {
           name: "Als Expression freigeben",
           exact: true,
         }),
       ).toBeDisabled();
-      await page
-        .getByLabel("Rohkandidat oder Composite", { exact: true })
-        .selectOption("composite");
-      await page
-        .getByText("Gespeicherte Maskenüberlagerung", { exact: true })
-        .click();
-      await expect(page.getByAltText("Gespeicherte Maske")).toBeVisible();
+      await field(page, "Rohkandidat oder Composite", {
+        exact: true,
+      }).selectOption("composite");
+      await text(page, "Gespeicherte Maskenüberlagerung", {
+        exact: true,
+      }).click();
+      await expect(image(page, "Gespeicherte Maske")).toBeVisible();
       await page
         .getByRole("button", { name: "Als Expression freigeben", exact: true })
         .click();
       expect((await manifest()).assets.at(-1).status).toBe("approved");
       await page
-        .getByRole("button", { name: "An Inspect senden", exact: true })
+        .getByRole("button", { name: "In Library prüfen", exact: true })
         .click();
       await expect(
         page.getByRole("slider", {
@@ -912,8 +994,8 @@ const path = require("node:path");
         })
         .getByLabel("Vergleichsregistrierung", { exact: true })
         .selectOption("visual");
-      await expect(page.getByText(/Nur visuelle Normalisierung/)).toBeVisible();
-      await page.getByRole("button", { name: /Create$/ }).click();
+      await expect(text(page, /Nur visuelle Normalisierung/)).toBeVisible();
+      await nav(page, "Studio");
       await page
         .getByRole("button", { name: "Maske bearbeiten", exact: true })
         .click();
@@ -922,14 +1004,14 @@ const path = require("node:path");
       await editor
         .getByRole("button", { name: "Editor schließen", exact: true })
         .click();
-      await page
-        .getByLabel("Bearbeitungsmodus", { exact: true })
-        .selectOption("soft");
+      await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
+        "soft",
+      );
       await expect(generate).toBeDisabled();
-      await expect(page.getByText(/Soft Lock nicht verfügbar/)).toBeVisible();
-      await page
-        .getByLabel("Bearbeitungsmodus", { exact: true })
-        .selectOption("none");
+      await expect(text(page, /Soft Lock nicht verfügbar/)).toBeVisible();
+      await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
+        "none",
+      );
       await page
         .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
         .click();
@@ -943,29 +1025,29 @@ const path = require("node:path");
       .map(JSON.parse)
       .filter((m) => m.method === "turn/start").length;
     await fs.writeFile(path.join(root, "scenario"), "no-multi");
-    await page
-      .getByLabel("Charakter Stilzuordnung", { exact: true })
-      .selectOption("project");
+    await field(page, "Charakter Stilzuordnung", { exact: true }).selectOption(
+      "project",
+    );
     // The mask-mode template was explicitly adopted above and is pristine;
     // switching style now updates it automatically rather than asking twice.
-    await expect(
-      page.getByLabel("Arbeits-Prompt", { exact: true }),
-    ).toHaveValue(/STYLE LOCK — Shared Noir/);
-    await page
-      .getByText("Inspector · Stimmaktion, Intensität und Herkunft", {
-        exact: true,
-      })
-      .click();
+    await expect(field(page, "Arbeits-Prompt", { exact: true })).toHaveValue(
+      /STYLE LOCK — Shared Noir/,
+    );
+    await text(page, "Inspector · Stimmaktion, Intensität und Herkunft", {
+      exact: true,
+    }).click();
     await page
       .getByRole("button", { name: "Codex-Verfügbarkeit prüfen", exact: true })
       .click();
     await expect(
-      page.getByText(/Mehrfachreferenzen nicht bestätigt/),
+      page
+        .locator(".generation-requirements")
+        .getByText(/Mehrfachreferenzen nicht bestätigt/),
     ).toBeVisible();
     await expect(generate).toBeDisabled();
-    await page
-      .getByLabel("Charakter Stilzuordnung", { exact: true })
-      .selectOption("master");
+    await field(page, "Charakter Stilzuordnung", { exact: true }).selectOption(
+      "master",
+    );
     await expect(generate).toBeEnabled();
     expect(
       (await fs.readFile(path.join(root, "trace.jsonl"), "utf8"))
@@ -1002,13 +1084,14 @@ const path = require("node:path");
     await page
       .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();
-    await page.getByRole("button", { name: /Create$/ }).click();
-    await expect(
-      page.getByLabel("Bearbeitungsmodus", { exact: true }),
-    ).toHaveValue("hard");
-    await expect(
-      page.getByLabel("Maskenrevision", { exact: true }),
-    ).toHaveValue(beforeMaskRestart.masks.at(-1).id);
+    await expect(page.getByRole("heading", {name: "Synthetic Native", exact: true})).toBeVisible();
+    await nav(page, "Studio");
+    await expect(field(page, "Bearbeitungsmodus", { exact: true })).toHaveValue(
+      "hard",
+    );
+    await expect(field(page, "Maskenrevision", { exact: true })).toHaveValue(
+      beforeMaskRestart.masks.at(-1).id,
+    );
     await expect(
       page
         .locator(".create-result .badge.approved")
@@ -1036,7 +1119,7 @@ const path = require("node:path");
     });
     expect(errors).toEqual([]);
     console.log(
-      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel/regeneration, monotonic timer metadata, real slider keyboard/mouse/touch, shared zoom/pan/overlay, PNG/WebP style chooser/drop/thumbnails/history/reuse, ordered multi-reference and master-only jobs, isolated character expression prompts/master references, 960px layout, project lock, provenance, approval, auth gating. Mask editor draw/erase/undo/redo, immutable mask snapshot, mismatch block, exact RGBA composite assertions, raw/composite approval, shared Inspect comparison, soft-lock gate. No live AI calls.",
+      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel/regeneration, monotonic timer metadata, real slider keyboard/mouse/touch, shared zoom/pan/overlay, PNG/WebP style chooser/drop/thumbnails/history/reuse, ordered multi-reference and master-only jobs, isolated character expression prompts/master references, 960x720/1440x900 layout, retained character drafts and read-only history without working-prompt replacement, project lock, provenance, approval, auth gating. Mask editor draw/erase/undo/redo, immutable mask snapshot, mismatch block, exact RGBA composite assertions, raw/composite approval, shared Library comparison, soft-lock gate. No live AI calls.",
     );
   } catch (error) {
     if (app) {

@@ -1,3 +1,4 @@
+const { field, image, nav } = require("./smoke-ui.cjs");
 // Synthetic local pixels only. No provider, image turn, remote request or private project.
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises"),
@@ -294,6 +295,64 @@ const { createHash } = require("node:crypto");
     expect(gate.node).toBe("undefined");
     await page.screenshot({
       path: "artifacts/quality-master-v2-960.png",
+      fullPage: true,
+    });
+    // UX-01 Library retains actual master versions and opens exact quality records.
+    await nav(page, "Library");
+    await field(page, "Library Assettyp", { exact: true }).selectOption(
+      "master",
+    );
+    await field(page, "Library Asset", { exact: true }).selectOption(
+      p.masters[0].id,
+    );
+    await expect(
+      image(page, "Library · Ergebnisvorschau", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator("section.library-workspace:visible"),
+    ).toContainText("Master V1");
+    await field(page, "Library Asset", { exact: true }).selectOption(
+      p.masters[1].id,
+    );
+    await expect(
+      page.locator("section.library-workspace:visible"),
+    ).toContainText("Master V2");
+    await field(page, "Library Assettyp", { exact: true }).selectOption(
+      "quality",
+    );
+    await field(page, "Library Asset", { exact: true }).selectOption(
+      p.qualityAssets[0].id,
+    );
+    q = page.locator('[data-testid="asset-quality"]:visible');
+    await q.locator("summary").first().click();
+    await expect(q.getByLabel("Qualitätsversion", { exact: true })).toHaveValue(
+      p.qualityAssets[0].id,
+    );
+    await expect(
+      q.getByRole("button", { name: "Hintergrund freistellen", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      q.getByRole("button", {
+        name: "Transparentes PNG exportieren",
+        exact: true,
+      }),
+    ).toBeEnabled();
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setSize(1440, 900),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+    await page.locator("section.library-workspace .master-compare").first().getByLabel("Create Zoom", {exact: true}).selectOption("400");
+    await q.getByLabel("Create Zoom", {exact: true}).selectOption("400");
+    await expect.poll(() => page.locator("section.library-workspace img:visible").evaluateAll(images => images.length > 0 && images.every(img => img.complete && img.naturalWidth > 0))).toBe(true);
+    await page.evaluate(() => window.scrollTo(0,0));
+    await page.screenshot({
+      path: "artifacts/ux01-library-1440.png",
       fullPage: true,
     });
     const before = await fs.readFile(

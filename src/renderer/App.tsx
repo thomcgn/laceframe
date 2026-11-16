@@ -1,13 +1,14 @@
+import { StyleLibrary } from "./components/StyleLibrary";
+import { AssetLibrary } from "./views/AssetLibrary";
+import type { StudioIntent, StudioMode, Workspace } from "../shared/studio";
 import { AssetQuality } from "./components/AssetQuality";
 import { CharacterCreator } from "./views/CharacterCreator";
-import { MasterCandidateCompare } from "./components/MasterCandidateCompare";
 import { ImagePreview } from "./components/ImagePreview";
 import { CreateView } from "./views/CreateView";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type {
   Command,
-  ExpressionAsset,
   Family,
   Snapshot,
   StagedImage,
@@ -17,7 +18,7 @@ import type {
 import { MAX_IMAGE_BYTES } from "../shared/domain";
 import type { Result } from "../shared/bridge";
 
-type View = "Create" | "Characters" | "Expressions" | "Motion" | "Inspect";
+type View = Workspace;
 const statusLabel = {
   candidate: "Kandidat · ungeprüft",
   approved: "Freigegeben",
@@ -182,7 +183,16 @@ export function App() {
   const [expressionRunning, setExpressionRunning] = useState(false);
   const [creatorRunning, setCreatorRunning] = useState(false);
   const generationRunning = expressionRunning || creatorRunning;
-  const [createDirty, setCreateDirty] = useState(false);
+  const [draftDirty, setDraftDirty] = useState<Record<string, boolean>>({});
+  const [styleDirty, setStyleDirty] = useState(false);
+  const createDirty = styleDirty || Object.values(draftDirty).some(Boolean);
+  const [studioMode, setStudioMode] = useState<StudioMode>("expression");
+  const [studioIntent, setStudioIntent] = useState<StudioIntent>();
+  const [styleIntent, setStyleIntent] = useState<{
+    id?: string;
+    serial: number;
+  }>();
+  const [visited, setVisited] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -191,7 +201,6 @@ export function App() {
   const [familyId, setFamilyId] = useState("");
   const [variantId, setVariantId] = useState("");
   const [newVariant, setNewVariant] = useState("");
-  const [creatorOpen, setCreatorOpen] = useState(false);
   const [assetId, setAssetId] = useState("");
   const [action, setAction] = useState<VocalAction>("silent");
   const [zoom, setZoom] = useState(100);
@@ -275,7 +284,12 @@ export function App() {
   function changedProject(value: Snapshot | null) {
     if (!value) return;
     setSnapshot(value);
-    setCreatorOpen(false);
+    setView("Characters");
+    setVisited([]);
+    setDraftDirty({});
+    setStyleDirty(false);
+    setStudioIntent(undefined);
+    setStyleIntent(undefined);
     setStaged(undefined);
     setAssetId("");
     setFamilyId("");
@@ -298,9 +312,7 @@ export function App() {
       return;
     }
     if (view === "Characters" && master) {
-      setError(
-        "Master V1 ist gesperrt. Kandidaten unter Expressions importieren.",
-      );
+      setError("Master ist gesperrt. Kandidaten unter Library importieren.");
       return;
     }
     if (files.length !== 1) {
@@ -350,115 +362,75 @@ export function App() {
   }
   function addCharacter(e: FormEvent) {
     e.preventDefault();
-    if (
-      createDirty &&
-      !window.confirm(
-        "Ungespeicherten Create-Entwurf verwerfen und neue Figur erstellen?",
-      )
-    )
-      return;
     void command({ type: "addCharacter", name: characterName });
   }
-  function reviewAsset(a: ExpressionAsset, status: "approved" | "rejected") {
-    void command(
-      { type: "review", id: a.id, status },
-      status === "approved" ? "Ausdruck freigegeben." : "Ausdruck abgelehnt.",
+  useEffect(() => {
+    if (p?.selectedCharacterId) {
+      const key = `${p.id}:${p.selectedCharacterId}`;
+      setVisited((old) => (old.includes(key) ? old : [...old, key]));
+      setDraftDirty((old) =>
+        old[`empty:${p.id}`] ? { ...old, [`empty:${p.id}`]: false } : old,
+      );
+    }
+  }, [p?.id, p?.selectedCharacterId]);
+  useEffect(() => {
+    if (p && p.characters.length === 0) setStudioMode("master");
+  }, [p?.id, p?.characters.length]);
+  function dirtyFor(key: string, value: boolean) {
+    setDraftDirty((old) =>
+      old[key] === value ? old : { ...old, [key]: value },
     );
   }
-  const comparison = (
-    <>
-      <div className="section-head">
-        <div>
-          <h2>Manuelle Bildprüfung</h2>
-          <p className="muted">
-            Identität, Bildausschnitt und Gesicht prüfen. Keine automatische
-            Qualitätsbewertung.
-          </p>
-        </div>
-      </div>
-      <MasterCandidateCompare
-        master={p?.masters.find((m) => m.id === asset?.masterId) ?? master}
-        candidate={asset}
-        previewPrefix="Inspect"
-      />
-      {asset && p && (
-        <AssetQuality
-          key={asset.id}
-          source={asset}
-          project={p}
-          onSnapshot={setSnapshot}
-          disabled={busy || generationRunning}
-        />
-      )}
-      {asset && (
-        <div className="review">
-          <div>
-            <span className={`badge ${asset.status}`}>
-              {statusLabel[asset.status]}
-            </span>
-            <p>
-              {p?.variants.find((v) => v.id === asset.variantId)?.label} ·
-              Stimmaktion: {actionLabel[asset.action]}
-            </p>
-            <p className="mono">
-              {asset.width} × {asset.height} px · SHA-256 {asset.sha256}
-            </p>
-            <p className="mono">Master-Quelle: {asset.masterSha256}</p>
-            {asset.composite ? (
-              <p className="mono">
-                Composite V{asset.composite.version} · Maske R
-                {asset.composite.maskRevision} / {asset.composite.maskSha256} ·
-                Rohbild {asset.composite.rawId} / {asset.composite.rawSha256}
-              </p>
-            ) : p?.attempts.find((a) => a.id === asset.attemptId)?.mask ? (
-              <p className="warning">
-                KI-Rohkandidat ohne Pixel Lock. Composite in Create erstellen
-                und prüfen; der Rohkandidat kann nicht freigegeben werden.
-              </p>
-            ) : null}
-            {master &&
-              (master.width !== asset.width ||
-                master.height !== asset.height) && (
-                <p className="warning">
-                  Abweichende Abmessungen. Registrierung vor späterem
-                  Motion-Export prüfen.
-                </p>
-              )}
-          </div>
-          {asset.status === "candidate" && (
-            <div className="button-row">
-              <button
-                className="primary"
-                disabled={Boolean(
-                  !asset.composite &&
-                    p?.attempts.find((a) => a.id === asset.attemptId)?.mask,
-                )}
-                onClick={() => reviewAsset(asset, "approved")}
-              >
-                Freigeben
-              </button>
-              <button
-                className="danger"
-                onClick={() => reviewAsset(asset, "rejected")}
-              >
-                Ablehnen
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </>
-  );
+  function enterStudio(input: Omit<StudioIntent, "serial">) {
+    const apply = () => {
+      setStudioMode(input.mode);
+      setStudioIntent((old) => ({ ...input, serial: (old?.serial ?? 0) + 1 }));
+      setView("Studio");
+    };
+    if (p?.selectedCharacterId === input.characterId) apply();
+    else
+      void run(
+        () =>
+          window.laceframe.command({
+            type: "selectCharacter",
+            id: input.characterId,
+          }),
+        (s) => {
+          setSnapshot(s);
+          apply();
+        },
+      );
+  }
+  function openLibrary(characterId: string, id: string) {
+    const apply = () => {
+      setAssetId(id);
+      setView("Library");
+    };
+    if (p?.selectedCharacterId === characterId) apply();
+    else
+      void run(
+        () =>
+          window.laceframe.command({
+            type: "selectCharacter",
+            id: characterId,
+          }),
+        (s) => {
+          setSnapshot(s);
+          apply();
+        },
+      );
+  }
+  function editStyle(id?: string) {
+    setStyleIntent((old) => ({ id, serial: (old?.serial ?? 0) + 1 }));
+    setView("Art Direction");
+  }
   return (
     <div
       className="app"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        if (
-          p &&
-          ((view === "Characters" && !creatorOpen) || view === "Expressions")
-        )
+        if (p && (view === "Characters" || view === "Library"))
           void drop(e.dataTransfer.files);
       }}
     >
@@ -473,11 +445,11 @@ export function App() {
         <nav aria-label="Hauptnavigation">
           {(
             [
-              "Create",
               "Characters",
-              "Expressions",
+              "Art Direction",
+              "Studio",
+              "Library",
               "Motion",
-              "Inspect",
             ] as const
           ).map((name, i) => (
             <button
@@ -502,7 +474,7 @@ export function App() {
       </aside>
       <main
         inert={importing}
-        className={view === "Create" ? "create-main" : undefined}
+        className={view === "Studio" ? "create-main" : undefined}
       >
         <header>
           <div>
@@ -529,20 +501,13 @@ export function App() {
         )}
         <div
           id="create-action-slot"
-          hidden={
-            view !== "Create" &&
-            !(view === "Characters" && creatorOpen) &&
-            !generationRunning
-          }
+          hidden={view !== "Studio" && !generationRunning}
         />
         <fieldset
           disabled={busy || Boolean(staged) || generationRunning}
           className="workspace"
         >
-          <details
-            className="project-management"
-            open={view !== "Create" && !creatorOpen}
-          >
+          <details className="project-management" open={!p}>
             <summary>
               Projektverwaltung · {p?.name ?? "Projekt auswählen"}
             </summary>
@@ -554,7 +519,7 @@ export function App() {
                   if (
                     createDirty &&
                     !window.confirm(
-                      "Ungespeicherten Create-Entwurf verwerfen und Projekt wechseln?",
+                      "Ungespeicherte Studio- und Stilentwürfe verwerfen und Projekt wechseln?",
                     )
                   )
                     return;
@@ -579,7 +544,7 @@ export function App() {
                 onClick={() =>
                   (!createDirty ||
                     window.confirm(
-                      "Ungespeicherten Create-Entwurf verwerfen und Projekt wechseln?",
+                      "Ungespeicherte Studio- und Stilentwürfe verwerfen und Projekt wechseln?",
                     )) &&
                   void run(() => window.laceframe.openProject(), changedProject)
                 }
@@ -589,43 +554,180 @@ export function App() {
             </section>
           </details>
           {p && (
-            <div hidden={view !== "Create"}>
-              <CreateView
-                key={`${p.id}:${p.selectedCharacterId ?? ""}`}
-                visible={view === "Create" && !creatorRunning}
+            <section
+              className="studio-context"
+              id="studio-context"
+              hidden={view !== "Studio"}
+            >
+              <label>
+                Figur
+                <select
+                  aria-label="Studio Figur"
+                  value={character?.id ?? ""}
+                  onChange={(e) =>
+                    void command({
+                      type: "selectCharacter",
+                      id: e.target.value,
+                    })
+                  }
+                >
+                  <option disabled value="">
+                    Figur anlegen
+                  </option>
+                  {p.characters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.masterId ? " · Master gesperrt" : " · Entwurf"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div
+                className="studio-modes"
+                role="group"
+                aria-label="Studio Modus"
+              >
+                <button
+                  aria-pressed={studioMode === "master"}
+                  onClick={() => setStudioMode("master")}
+                >
+                  Master erstellen
+                </button>
+                <button
+                  aria-pressed={studioMode === "expression"}
+                  onClick={() => setStudioMode("expression")}
+                >
+                  Expression erstellen
+                </button>
+              </div>
+            </section>
+          )}
+          {p && !p.characters.length && (
+            <div
+              className="studio-editor"
+              data-operation="master"
+              hidden={view !== "Studio"}
+            >
+              <CharacterCreator
+                contextControlled
                 snapshot={snapshot!}
-                busy={busy || creatorRunning}
+                visible={view === "Studio" && !expressionRunning}
+                busy={busy || generationRunning}
                 perform={run}
                 onSnapshot={setSnapshot}
-                onDirtyChange={setCreateDirty}
-                onRunningChange={setExpressionRunning}
-                onCharacters={() => setView("Characters")}
-                onInspect={(id) => {
+                onDirtyChange={(dirty) => dirtyFor(`empty:${p.id}`, dirty)}
+                onRunningChange={setCreatorRunning}
+                onClose={() => setView("Characters")}
+                onArtDirection={editStyle}
+                onLibrary={(id) => {
                   setAssetId(id);
-                  setView("Inspect");
+                  setView("Library");
                 }}
+                onExpressions={() => setStudioMode("expression")}
               />
             </div>
           )}
+          {p &&
+            p.characters
+              .filter((c) => visited.includes(`${p.id}:${c.id}`))
+              .map((c) => {
+                const bound = {
+                    ...snapshot!,
+                    project: { ...p, selectedCharacterId: c.id },
+                  },
+                  active = view === "Studio" && p.selectedCharacterId === c.id;
+                return (
+                  <div key={`${p.id}:${c.id}`}>
+                    <div
+                      className="studio-editor"
+                      data-operation="expression"
+                      hidden={!active || studioMode !== "expression"}
+                    >
+                      <CreateView
+                        contextControlled
+                        intent={
+                          studioIntent?.characterId === c.id
+                            ? studioIntent
+                            : undefined
+                        }
+                        visible={
+                          active &&
+                          studioMode === "expression" &&
+                          !creatorRunning
+                        }
+                        snapshot={bound}
+                        busy={busy || creatorRunning}
+                        perform={run}
+                        onSnapshot={setSnapshot}
+                        onDirtyChange={(dirty) =>
+                          dirtyFor(`expression:${p.id}:${c.id}`, dirty)
+                        }
+                        onRunningChange={setExpressionRunning}
+                        onCharacters={() => setView("Characters")}
+                        onArtDirection={editStyle}
+                        onInspect={(id) => openLibrary(c.id, id)}
+                      />
+                    </div>
+                    <div
+                      className="studio-editor"
+                      data-operation="master"
+                      hidden={!active || studioMode !== "master"}
+                    >
+                      <CharacterCreator
+                        contextControlled
+                        intent={
+                          studioIntent?.characterId === c.id
+                            ? studioIntent
+                            : undefined
+                        }
+                        snapshot={bound}
+                        visible={
+                          active &&
+                          studioMode === "master" &&
+                          !expressionRunning
+                        }
+                        busy={busy || expressionRunning}
+                        perform={run}
+                        onSnapshot={setSnapshot}
+                        onDirtyChange={(dirty) =>
+                          dirtyFor(`master:${p.id}:${c.id}`, dirty)
+                        }
+                        onRunningChange={setCreatorRunning}
+                        onClose={() => setView("Characters")}
+                        onArtDirection={editStyle}
+                        onLibrary={(id) => openLibrary(c.id, id)}
+                        onExpressions={() =>
+                          enterStudio({
+                            mode: "expression",
+                            characterId: c.id,
+                            masterId: p.characters.find((a) => a.id === c.id)
+                              ?.masterId,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                );
+              })}
           {p && (
-            <div hidden={view !== "Characters" || !creatorOpen}>
-              <CharacterCreator
-                key={`${p.id}:${p.selectedCharacterId ?? ""}`}
+            <section
+              className="art-direction-workspace"
+              hidden={view !== "Art Direction"}
+            >
+              <button onClick={() => setView("Studio")}>
+                Zurück zum Studio
+              </button>
+              <StyleLibrary
+                key={p.id}
                 snapshot={snapshot!}
-                visible={
-                  view === "Characters" && creatorOpen && !expressionRunning
-                }
-                busy={busy || expressionRunning}
+                busy={busy || generationRunning}
                 perform={run}
                 onSnapshot={setSnapshot}
-                onRunningChange={setCreatorRunning}
-                onClose={() => setCreatorOpen(false)}
-                onExpressions={() => {
-                  setCreatorOpen(false);
-                  setView("Create");
-                }}
+                selectedId={styleIntent?.id}
+                requestSerial={styleIntent?.serial}
+                onDirtyChange={setStyleDirty}
               />
-            </div>
+            </section>
           )}
           {!p ? (
             <section className="welcome">
@@ -646,9 +748,7 @@ export function App() {
             <>
               <section
                 className="character-bar"
-                hidden={
-                  view === "Create" || (view === "Characters" && creatorOpen)
-                }
+                hidden={view !== "Characters" && view !== "Library"}
               >
                 <label>
                   Aktive Figur
@@ -656,13 +756,6 @@ export function App() {
                     aria-label="Aktive Figur"
                     value={character?.id ?? ""}
                     onChange={(e) => {
-                      if (
-                        createDirty &&
-                        !window.confirm(
-                          "Ungespeicherten Create-Entwurf verwerfen und Figur wechseln?",
-                        )
-                      )
-                        return;
                       setAssetId("");
                       void command({
                         type: "selectCharacter",
@@ -680,7 +773,11 @@ export function App() {
                     ))}
                   </select>
                 </label>
-                <form className="inline-form" onSubmit={addCharacter}>
+                <form
+                  className="inline-form"
+                  onSubmit={addCharacter}
+                  hidden={view !== "Characters"}
+                >
                   <label>
                     Neue Figur
                     <input
@@ -694,16 +791,19 @@ export function App() {
                   <button type="submit">Figur erstellen</button>
                 </form>
               </section>
-              {view === "Characters" && !creatorOpen && (
+              {view === "Characters" && (
                 <button
                   className="primary"
-                  onClick={() => setCreatorOpen(true)}
+                  onClick={() => {
+                    setStudioMode("master");
+                    setView("Studio");
+                  }}
                 >
                   Neuen Charakter erstellen
                 </button>
               )}
-              {view === "Characters" && !creatorOpen && (
-                <section className="panel">
+              {view === "Characters" && (
+                <section className="panel characters-workspace">
                   <div className="section-head">
                     <div>
                       <p className="eyebrow">
@@ -744,6 +844,65 @@ export function App() {
                       </label>
                       <button type="submit">Namen speichern</button>
                     </form>
+                  )}
+                  {character && (
+                    <div className="button-row">
+                      <button
+                        onClick={() =>
+                          enterStudio({
+                            mode: "master",
+                            characterId: character.id,
+                          })
+                        }
+                      >
+                        Master im Studio erstellen
+                      </button>
+                      <button
+                        disabled={!master}
+                        onClick={() =>
+                          enterStudio({
+                            mode: "expression",
+                            characterId: character.id,
+                            masterId: master?.id,
+                          })
+                        }
+                      >
+                        Expressions im Studio erstellen
+                      </button>
+                      {master && (
+                        <button
+                          onClick={() => openLibrary(character.id, master.id)}
+                        >
+                          Master in Library prüfen
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {character && (
+                    <details>
+                      <summary>
+                        Identitätsquellen ·{" "}
+                        {
+                          p.identityAssets.filter(
+                            (a) => a.characterId === character.id,
+                          ).length
+                        }
+                      </summary>
+                      {p.identityAssets
+                        .filter((a) => a.characterId === character.id)
+                        .map((a) => (
+                          <div key={a.id}>
+                            <ImagePreview
+                              id={a.id}
+                              caption={`Identitätsquelle${a.removedAt ? " · archiviert" : " · aktiv"}`}
+                              zoom="fit"
+                            />
+                            <small>
+                              {a.width}×{a.height} · {a.sha256.slice(0, 12)}
+                            </small>
+                          </div>
+                        ))}
+                    </details>
                   )}
                   {master ? (
                     <>
@@ -789,6 +948,22 @@ export function App() {
                           .filter((m) => m.characterId === character?.id)
                           .map((m) => (
                             <div key={m.id}>
+                              <button
+                                onClick={() => openLibrary(m.characterId, m.id)}
+                              >
+                                Master V{m.version} in Library prüfen
+                              </button>
+                              <button
+                                onClick={() =>
+                                  enterStudio({
+                                    mode: "expression",
+                                    characterId: m.characterId,
+                                    masterId: m.id,
+                                  })
+                                }
+                              >
+                                Mit Master V{m.version} Expression erstellen
+                              </button>
                               <ImagePreview
                                 id={m.id}
                                 caption={`Master V${m.version} · ${m.id}`}
@@ -823,205 +998,190 @@ export function App() {
                   )}
                 </section>
               )}
-              {view === "Expressions" && (
-                <div className="expression-layout">
-                  <section className="panel">
-                    <p className="eyebrow">AUSDRUCKSBIBLIOTHEK</p>
-                    <h2>Familien & Varianten</h2>
-                    <label>
-                      Emotionsfamilie
-                      <select
-                        aria-label="Emotionsfamilie"
-                        value={family?.id ?? ""}
-                        onChange={(e) => {
-                          setFamilyId(e.target.value);
-                          setVariantId("");
-                        }}
-                      >
-                        {p.families.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {family && (
-                      <FamilyForm
-                        key={family.id + family.label + family.slug}
-                        family={family}
-                        save={(label, slug) =>
-                          void command({
-                            type: "editFamily",
-                            id: family.id,
-                            label,
-                            slug,
-                          })
-                        }
-                      />
-                    )}
-                    <details>
-                      <summary>Eigene Familie hinzufügen</summary>
-                      <FamilyForm
-                        save={(label, slug) =>
-                          void command({ type: "addFamily", label, slug })
-                        }
-                      />
-                    </details>
-                    <label>
-                      Variante
-                      <select
-                        aria-label="Variante"
-                        value={variant?.id ?? ""}
-                        onChange={(e) => {
-                          setVariantId(e.target.value);
-                          const v = variants.find(
-                            (v) => v.id === e.target.value,
-                          );
-                          if (v) setAction(v.suggestedAction);
-                        }}
-                      >
-                        <option value="" disabled>
-                          Variante auswählen
-                        </option>
-                        {variants.map((v) => (
-                          <option key={v.id} value={v.id}>
-                            {v.label} / {v.slug}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {variant && (
-                      <VariantEditor
-                        key={JSON.stringify(variant)}
-                        variant={variant}
-                        save={(v) =>
-                          void command({ type: "editVariant", variant: v })
-                        }
-                      />
-                    )}
-                    <form
-                      className="inline-form"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (family)
-                          void command({
-                            type: "addVariant",
-                            familyId: family.id,
-                            label: newVariant,
-                            slug: newVariant.trim(),
-                          });
-                      }}
-                    >
+              <div hidden={view !== "Library"}>
+                <AssetLibrary
+                  key={p.id}
+                  snapshot={snapshot!}
+                  selectedId={assetId}
+                  onSelect={setAssetId}
+                  onSnapshot={setSnapshot}
+                  onStudio={enterStudio}
+                  disabled={busy || generationRunning}
+                  command={(cmd, notice) => void command(cmd, notice)}
+                />
+              </div>
+              {view === "Library" && (
+                <details className="expression-tools library-workspace">
+                  <summary>Emotionsvorlagen & manueller Import</summary>
+                  <div className="expression-layout">
+                    <section className="panel">
+                      <p className="eyebrow">AUSDRUCKSBIBLIOTHEK</p>
+                      <h2>Familien & Varianten</h2>
                       <label>
-                        Neue Variante
-                        <input
-                          required
-                          maxLength={120}
-                          value={newVariant}
-                          onChange={(e) => setNewVariant(e.target.value)}
-                        />
+                        Emotionsfamilie
+                        <select
+                          aria-label="Emotionsfamilie"
+                          value={family?.id ?? ""}
+                          onChange={(e) => {
+                            setFamilyId(e.target.value);
+                            setVariantId("");
+                          }}
+                        >
+                          {p.families.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.label}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-                      <button disabled={!family} type="submit">
-                        Variante hinzufügen
-                      </button>
-                    </form>
-                  </section>
-                  <section className="panel">
-                    <p className="eyebrow">MANUELLER IMPORT</p>
-                    <h2>Ausdruckskandidat</h2>
-                    <p>
-                      PNG für{" "}
-                      <strong>{variant?.label ?? "eine Variante"}</strong>{" "}
-                      ablegen oder auswählen. Jeder Import benötigt eine eigene
-                      Freigabe.
-                    </p>
-                    <Actions
-                      label="Stimmaktion dieses Imports"
-                      value={action}
-                      onChange={setAction}
-                    />
-                    <button
-                      className="primary"
-                      disabled={!master || !variant}
-                      onClick={choose}
-                    >
-                      Kandidaten-PNG auswählen …
-                    </button>
-                    {!master && (
-                      <p className="warning">
-                        Zuerst unter Characters einen Master sperren.
+                      {family && (
+                        <FamilyForm
+                          key={family.id + family.label + family.slug}
+                          family={family}
+                          save={(label, slug) =>
+                            void command({
+                              type: "editFamily",
+                              id: family.id,
+                              label,
+                              slug,
+                            })
+                          }
+                        />
+                      )}
+                      <details>
+                        <summary>Eigene Familie hinzufügen</summary>
+                        <FamilyForm
+                          save={(label, slug) =>
+                            void command({ type: "addFamily", label, slug })
+                          }
+                        />
+                      </details>
+                      <label>
+                        Variante
+                        <select
+                          aria-label="Variante"
+                          value={variant?.id ?? ""}
+                          onChange={(e) => {
+                            setVariantId(e.target.value);
+                            const v = variants.find(
+                              (v) => v.id === e.target.value,
+                            );
+                            if (v) setAction(v.suggestedAction);
+                          }}
+                        >
+                          <option value="" disabled>
+                            Variante auswählen
+                          </option>
+                          {variants.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.label} / {v.slug}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {variant && (
+                        <VariantEditor
+                          key={JSON.stringify(variant)}
+                          variant={variant}
+                          save={(v) =>
+                            void command({ type: "editVariant", variant: v })
+                          }
+                        />
+                      )}
+                      <form
+                        className="inline-form"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (family)
+                            void command({
+                              type: "addVariant",
+                              familyId: family.id,
+                              label: newVariant,
+                              slug: newVariant.trim(),
+                            });
+                        }}
+                      >
+                        <label>
+                          Neue Variante
+                          <input
+                            required
+                            maxLength={120}
+                            value={newVariant}
+                            onChange={(e) => setNewVariant(e.target.value)}
+                          />
+                        </label>
+                        <button disabled={!family} type="submit">
+                          Variante hinzufügen
+                        </button>
+                      </form>
+                    </section>
+                    <section className="panel">
+                      <p className="eyebrow">MANUELLER IMPORT</p>
+                      <h2>Ausdruckskandidat</h2>
+                      <p>
+                        PNG für{" "}
+                        <strong>{variant?.label ?? "eine Variante"}</strong>{" "}
+                        ablegen oder auswählen. Jeder Import benötigt eine
+                        eigene Freigabe.
                       </p>
-                    )}
-                    <div className="asset-list">
-                      <h3>Importierte Ausdrücke ({assets.length})</h3>
-                      {!assets.length && (
-                        <p className="muted">
-                          Noch keine Kandidaten für diese Figur.
+                      <Actions
+                        label="Stimmaktion dieses Imports"
+                        value={action}
+                        onChange={setAction}
+                      />
+                      <button
+                        className="primary"
+                        disabled={!master || !variant}
+                        onClick={choose}
+                      >
+                        Kandidaten-PNG auswählen …
+                      </button>
+                      {!master && (
+                        <p className="warning">
+                          Zuerst unter Characters einen Master sperren.
                         </p>
                       )}
-                      {assets.map((a) => (
-                        <button
-                          key={a.id}
-                          aria-pressed={asset?.id === a.id}
-                          onClick={() => setAssetId(a.id)}
-                        >
-                          <strong>
-                            {
-                              p.variants.find((v) => v.id === a.variantId)
-                                ?.label
-                            }
-                          </strong>
-                          <span className={`badge ${a.status}`}>
-                            {statusLabel[a.status]}
-                          </span>
-                          <small>
-                            {actionLabel[a.action]} · {a.width} × {a.height}
-                          </small>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                  <section className="panel full-width">{comparison}</section>
-                </div>
-              )}
-              {view === "Inspect" && (
-                <section className="panel">
-                  <label>
-                    Ausdruck auswählen
-                    <select
-                      aria-label="Ausdruck auswählen"
-                      value={asset?.id ?? ""}
-                      onChange={(e) => setAssetId(e.target.value)}
-                    >
-                      <option value="" disabled>
-                        Kein Ausdruck
-                      </option>
-                      {assets.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {p.variants.find((v) => v.id === a.variantId)?.label}{" "}
-                          ·{" "}
-                          {a.composite
-                            ? "Composite"
-                            : p.attempts.find((t) => t.id === a.attemptId)?.mask
-                              ? "Rohkandidat"
-                              : "Ausdruck"}{" "}
-                          · {statusLabel[a.status]} · {a.id.slice(0, 8)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {comparison}
-                </section>
+                      <div className="asset-list">
+                        <h3>Importierte Ausdrücke ({assets.length})</h3>
+                        {!assets.length && (
+                          <p className="muted">
+                            Noch keine Kandidaten für diese Figur.
+                          </p>
+                        )}
+                        {assets.map((a) => (
+                          <button
+                            key={a.id}
+                            aria-pressed={asset?.id === a.id}
+                            onClick={() => setAssetId(a.id)}
+                          >
+                            <strong>
+                              {
+                                p.variants.find((v) => v.id === a.variantId)
+                                  ?.label
+                              }
+                            </strong>
+                            <span className={`badge ${a.status}`}>
+                              {statusLabel[a.status]}
+                            </span>
+                            <small>
+                              {actionLabel[a.action]} · {a.width} × {a.height}
+                            </small>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  </div>
+                </details>
               )}
               {view === "Motion" && (
                 <section className="welcome">
                   <p className="eyebrow">ALS NÄCHSTES</p>
-                  <h2>Motion kommt in Task 03.</h2>
+                  <h2>Motion · späterer Meilenstein.</h2>
                   <p>
-                    Geplant: manuell geladene Blink- und Mundframes, Timeline
-                    mit individueller Dauer, Play/Pause und JSON- sowie
-                    PNG-Export. Die freigegebenen Ausdrücke bilden die
-                    Grundlage.
+                    Nach Style Intelligence geplant: manuell geladene Blink- und
+                    Mundframes, Timeline mit individueller Dauer, Play/Pause und
+                    JSON- sowie PNG-Export. Die freigegebenen Ausdrücke bilden
+                    die Grundlage.
                   </p>
                   <p>
                     Aktuell freigegeben:{" "}

@@ -120,8 +120,13 @@ export function AssetQuality({
   const sourceQuality = project.qualityAssets.find(
     (q) => q.id === promotedSource?.qualitySourceId,
   );
+  const selectedSource = project.qualityAssets.find((q) => q.id === source.id);
   const derivative =
-      derivatives.find((q) => q.id === selected) ?? derivatives.at(-1),
+      (selected === source.id
+        ? selectedSource
+        : derivatives.find((q) => q.id === selected)) ??
+      selectedSource ??
+      derivatives.at(-1),
     active = derivative ?? source;
   let root = source;
   const visited = new Set<string>();
@@ -291,7 +296,7 @@ export function AssetQuality({
               />
               Provenienz-JSON exportieren (Prompt, Herkunft, Prüfnotizen)
             </label>
-            {derivatives.length > 0 && (
+            {(derivatives.length > 0 || derivative) && (
               <>
                 <label>
                   Qualitätsversion
@@ -300,7 +305,10 @@ export function AssetQuality({
                     value={derivative?.id ?? ""}
                     onChange={(e) => setSelected(e.target.value)}
                   >
-                    {derivatives.map((d, i) => (
+                    {(selectedSource
+                      ? [selectedSource, ...derivatives]
+                      : derivatives
+                    ).map((d, i) => (
                       <option key={d.id} value={d.id}>
                         {i + 1} · {d.operation} · {d.width}×{d.height} ·{" "}
                         {d.status}
@@ -309,7 +317,16 @@ export function AssetQuality({
                   </select>
                 </label>
                 <MasterCandidateCompare
-                  master={source}
+                  master={
+                    project.qualityAssets.some((q) => q.id === source.id)
+                      ? [
+                          ...project.masters,
+                          ...project.assets,
+                          ...project.masterCandidates,
+                          ...project.qualityAssets,
+                        ].find((a) => a.id === derivative?.sourceId)
+                      : source
+                  }
                   candidate={derivative}
                   beforeLabel="Original"
                   previewPrefix="Qualität"
