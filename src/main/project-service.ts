@@ -128,6 +128,8 @@ export class ProjectService {
       masters: [],
       assets: [],
       attempts: [],
+      artDirections: [],
+      expressionPerformances: [],
       ...createPresets(randomUUID),
     });
     await fs.mkdir(path.join(root, "assets", "originals"), { recursive: true });
@@ -313,6 +315,52 @@ export class ProjectService {
             "Native Ergebnisse können nicht über manuellen Import zugeordnet werden.",
           );
         await this.attachResult(p, attempt, cmd.token);
+        break;
+      }
+      case "addArtDirection": {
+        const id = randomUUID();
+        p.artDirections.push({
+          id,
+          name: cmd.name,
+          revision: 1,
+          renderRules: cmd.renderRules,
+        });
+        if (!p.defaultArtDirectionId) p.defaultArtDirectionId = id;
+        break;
+      }
+      case "updateArtDirection": {
+        const profile = p.artDirections.find((a) => a.id === cmd.id);
+        if (!profile) throw new Error("Art Direction fehlt.");
+        profile.name = cmd.name;
+        profile.renderRules = cmd.renderRules;
+        profile.revision += 1;
+        break;
+      }
+      case "setArtDirection": {
+        if (!p.artDirections.some((a) => a.id === cmd.id))
+          throw new Error("Art Direction fehlt.");
+        p.defaultArtDirectionId = cmd.id;
+        break;
+      }
+      case "setExpressionPerformance": {
+        character(cmd.characterId);
+        if (!p.variants.some((v) => v.id === cmd.variantId))
+          throw new Error("Emotionsvariante fehlt.");
+        const index = p.expressionPerformances.findIndex(
+          (e) => e.characterId === cmd.characterId && e.variantId === cmd.variantId,
+        );
+        const direction = cmd.direction.trim();
+        if (!direction) {
+          if (index >= 0) p.expressionPerformances.splice(index, 1);
+        } else if (index >= 0) {
+          p.expressionPerformances[index].direction = direction;
+        } else {
+          p.expressionPerformances.push({
+            characterId: cmd.characterId,
+            variantId: cmd.variantId,
+            direction,
+          });
+        }
         break;
       }
       case "addCharacter": {
