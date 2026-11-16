@@ -24,7 +24,7 @@ npm run make
 
 `build` creates an unpacked native application in `out/`. `make` creates a ZIP for the current OS; on Linux/macOS its Forge maker requires the system `zip` command. This machine lacks `zip`, so ZIP creation currently fails with `spawn zip ENOENT`; the unpacked application builds and runs. Forge is configured for Linux, Windows and macOS; build on each target OS. Windows/macOS execution, packaging and signing have not yet been validated. `test:desktop` uses the packaged Linux executable and a running display; set `LACEFRAME_EXECUTABLE` for another executable path. Its temporary projects contain synthetic images only. Playwright supplies native-dialog selections during this test; filesystem, IPC, image decoding and the renderer are real. Playwright itself adds `--no-sandbox` to its instrumented Electron launch; `npm run start` was also launched separately with the normal sandbox enabled.
 
-To verify development CSP, React Refresh and the preload sender check, start a fresh development instance with `npm run start -- -- --remote-debugging-port=9232`, then run `npm run test:dev` in another terminal. The debug port is used only when explicitly requested by this command.
+To verify development CSP, React Refresh and the preload sender check, first-load rendering and renderer-initiated reloads, start a fresh development instance with `npm run start -- -- --remote-debugging-port=9232`, then run `npm run test:dev` in another terminal. The debug port is used only when explicitly requested by this command.
 
 ## Portrait workflow
 
@@ -50,7 +50,7 @@ project/
 
 Originals are written exclusively and marked read-only; imports never write to the source file. Repeated imports reuse identical bytes but retain distinct candidate IDs. Candidate review does not move or rewrite image data. Manifest saves use a synced temporary file and atomic rename. External manifest edits trigger a conflict instead of being overwritten. Opening a project validates its schema, references, hashes, dimensions and canonical asset paths before replacing the active workspace. Keep backups of the complete project directory.
 
-The renderer has context isolation, sandboxing and no Node integration. The narrow preload exposes seven typed operations; main-process handlers validate input and the exact sender/frame, serialize writes, restrict image formats/sizes and reject traversal and symlinks. Previews use controlled image bytes. Packaged UI resources use a restricted `laceframe://app` protocol and CSP with network connections denied. Arbitrary file/protocol access, navigation, popups and permissions are blocked. There is no background server/database in the packaged application.
+The renderer has context isolation, sandboxing and no Node integration. The narrow preload exposes seven typed operations; main-process handlers validate input and the exact sender/frame, serialize writes, restrict image formats/sizes and reject traversal and symlinks. Previews use controlled image bytes. Packaged UI resources use a restricted `laceframe://app` protocol and CSP with network connections denied. Arbitrary file/protocol access, external navigation, popups and permissions are blocked. During development, only navigation to the exact local Vite entry URL is allowed, so its startup reload can complete. There is no background server/database in the packaged application.
 
 See [Task 01 validation and limitations](docs/TASK_01_VALIDATION.md), [MVP plan](docs/MVP_PLAN.md) and [character/expression rules](docs/CHARACTER_EXPRESSIONS.md).
 

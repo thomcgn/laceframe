@@ -15,6 +15,7 @@ import { z } from "zod";
 import { commandSchema, idSchema, MAX_IMAGE_BYTES } from "../shared/domain";
 import { ProjectService } from "./project-service";
 import { decodeImage } from "./decode-image";
+import { mayNavigateDevelopmentPage } from "./navigation";
 import type { Result } from "../shared/bridge";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -146,7 +147,15 @@ function createWindow() {
   });
   window.setMenuBarVisibility(false);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  window.webContents.on("will-navigate", (event) => event.preventDefault());
+  window.webContents.on("will-navigate", (event) => {
+    // Vite's first dependency build can trigger a same-page navigation. Blocking
+    // it aborts the initial module graph and leaves an empty renderer.
+    if (
+      !mayNavigateDevelopmentPage(event.url, MAIN_WINDOW_VITE_DEV_SERVER_URL)
+    ) {
+      event.preventDefault();
+    }
+  });
   window.webContents.on("will-redirect", (event) => event.preventDefault());
   void window.loadURL(rendererURL());
 }
