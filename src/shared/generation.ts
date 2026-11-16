@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { maskSelectionSchema } from "./masking";
 import { styleReferenceSchema } from "./style";
 import type { Master, Variant, VocalAction, Project } from "./domain";
 
 export const generationDraftSchema = z
   .object({
+    mask: maskSelectionSchema.optional(),
     characterId: z.uuid(),
     masterId: z.uuid(),
     masterSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -141,6 +143,7 @@ export function validateExternalURL(input: unknown): string {
   return CHATGPT_URL;
 }
 export function composePrompt(input: {
+  mask?: z.infer<typeof maskSelectionSchema>;
   characterName: string;
   master: Master;
   familyLabel: string;
@@ -165,6 +168,9 @@ export function composePrompt(input: {
       : "",
     input.styleReferences?.length
       ? `REFERENCE ROLES: Image 1 is the IDENTITY MASTER. Images 2–${input.styleReferences.length + 1} are STYLE ONLY, in the listed order: ${input.styleReferences.map((r, i) => `image ${i + 2}: ID ${r.id}, SHA-256 ${r.sha256}`).join("; ")}. Borrow rendering, lighting and palette treatment only. NEVER copy faces, hair, freckles, gender presentation, clothing, accessories, poses or personality from style references. Identity and outfit come ONLY from image 1. Edit image 1; style pictures are not edit targets.`
+      : "",
+    input.mask
+      ? `LOCAL HARD PIXEL LOCK: mask ${input.mask.id}, revision ${input.mask.revision}, SHA-256 ${input.mask.sha256}. Laceframe composites locally AFTER generation. No inpainting mask is sent to Codex. Return the exact original canvas dimensions and aligned origin; do not crop or scale. This does not constrain the AI to a region; manual registration and identity review remain required.`
       : "",
     "CHARACTER LOCK — EDIT THE PROVIDED APPROVED MASTER IMAGE",
     `Attach the actual approved master image as the reference. A filename, ID or hash alone is NOT an image reference. Use the PROVIDED IMAGE of ${input.characterName}; do not invent or redesign the character.`,

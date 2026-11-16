@@ -37,7 +37,7 @@ const path = require("node:path");
       args: ["--user-data-dir=" + path.join(root, "user-data")],
       env,
     });
-    const page = await app.firstWindow();
+    let page = await app.firstWindow();
     page.setDefaultTimeout(15000);
     page.on("pageerror", (error) => errors.push(error.message));
     await expect(
@@ -632,6 +632,300 @@ const path = require("node:path");
     expect(
       lastRpc.params.input.filter((i) => i.type === "localImage"),
     ).toHaveLength(1);
+    {
+      // 02D: actual editor -> persisted mask -> fixture raw -> deterministic composite.
+      const { PNG } = require("pngjs");
+      await page
+        .getByLabel("Bearbeitungsmodus", { exact: true })
+        .selectOption("hard");
+      await expect(generate).toBeDisabled();
+      await page
+        .getByRole("button", { name: "Maske erstellen", exact: true })
+        .click();
+      const editor = page.getByRole("dialog", {
+        name: "Bearbeitungsmaske",
+        exact: true,
+      });
+      await expect(editor.getByAltText("Masken-Master")).toBeVisible();
+      await editor
+        .getByLabel("Maskenname", { exact: true })
+        .fill("Synthetic expression region");
+      await editor.getByLabel("Pinselgröße", { exact: true }).fill("80");
+      await editor.getByLabel("Maskenwert", { exact: true }).fill("128");
+      const maskImage = editor.getByAltText("Masken-Master");
+      let box = await maskImage.boundingBox();
+      await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.5);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5, {
+        steps: 8,
+      });
+      await page.mouse.up();
+      const maskAlpha = () =>
+        editor.locator("canvas").evaluate((c) => {
+          const data = c
+            .getContext("2d")
+            .getImageData(0, 0, c.width, c.height).data;
+          let sum = 0;
+          for (let i = 3; i < data.length; i += 4) sum += data[i];
+          return sum;
+        });
+      const painted = await maskAlpha();
+      expect(painted).toBeGreaterThan(0);
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].setSize(960, 720),
+      );
+      await expect
+        .poll(() => editor.evaluate((el) => el.scrollWidth <= el.clientWidth))
+        .toBe(true);
+      await fs.mkdir("artifacts", { recursive: true });
+      await page.screenshot({ path: "artifacts/mask-editor-960.png" });
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].setSize(1440, 1000),
+      );
+
+      await editor
+        .getByRole("button", { name: "Rückgängig", exact: true })
+        .click();
+      expect(await maskAlpha()).toBe(0);
+      await editor
+        .getByRole("button", { name: "Wiederholen", exact: true })
+        .click();
+      expect(await maskAlpha()).toBe(painted);
+      box = await maskImage.boundingBox();
+      await editor
+        .getByLabel("Maskenwerkzeug", { exact: true })
+        .selectOption("erase");
+      await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+      expect(await maskAlpha()).toBeLessThan(painted);
+      await editor
+        .getByRole("button", { name: "Rückgängig", exact: true })
+        .click();
+      expect(await maskAlpha()).toBe(painted);
+      await editor
+        .getByRole("button", { name: "Maske zurücksetzen", exact: true })
+        .click();
+      expect(await maskAlpha()).toBe(0);
+      await editor
+        .getByRole("button", { name: "Rückgängig", exact: true })
+        .click();
+      expect(await maskAlpha()).toBe(painted);
+      await editor
+        .getByLabel("Maskenwerkzeug", { exact: true })
+        .selectOption("paint");
+      const touch = await page.context().newCDPSession(page);
+      const touchPoint = {
+        x: box.x + box.width * 0.25,
+        y: box.y + box.height * 0.25,
+        radiusX: 1,
+        radiusY: 1,
+        force: 1,
+        id: 7,
+      };
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [touchPoint],
+      });
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      });
+      expect(await maskAlpha()).toBeGreaterThan(painted);
+      await editor
+        .getByLabel("Maskenzeichenfläche", { exact: true })
+        .press("Control+z");
+      expect(await maskAlpha()).toBe(painted);
+      await touch.detach();
+      await editor.getByLabel("Maskenzoom", { exact: true }).selectOption("2");
+      await editor
+        .getByLabel("Maskenwerkzeug", { exact: true })
+        .selectOption("pan");
+      const previousTransform = await editor
+        .locator(".mask-stage")
+        .getAttribute("style");
+      await page.mouse.move(box.x + 100, box.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 140, box.y + 120);
+      await page.mouse.up();
+      expect(
+        await editor.locator(".mask-stage").getAttribute("style"),
+      ).not.toBe(previousTransform);
+      await editor
+        .getByRole("button", {
+          name: "Maskenansicht zurücksetzen",
+          exact: true,
+        })
+        .click();
+      await editor
+        .getByRole("button", { name: "Maskenrevision speichern", exact: true })
+        .click();
+      await expect(editor).not.toBeVisible();
+      const maskRecord = (await manifest()).masks.at(-1);
+      expect(maskRecord).toMatchObject({
+        width: 600,
+        height: 400,
+        revision: 1,
+        masterId: (await manifest()).masters[0].id,
+      });
+      await page
+        .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
+        .click();
+      await expect(generate).toBeEnabled();
+      await generate.click();
+      await expect(
+        page.getByRole("status", { name: "Codex Status" }),
+      ).toContainText("Generierung läuft");
+      await expect(
+        page.getByRole("status", { name: "Codex Status" }),
+      ).toContainText("Generierung abgeschlossen");
+      await expect(
+        page.getByText(/Hard Lock blockiert: unterschiedliche Abmessungen/),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: "Als Expression freigeben",
+          exact: true,
+        }),
+      ).toBeDisabled();
+      await page
+        .getByRole("region", {
+          name: "Master und Kandidat vergleichen",
+          exact: true,
+        })
+        .getByLabel("Vergleichsregistrierung", { exact: true })
+        .selectOption("visual");
+      await expect(page.getByText(/Nur visuelle Normalisierung/)).toBeVisible();
+      await page
+        .getByRole("region", {
+          name: "Master und Kandidat vergleichen",
+          exact: true,
+        })
+        .getByLabel("Vergleichsregistrierung", { exact: true })
+        .selectOption("native");
+      // A new synthetic same-size raw result; no scaling of either source.
+      const fixture = new PNG({ width: 600, height: 400 });
+      for (let i = 0; i < fixture.data.length; i += 4) {
+        fixture.data[i] = 210;
+        fixture.data[i + 1] = 110;
+        fixture.data[i + 2] = 80;
+        fixture.data[i + 3] = 255;
+      }
+      await fs.writeFile(
+        path.join(output, "result.png"),
+        PNG.sync.write(fixture),
+      );
+      await expect(generate).toBeEnabled();
+      await generate.click();
+      await expect(
+        page.getByRole("status", { name: "Codex Status" }),
+      ).toContainText("Generierung läuft");
+      await expect(
+        page.getByRole("status", { name: "Codex Status" }),
+      ).toContainText("Generierung abgeschlossen");
+      page.once("dialog", (dialog) => dialog.accept());
+      await page
+        .getByRole("button", {
+          name: "Registrierung bestätigen & Composite erstellen",
+          exact: true,
+        })
+        .click();
+      await expect(page.locator(".notice")).toContainText("Composite erstellt");
+      const compositeProject = await manifest(),
+        compositeRecord = compositeProject.assets.at(-1);
+      expect(compositeRecord.status).toBe("candidate");
+      expect(compositeRecord.composite.maskId).toBe(maskRecord.id);
+      const readPixels = async (image) =>
+        PNG.sync.read(await fs.readFile(path.join(project, image.file)));
+      const mp = await readPixels(compositeProject.masters[0]),
+        rp = await readPixels(
+          compositeProject.assets.find(
+            (a) => a.id === compositeRecord.composite.rawId,
+          ),
+        );
+      const cp = await readPixels(compositeRecord),
+        wp = await readPixels(maskRecord);
+      let protectedPixels = 0,
+        editablePixels = 0;
+      for (let i = 0; i < wp.data.length; i += 4) {
+        const w = wp.data[i];
+        if (!w) protectedPixels++;
+        else editablePixels++;
+        for (let c = 0; c < 4; c++) {
+          const expected =
+            w === 0
+              ? mp.data[i + c]
+              : w === 255
+                ? rp.data[i + c]
+                : Math.round(
+                    (mp.data[i + c] * (255 - w) + rp.data[i + c] * w) / 255,
+                  );
+          if (cp.data[i + c] !== expected)
+            throw new Error(`Composite pixel mismatch ${i}/${c}`);
+        }
+      }
+      expect(protectedPixels).toBeGreaterThan(0);
+      expect(editablePixels).toBeGreaterThan(0);
+      await page.screenshot({
+        path: "artifacts/hard-pixel-composite.png",
+        fullPage: true,
+      });
+      await page
+        .getByLabel("Rohkandidat oder Composite", { exact: true })
+        .selectOption("raw");
+      await expect(
+        page.getByRole("button", {
+          name: "Als Expression freigeben",
+          exact: true,
+        }),
+      ).toBeDisabled();
+      await page
+        .getByLabel("Rohkandidat oder Composite", { exact: true })
+        .selectOption("composite");
+      await page
+        .getByText("Gespeicherte Maskenüberlagerung", { exact: true })
+        .click();
+      await expect(page.getByAltText("Gespeicherte Maske")).toBeVisible();
+      await page
+        .getByRole("button", { name: "Als Expression freigeben", exact: true })
+        .click();
+      expect((await manifest()).assets.at(-1).status).toBe("approved");
+      await page
+        .getByRole("button", { name: "An Inspect senden", exact: true })
+        .click();
+      await expect(
+        page.getByRole("slider", {
+          name: "Before/After-Vergleich",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await page
+        .getByRole("region", {
+          name: "Master und Kandidat vergleichen",
+          exact: true,
+        })
+        .getByLabel("Vergleichsregistrierung", { exact: true })
+        .selectOption("visual");
+      await expect(page.getByText(/Nur visuelle Normalisierung/)).toBeVisible();
+      await page.getByRole("button", { name: /Create$/ }).click();
+      await page
+        .getByRole("button", { name: "Maske bearbeiten", exact: true })
+        .click();
+      await expect(editor.getByAltText("Masken-Master")).toBeVisible();
+      await expect.poll(maskAlpha).toBe(painted);
+      await editor
+        .getByRole("button", { name: "Editor schließen", exact: true })
+        .click();
+      await page
+        .getByLabel("Bearbeitungsmodus", { exact: true })
+        .selectOption("soft");
+      await expect(generate).toBeDisabled();
+      await expect(page.getByText(/Soft Lock nicht verfügbar/)).toBeVisible();
+      await page
+        .getByLabel("Bearbeitungsmodus", { exact: true })
+        .selectOption("none");
+      await page
+        .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
+        .click();
+    }
     // An unconfirmed schema blocks style-image submission, with an explicit master-only route.
     const turnsBefore = (
       await fs.readFile(path.join(root, "trace.jsonl"), "utf8")
@@ -644,9 +938,11 @@ const path = require("node:path");
     await page
       .getByLabel("Charakter Stilzuordnung", { exact: true })
       .selectOption("project");
-    await page
-      .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
-      .click();
+    // The mask-mode template was explicitly adopted above and is pristine;
+    // switching style now updates it automatically rather than asking twice.
+    await expect(
+      page.getByLabel("Arbeits-Prompt", { exact: true }),
+    ).toHaveValue(/STYLE LOCK/);
     await page
       .getByText("Inspector · Stimmaktion, Intensität und Herkunft", {
         exact: true,
@@ -678,6 +974,53 @@ const path = require("node:path");
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Nicht mit ChatGPT angemeldet");
     await expect(generate).toBeDisabled();
+    // Close/relaunch/reopen the actual project: masks, composites, reviews and prompts persist exactly.
+    const beforeMaskRestart = await manifest();
+    await app.close();
+    app = await electron.launch({
+      executablePath: path.resolve("out/Laceframe-linux-x64/laceframe"),
+      args: ["--user-data-dir=" + path.join(root, "user-data")],
+      env,
+    });
+    page = await app.firstWindow();
+    page.setDefaultTimeout(15000);
+    page.on("pageerror", (error) => errors.push(error.message));
+    await app.evaluate(({ dialog }, directory) => {
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [directory],
+      });
+    }, project);
+    await page
+      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .click();
+    await page.getByRole("button", { name: /Create$/ }).click();
+    await expect(
+      page.getByLabel("Bearbeitungsmodus", { exact: true }),
+    ).toHaveValue("hard");
+    await expect(
+      page.getByLabel("Maskenrevision", { exact: true }),
+    ).toHaveValue(beforeMaskRestart.masks.at(-1).id);
+    await expect(
+      page
+        .locator(".create-result .badge.approved")
+        .filter({ hasText: "Freigegeben" }),
+    ).toBeVisible();
+    expect(await manifest()).toEqual(beforeMaskRestart);
+    await page
+      .getByRole("button", { name: "Maske bearbeiten", exact: true })
+      .click();
+    const reopenedEditor = page.getByRole("dialog", {
+      name: "Bearbeitungsmaske",
+      exact: true,
+    });
+    await expect(reopenedEditor.getByAltText("Masken-Master")).toBeVisible();
+    await expect(
+      reopenedEditor.getByLabel("Maskenname", { exact: true }),
+    ).toHaveValue("Synthetic expression region");
+    await reopenedEditor
+      .getByRole("button", { name: "Editor schließen", exact: true })
+      .click();
     await fs.mkdir("artifacts", { recursive: true });
     await page.screenshot({
       path: "artifacts/native-provider-smoke.png",
@@ -685,7 +1028,7 @@ const path = require("node:path");
     });
     expect(errors).toEqual([]);
     console.log(
-      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel/regeneration, monotonic timer metadata, real slider keyboard/mouse/touch, shared zoom/pan/overlay, PNG/WebP style chooser/drop/thumbnails/history/reuse, ordered multi-reference and master-only jobs, isolated character expression prompts/master references, 960px layout, project lock, provenance, approval, auth gating. No live AI calls.",
+      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel/regeneration, monotonic timer metadata, real slider keyboard/mouse/touch, shared zoom/pan/overlay, PNG/WebP style chooser/drop/thumbnails/history/reuse, ordered multi-reference and master-only jobs, isolated character expression prompts/master references, 960px layout, project lock, provenance, approval, auth gating. Mask editor draw/erase/undo/redo, immutable mask snapshot, mismatch block, exact RGBA composite assertions, raw/composite approval, shared Inspect comparison, soft-lock gate. No live AI calls.",
     );
   } catch (error) {
     if (app) {

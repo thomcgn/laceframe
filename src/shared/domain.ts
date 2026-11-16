@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { compositeSchema, MAX_MASK_PIXELS } from "./masking";
 import {
   styleRules,
   revisionSchema,
@@ -28,6 +29,20 @@ export const masterSchema = z
     locked: z.literal(true),
   })
   .strict();
+export const maskSchema = z
+  .object({
+    ...imageFields,
+    format: z.literal("png"),
+    characterId: idSchema,
+    masterId: idSchema,
+    masterSha256: sha,
+    seriesId: idSchema,
+    revision: z.number().int().positive(),
+    name: label,
+    createdAt: z.iso.datetime(),
+  })
+  .strict()
+  .refine((m) => m.width * m.height <= MAX_MASK_PIXELS, "Mask too large");
 export const assetSchema = z
   .object({
     ...imageFields,
@@ -42,6 +57,7 @@ export const assetSchema = z
     attemptId: idSchema.optional(),
     promptRevisionId: idSchema.optional(),
     providerId: z.string().min(1).max(120).optional(),
+    composite: compositeSchema.optional(),
   })
   .strict();
 export const familySchema = z
@@ -108,6 +124,8 @@ const projectObject = z
     attempts: z.array(attemptSchema).max(10000),
     artDirections: z.array(artDirectionSchema).max(100).default([]),
     defaultArtDirectionId: idSchema.optional(),
+    maskingVersion: z.literal(1).optional(),
+    masks: z.array(maskSchema).max(1000).default([]),
     visualStyleVersion: z.literal(1).optional(),
     styleAssets: z
       .array(
@@ -155,6 +173,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       ...p.attempts.map((a) => a.promptRevision),
       ...p.artDirections,
       ...p.styleAssets,
+      ...p.masks,
       ...p.outfits,
     ].map((x) => x.id),
   ];
@@ -246,6 +265,28 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       )
         fail("Current style revision mismatch");
     }
+  const maskKeys = p.masks.map((m) => `${m.seriesId}/${m.revision}`);
+  if (new Set(maskKeys).size !== maskKeys.length)
+    fail("Duplicate mask revision");
+  for (const m of p.masks) {
+    const master = p.masters.find((a) => a.id === m.masterId);
+    if (
+      !master ||
+      master.characterId !== m.characterId ||
+      master.sha256 !== m.masterSha256 ||
+      master.width !== m.width ||
+      master.height !== m.height
+    )
+      fail("Invalid mask master");
+    if (m.file !== assetFile("masks", m.sha256, "png"))
+      fail("Unsafe mask path");
+    const series = p.masks.filter((a) => a.seriesId === m.seriesId);
+    if (
+      series.some((a) => a.masterId !== m.masterId) ||
+      (!series.some((a) => a.revision === m.revision - 1) && m.revision !== 1)
+    )
+      fail("Invalid mask series");
+  }
   for (const v of p.variants)
     if (!p.families.some((f) => f.id === v.familyId))
       fail("Unknown variant family");
@@ -265,6 +306,16 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       !p.variants.some((v) => v.id === attempt.variantId)
     )
       fail("Invalid attempt reference");
+    if (attempt.mask) {
+      const mask = p.masks.find((m) => m.id === attempt.mask!.id);
+      if (
+        !mask ||
+        mask.masterId !== attempt.masterId ||
+        mask.sha256 !== attempt.mask.sha256 ||
+        mask.revision !== attempt.mask.revision
+      )
+        fail("Invalid attempt mask provenance");
+    }
     const style = p.artDirections.find((a) => a.id === attempt.artDirectionId);
     if (
       (attempt.artDirectionId === undefined) !==
@@ -304,7 +355,10 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       !p.assets.some((a) => a.attemptId === attempt.id)
     )
       fail("Completed generation has no result");
-    if (p.assets.filter((a) => a.attemptId === attempt.id).length > 1)
+    if (
+      p.assets.filter((a) => a.attemptId === attempt.id && !a.composite)
+        .length > 1
+    )
       fail("An attempt has multiple results");
   }
   for (const a of p.assets) {
@@ -317,6 +371,36 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       fail("Unsafe candidate path");
     if ((a.status === "candidate") === Boolean(a.reviewedAt))
       fail("Invalid review timestamp");
+    if (a.composite) {
+      const c = a.composite,
+        raw = p.assets.find((r) => r.id === c.rawId && !r.composite);
+      const mask = p.masks.find((m) => m.id === c.maskId);
+      const attempt = p.attempts.find((t) => t.id === a.attemptId);
+      if (
+        !raw ||
+        !mask ||
+        !attempt?.mask ||
+        raw.sha256 !== c.rawSha256 ||
+        mask.sha256 !== c.maskSha256 ||
+        mask.revision !== c.maskRevision ||
+        attempt.mask.id !== mask.id ||
+        raw.attemptId !== a.attemptId ||
+        mask.masterId !== a.masterId ||
+        raw.width !== m?.width ||
+        raw.height !== m?.height ||
+        a.width !== m?.width ||
+        a.height !== m?.height ||
+        a.format !== "png"
+      )
+        fail("Invalid composite provenance");
+      if (
+        p.assets.filter(
+          (r) =>
+            r.composite?.rawId === c.rawId && r.composite?.maskId === c.maskId,
+        ).length !== 1
+      )
+        fail("Duplicate composite");
+    }
     if (a.attemptId) {
       const attempt = p.attempts.find((x) => x.id === a.attemptId);
       if (
@@ -386,11 +470,29 @@ export type StagedImage = {
 };
 export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 export const assetFile = (
-  kind: "originals" | "candidates" | "styles",
+  kind: "originals" | "candidates" | "styles" | "masks",
   hash: string,
   format: "png" | "webp",
 ) => `assets/${kind}/${hash}.${format}`;
 export const commandSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("saveMask"),
+      masterId: idSchema,
+      previousId: idSchema.optional(),
+      name: label,
+      weights: z
+        .instanceof(Uint8Array)
+        .refine((v) => v.length <= MAX_MASK_PIXELS),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("createComposite"),
+      rawId: idSchema,
+      registrationConfirmed: z.literal(true),
+    })
+    .strict(),
   z
     .object({ type: z.literal("prepareAttempt"), draft: generationDraftSchema })
     .strict(),

@@ -81,3 +81,11 @@ New attempts preserve style revision, ordered reference IDs/SHA-256, personal di
 See [02C implementation and validation](docs/CODEX_02C_VALIDATION.md) and the historical [PR #8 review](docs/PR_08_VALIDATION.md).
 
 See [UX quality validation and comparison controls](docs/UX_QUALITY_VALIDATION.md) and [Task 02 implementation, official integration findings and validation](docs/TASK_02_VALIDATION.md). Motion playback/export remains Task 03.
+
+### Expression masks and Hard Pixel Lock (02D)
+
+In Create, choose **Hard Pixel Lock**, create/select a mask and explicitly save its revision. Paint marks allowed pixels; eraser protects pixels again. Gray weights blend; undo/redo, overlay, zoom and pan operate in original master coordinates. Generate or manually import a raw result for that saved attempt. Equal dimensions are required; after checking alignment, click **Registrierung bestätigen & Composite erstellen**. Compare raw/composite and manually approve the separate composite. Master, raw image and historical mask/prompt revisions remain immutable.
+
+Hard Lock currently processes non-animated PNG up to 8 bits/channel and 16 megapixels. It copies every protected decoded RGBA8 channel exactly and never scales mismatched inputs. WebP/16-bit images remain importable but cannot be hard-composited. **Soft Lock is unavailable:** the checked Codex App Server input schema has no confirmed explicit inpainting-mask route. Masks are used locally, never advertised as an AI boundary. Inspect reuses the registered comparison; its optional visual normalization changes presentation only and cannot enable compositing.
+
+See [02D implementation, actual tests and limitations](docs/CODEX_02D_VALIDATION.md).
