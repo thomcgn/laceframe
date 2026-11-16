@@ -1,5 +1,7 @@
 # Task 02 — Create workspace
 
+> Historical manual/Create baseline. The subsequent implemented native Codex provider and its live reference test are documented in [NATIVE_CODEX_VALIDATION.md](NATIVE_CODEX_VALIDATION.md). Statements below about no native integration describe the earlier baseline and the separate Sign-in-with-ChatGPT/Responses route.
+
 Implemented on `feat/task-02-create-workspace`, continuing the existing Electron/React application. No worktree, second app, new runtime dependency or private portrait asset.
 
 ## Working vertical slice

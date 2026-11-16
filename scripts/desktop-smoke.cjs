@@ -88,17 +88,21 @@ const { createHash } = require("node:crypto");
     ).toEqual({
       node: "undefined",
       bridge: [
+        "cancelGeneration",
+        "checkCodex",
         "chooseImage",
         "command",
         "copyPrompt",
         "createProject",
         "discardImage",
+        "generationStatus",
         "openChatGPT",
         "openProject",
         "preview",
         "providers",
         "revealMaster",
         "stageImage",
+        "startGeneration",
       ],
     });
     const bytes = await app.evaluate(({ nativeImage }) => [
@@ -175,7 +179,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Variante speichern", exact: true })
       .click();
-    await expect(page.getByRole("status")).toHaveText("Gespeichert.");
+    await expect(page.locator(".notice")).toHaveText("Gespeichert.");
     await setDialog(source);
     await page
       .getByRole("button", { name: "Kandidaten-PNG auswählen …", exact: true })
@@ -187,7 +191,7 @@ const { createHash } = require("node:crypto");
       page.getByRole("button", { name: "Freigeben", exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Freigeben", exact: true }).click();
-    await expect(page.getByRole("status")).toHaveText("Ausdruck freigegeben.");
+    await expect(page.locator(".notice")).toHaveText("Ausdruck freigegeben.");
     await page
       .getByRole("button", { name: "Kandidaten-PNG auswählen …", exact: true })
       .click();
@@ -195,7 +199,7 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Kandidat importieren", exact: true })
       .click();
     await page.getByRole("button", { name: "Ablehnen", exact: true }).click();
-    await expect(page.getByRole("status")).toHaveText("Ausdruck abgelehnt.");
+    await expect(page.locator(".notice")).toHaveText("Ausdruck abgelehnt.");
     await page.getByText("Eigene Familie hinzufügen", { exact: true }).click();
     await page.getByLabel("Neue Familie", { exact: true }).fill("Erleichtert");
     await page
@@ -205,7 +209,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Familie hinzufügen", exact: true })
       .click();
-    await expect(page.getByRole("status")).toHaveText("Gespeichert.");
+    await expect(page.locator(".notice")).toHaveText("Gespeichert.");
     await page
       .getByLabel("Emotionsfamilie", { exact: true })
       .selectOption({ label: "Erleichtert" });
@@ -262,9 +266,7 @@ const { createHash } = require("node:crypto");
     await page.getByRole("button", { name: /Create$/ }).click();
     await expect(page.getByAltText("Create · Masterreferenz")).toBeVisible();
     await expect(
-      page.getByText("ChatGPT-Plan · direkte Bildgenerierung nicht verfügbar", {
-        exact: true,
-      }),
+      page.getByLabel("Create Anbieter", { exact: true }),
     ).toBeVisible();
     await expect(page.getByAltText("Create · Ergebnisvorschau")).toHaveCount(0);
     await expect(
@@ -290,7 +292,9 @@ const { createHash } = require("node:crypto");
     const providers = await page.evaluate(() => window.laceframe.providers());
     expect(providers.ok).toBe(true);
     expect(
-      providers.value.map((p) => [p.id, p.capabilities.canGenerate]),
+      providers.value
+        .filter((p) => p.id !== "codex-native")
+        .map((p) => [p.id, p.capabilities.canGenerate]),
     ).toEqual([
       ["chatgpt-plan", false],
       ["manual-import", false],
@@ -324,7 +328,7 @@ const { createHash } = require("node:crypto");
         exact: true,
       })
       .click();
-    await expect(page.getByRole("status")).toContainText("Prompt kopiert.");
+    await expect(page.locator(".notice")).toContainText("Prompt kopiert.");
     expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe(
       await prompt.inputValue(),
     );
@@ -339,7 +343,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Referenz im Ordner zeigen", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(page.locator(".notice")).toContainText(
       "Referenz im Dateimanager",
     );
     expect(await app.evaluate(() => globalThis.__revealed)).toMatch(
@@ -377,7 +381,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Als Expression freigeben", exact: true })
       .click();
-    await expect(page.getByRole("status")).toHaveText(
+    await expect(page.locator(".notice")).toHaveText(
       "Als Expression freigegeben.",
     );
     await page.getByRole("button", { name: /Expressions$/ }).click();
@@ -411,7 +415,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Kandidat verwerfen", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Kandidat verworfen.");
+    await expect(page.locator(".notice")).toContainText("Kandidat verworfen.");
     await dropResult();
     await expect(
       page.getByText("Ergebnis ersetzen?", { exact: true }),
@@ -428,7 +432,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Als Expression freigeben", exact: true })
       .click();
-    await expect(page.getByRole("status")).toHaveText(
+    await expect(page.locator(".notice")).toHaveText(
       "Als Expression freigegeben.",
     );
     await fs.mkdir("artifacts", { recursive: true });

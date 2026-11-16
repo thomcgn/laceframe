@@ -11,7 +11,7 @@ npm ci
 npm run start
 ```
 
-The lockfile pins dependencies. Fonts are bundled locally; the installed application makes no network requests. The development server binds locally for Vite hot reload.
+The lockfile pins dependencies. Fonts are bundled locally. Manual projects work offline; the optional native Codex provider uses the installed Codex CLI and its existing ChatGPT sign-in. Only an explicit generation click submits the master image and prompt. The development server binds locally for Vite hot reload.
 
 ```sh
 npm run typecheck
@@ -50,7 +50,7 @@ project/
 
 Originals are written exclusively and marked read-only; imports never write to the source file. Repeated imports reuse identical bytes but retain distinct candidate IDs. Candidate review does not move or rewrite image data. Manifest saves use a synced temporary file and atomic rename. External manifest edits trigger a conflict instead of being overwritten. Opening a project validates its schema, references, hashes, dimensions and canonical asset paths before replacing the active workspace. Keep backups of the complete project directory.
 
-The renderer has context isolation, sandboxing and no Node integration. The narrow preload exposes eleven typed operations; main-process handlers validate input and the exact sender/frame, serialize writes, restrict image formats/sizes and reject traversal and symlinks. Previews use controlled image bytes. Packaged UI resources use a restricted `laceframe://app` protocol and CSP with network connections denied. Arbitrary file/protocol access, navigation, popups and permissions are blocked. There is no background server/database in the packaged application.
+The renderer has context isolation, sandboxing and no Node integration. The narrow preload exposes fifteen typed operations; main-process handlers validate input and the exact sender/frame, serialize writes, restrict image formats/sizes and reject traversal and symlinks. Previews use controlled image bytes. Packaged UI resources use a restricted `laceframe://app` protocol and CSP with network connections denied. Arbitrary file/protocol access, navigation, popups and permissions are blocked. There is no background server/database in the packaged application.
 
 See [Task 01 validation and limitations](docs/TASK_01_VALIDATION.md), [MVP plan](docs/MVP_PLAN.md) and [character/expression rules](docs/CHARACTER_EXPRESSIONS.md).
 
@@ -62,6 +62,12 @@ Select **Create**, choose the character, approved master, emotion family/variant
 
 Schema v2 stores attempts and prompt revisions with exact master, variant and result provenance. Opening v1 projects migrates only in memory; the first explicit save preserves the exact original manifest as `laceframe.v1.backup.json` before writing v2. Old app versions cannot open v2; use the backup with the complete asset directory if reverting.
 
-**ChatGPT-plan image generation is unavailable through the documented plan route.** Official Sign in with ChatGPT supports identity and optional eligible Responses API usage, but its current [preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations) explicitly exclude image generation. Laceframe therefore implements no account login, token storage, paid API calls or automatic reference uploads. Opening ChatGPT is an external manual workflow. The typed providers expose authentication, capabilities, generate/edit, cancellation and result retrieval; unavailable operations return an explicit error, never a successful fake result.
+**Native Codex image generation is implemented.** In Create, select **Codex · native Bildbearbeitung**, check availability and click **Mit Masterreferenz generieren**. Install the official Codex CLI separately and sign in with ChatGPT using `codex login` first. The executable must be available in Laceframe's PATH. No API key is required or accepted by this provider. The explicit click uses your Codex allowance and submits a temporary immutable copy of the approved master as an official `localImage` input with the full prompt and selected emotion/variant/action. Exactly one job runs; the project stays locked until completion or cancellation. Results are imported as candidates with exact master/prompt provenance, never approved automatically. There is no 64×64 conversion.
+
+The native provider runs the local official App Server over stdio JSON-RPC. It checks managed ChatGPT authentication and the enabled image-generation feature before each image turn. It only accepts a confirmed `imageGeneration.savedPath` under that job's generated-image thread directory, validates bounded image bytes and decodes them through the existing project service. The renderer receives status and project assets, never Codex paths or credentials. A separate Sign-in-with-ChatGPT/Responses provider remains unavailable for image generation; it is a different access route.
+
+A live controlled reference test changed only the pot color of a test image and preserved its 1254×1254 canvas; this establishes reference-edit capability, not a guarantee of portrait identity preservation. The manual browser/import workflow remains available. See [native integration and exact validation results](docs/NATIVE_CODEX_VALIDATION.md).
+
+Run `npm run test:desktop:native` after building for the deterministic packaged native-provider UI smoke test. Its explicitly labelled protocol fixture exercises success, failure and cancellation without additional live generations; the application has no simulated-generation fallback.
 
 See [Task 02 implementation, official integration findings and validation](docs/TASK_02_VALIDATION.md). Motion playback/export remains Task 03.

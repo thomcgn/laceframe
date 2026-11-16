@@ -19,6 +19,8 @@ import { ProjectService } from "./project-service";
 import { validateExternalURL } from "../shared/generation";
 import { chatgptPlanProvider } from "./services/providers/chatgptPlan";
 import { manualImportProvider } from "./services/providers/manualImport";
+import { CodexImageGenerationProvider } from "./services/providers/codexImageGeneration";
+import { GenerationController } from "./services/generation-controller";
 import { decodeImage } from "./decode-image";
 import type { Result } from "../shared/bridge";
 
@@ -37,6 +39,10 @@ protocol.registerSchemesAsPrivileged([
 ]);
 let window: BrowserWindow;
 const service = new ProjectService(decodeImage);
+const generation = new GenerationController(
+  service,
+  new CodexImageGenerationProvider(),
+);
 let queue: Promise<unknown> = Promise.resolve();
 function handle<T>(
   channel: string,
@@ -54,6 +60,18 @@ function handle<T>(
             event.senderFrame.url !== rendererURL()
           )
             throw new Error("Unzulässiger IPC-Absender.");
+          if (
+            generation.running &&
+            ![
+              "generation:status",
+              "generation:cancel",
+              "generation:providers",
+              "image:preview",
+            ].includes(channel)
+          )
+            throw new Error(
+              "Während der Generierung ist das Projekt gesperrt. Erst abbrechen oder auf das Ergebnis warten.",
+            );
           return { ok: true, value: await operation(input) };
         } catch (error) {
           return {
@@ -78,13 +96,30 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC() {
+  handle("generation:check", (input) => {
+    z.undefined().parse(input);
+    return generation.check();
+  });
+  handle("generation:start", (input) => generation.start(input));
+  handle("generation:status", (input) => {
+    z.undefined().parse(input);
+    return { status: generation.status(), snapshot: service.snapshot() };
+  });
+  handle("generation:cancel", (input) => {
+    z.undefined().parse(input);
+    return generation.cancel();
+  });
   handle("generation:reveal-master", async (input) => {
     shell.showItemInFolder(await service.masterFile(idSchema.parse(input)));
     return null;
   });
   handle("generation:providers", (input) => {
     z.undefined().parse(input);
-    return [chatgptPlanProvider.descriptor, manualImportProvider.descriptor];
+    return [
+      generation.provider.descriptor,
+      chatgptPlanProvider.descriptor,
+      manualImportProvider.descriptor,
+    ];
   });
   handle("generation:copy-prompt", (input) => {
     const id = idSchema.parse(input);
@@ -220,6 +255,14 @@ else {
     app.on("activate", () => {
       if (!BrowserWindow.getAllWindows().length) createWindow();
     });
+  });
+  let shuttingDown = false;
+  app.on("before-quit", (event) => {
+    if (!shuttingDown) {
+      event.preventDefault();
+      shuttingDown = true;
+      void generation.close().finally(() => app.quit());
+    }
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();

@@ -12,7 +12,7 @@ export const generationDraftSchema = z
     supplementaryInstructions: z.string().max(8000),
     basePrompt: z.string().min(1).max(24000),
     prompt: z.string().trim().min(1).max(24000),
-    providerId: z.literal("manual-import"),
+    providerId: z.enum(["manual-import", "codex-native"]),
   })
   .strict();
 export const attemptSchema = generationDraftSchema
@@ -50,6 +50,7 @@ export type ProviderDescriptor = {
 export type GenerationRequest = GenerationDraft & {
   projectId: string;
   referenceAssetPath: string;
+  selectionContext?: string;
 };
 export type GenerationResult = {
   providerId: string;
@@ -169,3 +170,17 @@ export function sameDraft(a: GenerationDraft, b: GenerationDraft): boolean {
     JSON.stringify(left.data) === JSON.stringify(right.data)
   );
 }
+
+export type CodexStatus = {
+  state:
+    | "not-installed"
+    | "not-authenticated"
+    | "unavailable"
+    | "ready"
+    | "running"
+    | "completed"
+    | "failed"
+    | "cancelled";
+  message: string;
+  attemptId?: string;
+};

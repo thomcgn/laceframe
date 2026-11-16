@@ -176,6 +176,7 @@ function VariantEditor({
 export function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [view, setView] = useState<View>("Characters");
+  const [generationRunning, setGenerationRunning] = useState(false);
   const [createDirty, setCreateDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -502,7 +503,26 @@ export function App() {
             {error}
           </div>
         )}
-        <fieldset disabled={busy || Boolean(staged)} className="workspace">
+        {generationRunning && (
+          <div className="prompt-conflict" role="status">
+            Generierung läuft · Projekt ist bis zum Abschluss gesperrt.{" "}
+            <button
+              onClick={() =>
+                void run(
+                  () => window.laceframe.cancelGeneration(),
+                  () => {},
+                  "Abbruch angefordert.",
+                )
+              }
+            >
+              Generierung abbrechen
+            </button>
+          </div>
+        )}
+        <fieldset
+          disabled={busy || Boolean(staged) || generationRunning}
+          className="workspace"
+        >
           <section className="project-bar" aria-label="Projektverwaltung">
             <form
               className="inline-form"
@@ -553,6 +573,7 @@ export function App() {
                 perform={run}
                 onSnapshot={setSnapshot}
                 onDirtyChange={setCreateDirty}
+                onRunningChange={setGenerationRunning}
                 onCharacters={() => setView("Characters")}
                 onInspect={(id) => {
                   setAssetId(id);

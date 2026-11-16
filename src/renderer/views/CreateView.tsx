@@ -18,6 +18,7 @@ import {
   type ComposerState,
   type GenerationDraft,
   type ProviderDescriptor,
+  type CodexStatus,
 } from "../../shared/generation";
 import { ImagePreview } from "../components/ImagePreview";
 import { PromptComposer } from "../components/PromptComposer";
@@ -35,6 +36,7 @@ export function CreateView({
   onDirtyChange,
   onCharacters,
   onInspect,
+  onRunningChange,
 }: {
   snapshot: Snapshot;
   busy: boolean;
@@ -43,6 +45,7 @@ export function CreateView({
   onDirtyChange: (value: boolean) => void;
   onCharacters: () => void;
   onInspect: (id: string) => void;
+  onRunningChange: (running: boolean) => void;
 }) {
   const p = snapshot.project;
   const character = p.characters.find((c) => c.id === p.selectedCharacterId);
@@ -126,9 +129,91 @@ export function CreateView({
       live = false;
     };
   }, []);
-  const provider = providers.find(
-    (provider) => provider.id === "manual-import",
-  );
+  const [providerId, setProviderId] = useState<
+    "manual-import" | "codex-native"
+  >(latest?.providerId ?? "manual-import");
+  const [codex, setCodex] = useState<CodexStatus>({
+    state: "unavailable",
+    message: "Codex wird geprüft …",
+  });
+  const provider = providers.find((p) => p.id === providerId);
+  function checkCodex() {
+    void perform(
+      () => window.laceframe.checkCodex(),
+      (value) => {
+        setCodex(value);
+        void window.laceframe.providers().then((r) => {
+          if (r.ok) setProviders(r.value);
+        });
+      },
+    );
+  }
+  useEffect(() => {
+    let live = true;
+    void window.laceframe.checkCodex().then((r) => {
+      if (live && r.ok) {
+        setCodex(r.value);
+        void window.laceframe.providers().then((p) => {
+          if (live && p.ok) setProviders(p.value);
+        });
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  useEffect(() => {
+    onRunningChange(codex.state === "running");
+  }, [codex.state, onRunningChange]);
+  useEffect(() => {
+    if (codex.state !== "running") return;
+    let live = true;
+    let pending = false;
+    const timer = setInterval(() => {
+      if (pending) return;
+      pending = true;
+      void window.laceframe
+        .generationStatus()
+        .then((r) => {
+          if (!live) return;
+          if (r.ok) {
+            setCodex(r.value.status);
+            if (r.value.status.state !== "running") {
+              onSnapshot(r.value.snapshot);
+              setActiveId(r.value.status.attemptId ?? "");
+            }
+          } else setProviderError(r.error);
+        })
+        .catch(() => {
+          if (live)
+            setProviderError(
+              "Status konnte nicht gelesen werden. Generierung über Abbrechen beenden.",
+            );
+        })
+        .finally(() => {
+          pending = false;
+        });
+    }, 1000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [codex.state, onSnapshot]);
+  function generate() {
+    if (!draft || !valid) return;
+    void perform(
+      () =>
+        window.laceframe.startGeneration({
+          ...draft,
+          providerId: "codex-native",
+        }),
+      (value) => {
+        setCodex(value);
+        setActiveId(value.attemptId ?? "");
+        onRunningChange(value.state === "running");
+      },
+    );
+  }
   const draft: GenerationDraft | undefined =
     master && character && variant
       ? {
@@ -141,11 +226,12 @@ export function CreateView({
           supplementaryInstructions: instructions,
           basePrompt: composer.base,
           prompt: composer.text,
-          providerId: "manual-import",
+          providerId,
         }
       : undefined;
   const valid = Boolean(
-    provider?.capabilities.canImportResult &&
+    (provider?.capabilities.canImportResult ||
+      (provider?.capabilities.canGenerate && codex.state !== "running")) &&
       draft &&
       generationDraftSchema.safeParse(draft).success &&
       composer.pendingBase === undefined,
@@ -168,7 +254,9 @@ export function CreateView({
         rejected: "Abgelehnt",
       }[asset.status]
     : active
-      ? "Bildimport ausstehend"
+      ? active.providerId === "codex-native"
+        ? "Kein bestätigtes Codex-Ergebnis"
+        : "Bildimport ausstehend"
       : "Noch kein Ergebnis · nicht generiert";
   async function unwrap<T>(promise: Promise<Result<T>>): Promise<T> {
     const result = await promise;
@@ -211,7 +299,7 @@ export function CreateView({
   function importImage(file?: File, forceNew = false) {
     void perform(
       async () => {
-        if (!valid)
+        if (!valid || providerId !== "manual-import")
           throw new Error(
             "Master und Variante wählen und eigenen Prompt bestätigen.",
           );
@@ -251,6 +339,17 @@ export function CreateView({
     );
   }
   function requestImport(file?: File) {
+    if (providerId !== "manual-import") {
+      void perform(
+        async () => ({
+          ok: false,
+          error:
+            "Für einen manuellen Ergebnisimport den Anbieter „Manueller Import“ wählen.",
+        }),
+        () => {},
+      );
+      return;
+    }
     if (asset) setReplace({ file });
     else importImage(file);
   }
@@ -263,6 +362,7 @@ export function CreateView({
     const attempt = attempts.find((a) => a.id === id);
     if (!attempt) return;
     setActiveId(id);
+    setProviderId(attempt.providerId);
     setMasterId(attempt.masterId);
     setFamilyId(
       p.variants.find((v) => v.id === attempt.variantId)?.familyId ?? "",
@@ -296,24 +396,66 @@ export function CreateView({
           <h2>Gleicher Charakter. Neuer Ausdruck.</h2>
         </div>
         <span className="badge">
-          {provider?.label ?? "Anbieter wird geladen …"} · keine direkte
-          Generierung
+          {provider?.label ?? "Anbieter wird geladen …"}
         </span>
       </div>
-      <details className="provider-status">
-        <summary>
-          ChatGPT-Plan · direkte Bildgenerierung nicht verfügbar
-        </summary>
-        <p>
-          {providers.find((p) => p.id === "chatgpt-plan")?.unavailableReason ??
-            "Offizieller Plan-Zugang unterstützt derzeit keine Bildgenerierung oder Bildbearbeitung."}
+      <section className="panel codex-controls">
+        <label>
+          Anbieter
+          <select
+            aria-label="Create Anbieter"
+            value={providerId}
+            onChange={(e) => {
+              setProviderId(e.target.value as "manual-import" | "codex-native");
+              setActiveId("");
+            }}
+          >
+            <option value="manual-import">Manueller Import</option>
+            <option value="codex-native">Codex · native Bildbearbeitung</option>
+          </select>
+        </label>
+        <p role="status" aria-label="Codex Status">
+          <strong>
+            {
+              {
+                "not-installed": "Codex nicht installiert",
+                "not-authenticated": "Nicht angemeldet",
+                unavailable: "ImageGen nicht verfügbar",
+                ready: "Codex bereit",
+                running: "Generierung läuft",
+                completed: "Generierung abgeschlossen",
+                failed: "Generierung fehlgeschlagen",
+                cancelled: "Generierung abgebrochen",
+              }[codex.state]
+            }
+          </strong>{" "}
+          · {codex.message}
         </p>
-        <p>
-          Keine ChatGPT-Anmeldung in Laceframe. Keine Planberechtigung,
-          Zugangsdaten oder API-Abrechnung werden verwendet. „ChatGPT öffnen“
-          öffnet nur den externen Browser; es meldet die App nicht an.
-        </p>
-      </details>
+        <div className="button-row">
+          <button onClick={checkCodex}>Codex-Verfügbarkeit prüfen</button>
+          {providerId === "codex-native" && (
+            <button
+              className="primary"
+              disabled={
+                !valid ||
+                (codex.state !== "ready" && codex.state !== "completed")
+              }
+              onClick={generate}
+            >
+              Mit Masterreferenz generieren
+            </button>
+          )}
+        </div>
+        {providerId === "codex-native" && (
+          <p className="muted">
+            Übermittelt nach deinem Klick den freigegebenen Master und diesen
+            Prompt an Codex. Nutzt dein Codex-Kontingent. Genau ein Auftrag;
+            keine automatischen Wiederholungen. Das Ergebnis wird in
+            Originalauflösung importiert und muss geprüft werden. Bestehende
+            Ergebnisse bleiben im Verlauf.
+          </p>
+        )}
+      </section>
       {providerError && (
         <p role="alert" className="error">
           {providerError}
@@ -492,8 +634,9 @@ export function CreateView({
             </button>
           )}
           <p className="reference-reminder">
-            Das tatsächliche Masterbild in ChatGPT manuell beifügen. Dateiname
-            oder Prompt allein reichen nicht als Referenz.
+            {providerId === "codex-native"
+              ? "Codex erhält beim Generieren eine unveränderte Kopie dieses Masters als tatsächliche Bildreferenz."
+              : "Das tatsächliche Masterbild in ChatGPT manuell beifügen. Dateiname oder Prompt allein reichen nicht als Referenz."}
           </p>
         </section>
         <section
@@ -587,7 +730,7 @@ export function CreateView({
                 <button onClick={() => setReplace(null)}>Abbrechen</button>
                 <button
                   className="primary"
-                  disabled={!valid}
+                  disabled={!valid || providerId !== "manual-import"}
                   onClick={() => importImage(replace.file, true)}
                 >
                   Ersetzen bestätigen
@@ -598,7 +741,7 @@ export function CreateView({
             <div className="button-row">
               <button
                 className="primary"
-                disabled={!valid}
+                disabled={!valid || providerId !== "manual-import"}
                 onClick={() => requestImport()}
               >
                 {asset ? "Ergebnis ersetzen …" : "Ergebnis importieren …"}
@@ -670,9 +813,10 @@ export function CreateView({
             </button>
           </div>
           <p className="muted">
-            Manueller Modus: Es werden keine Bilder erzeugt oder hochgeladen.
-            Der Browser öffnet sich ausschließlich nach deinem Klick.
-            Referenzbild und Prompt fügst du dort selbst ein.
+            Manueller Browser-Weg: Der Browser öffnet sich ausschließlich nach
+            deinem Klick. Referenzbild und Prompt fügst du dort selbst ein. Die
+            direkte Codex-Generierung hat einen eigenen ausdrücklichen
+            Startknopf.
           </p>
           {!master && (
             <p className="warning">
@@ -687,8 +831,11 @@ export function CreateView({
               <br />
               SHA-256: {master?.sha256 ?? "—"}
               <br />
-              Anbieter: manual-import · direkte Referenz-/Maskenübertragung:
-              nicht unterstützt
+              Anbieter: {providerId} · Masterreferenz:{" "}
+              {provider?.capabilities.supportsReferenceImages
+                ? "unterstützt"
+                : "manuell beifügen"}{" "}
+              · Masken: nicht unterstützt
             </p>
             {variant && (
               <form

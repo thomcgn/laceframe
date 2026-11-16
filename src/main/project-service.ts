@@ -14,7 +14,7 @@ import {
   type StagedImage,
 } from "../shared/domain";
 import { manualImportProvider } from "./services/providers/manualImport";
-import { draftFromAttempt } from "../shared/generation";
+import { type GenerationAttempt, draftFromAttempt } from "../shared/generation";
 import { createPresets } from "../shared/presets";
 
 export const hashBytes = (bytes: Uint8Array) =>
@@ -303,30 +303,11 @@ export class ProjectService {
           throw new Error(
             "Versuch hat bereits ein Ergebnis. Neuen Versuch anlegen; vorheriges Ergebnis bleibt erhalten.",
           );
-        const request = manualImportProvider.prepare(
-          p,
-          draftFromAttempt(attempt),
-        );
-        await this.preview(attempt.masterId);
-        const image = await this.store("candidates", cmd.token);
-        const result = manualImportProvider.acceptImportedResult(
-          request,
-          image.file,
-        );
-        p.assets.push({
-          ...image,
-          id: randomUUID(),
-          characterId: attempt.characterId,
-          masterId: attempt.masterId,
-          masterSha256: attempt.masterSha256,
-          variantId: attempt.variantId,
-          action: attempt.action,
-          status: "candidate",
-          createdAt: result.createdAt,
-          attemptId: attempt.id,
-          promptRevisionId: attempt.promptRevision.id,
-          providerId: result.providerId,
-        });
+        if (attempt.providerId !== "manual-import")
+          throw new Error(
+            "Native Ergebnisse können nicht über manuellen Import zugeordnet werden.",
+          );
+        await this.attachResult(p, attempt, cmd.token);
         break;
       }
       case "addCharacter": {
@@ -429,6 +410,51 @@ export class ProjectService {
     )
       this.staged = undefined;
     return this.snapshot();
+  }
+  private async attachResult(
+    p: Project,
+    attempt: GenerationAttempt,
+    token: string,
+  ) {
+    if (p.assets.some((a) => a.attemptId === attempt.id))
+      throw new Error("Versuch hat bereits ein Ergebnis.");
+    manualImportProvider.prepare(p, draftFromAttempt(attempt));
+    await this.preview(attempt.masterId);
+    const image = await this.store("candidates", token);
+    p.assets.push({
+      ...image,
+      id: randomUUID(),
+      characterId: attempt.characterId,
+      masterId: attempt.masterId,
+      masterSha256: attempt.masterSha256,
+      variantId: attempt.variantId,
+      action: attempt.action,
+      status: "candidate",
+      createdAt: new Date().toISOString(),
+      attemptId: attempt.id,
+      promptRevisionId: attempt.promptRevision.id,
+      providerId: attempt.providerId,
+    });
+  }
+  /** Main-only native result ingestion. Never callable with renderer-provided paths. */
+  async importGeneratedResult(
+    attemptId: string,
+    bytes: Uint8Array,
+  ): Promise<Snapshot> {
+    const p = this.snapshot().project,
+      attempt = p.attempts.find(
+        (a) => a.id === attemptId && a.providerId === "codex-native",
+      );
+    if (!attempt) throw new Error("Unbekannter Codex-Versuch.");
+    const staged = await this.stage(bytes, "codex-result");
+    try {
+      await this.attachResult(p, attempt, staged.token);
+      p.updatedAt = new Date().toISOString();
+      await this.save(p);
+      return this.snapshot();
+    } finally {
+      this.discard(staged.token);
+    }
   }
   async masterFile(id: string): Promise<string> {
     const master = this.snapshot().project.masters.find((m) => m.id === id);

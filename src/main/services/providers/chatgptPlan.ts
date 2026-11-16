@@ -3,7 +3,7 @@ import type { ImageGenerationProvider } from "../../../shared/generation";
 // Verified 2026-11-16: OAuth/plan permission is not image-generation permission.
 // https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations
 export const CHATGPT_PLAN_LIMITATION =
-  "ChatGPT-Plan: Bildgenerierung und Bildbearbeitung sind über den offiziellen Plan-Zugang derzeit nicht unterstützt. Eine Anmeldung schaltet sie nicht frei. Nutze den manuellen Ergebnisimport.";
+  "Separater Sign-in-with-ChatGPT/Responses-Zugang: Bildgenerierung und Bildbearbeitung sind hier derzeit nicht unterstützt. Für die native Integration den Codex-Anbieter wählen; manueller Import bleibt verfügbar.";
 const unavailable = (): never => {
   throw new Error(CHATGPT_PLAN_LIMITATION);
 };
