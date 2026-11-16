@@ -1,6 +1,6 @@
 # Laceframe — MVP implementation plan
 
-**Status:** Task 01 offline portrait/expression workspace implemented; upcoming tasks prioritize a real Create workflow, then Motion. **Goal:** a usable offline studio with prompt composition and candidate imports first; direct generative AI is a separate optional integration only if official capabilities support image generation.
+**Status per developer report (2026-11-16):** Task 01, Task 02 Create and native Codex App Server ImageGen implemented. Quality pass reports a compact Create UI, monotonic timer, registered Before/After slider and 91 passed unit tests. See `docs/CODEX_02_UX_VALIDATION_2026-11-16.md`; this report is not a fresh rerun of tests.
 
 ## Product decisions
 
@@ -24,7 +24,7 @@
 **Atlas** — PNG/spritesheet/JSON export.
 **Settings** — project paths, default export profiles, external providers.
 
-**Updated execution order:** Task 01 (existing) → **Task 02 Create** (`docs/CODEX_02_CREATE.md`) → **Task 03 Motion** (`docs/CODEX_03_MOTION.md`). Create supports master-linked prompts, external ChatGPT opening, local result import, preview and approval. Do not mock ChatGPT login or image generation.
+**Current order:** Tasks 01/02 completed by report → integrate separate UX-quality PR → **Task 02B Art Direction / per-character expression performance** (`docs/CODEX_02B_ART_DIRECTION.md`) → **Task 03 Motion** (`docs/CODEX_03_MOTION.md`). Native Codex ImageGen and manual import both remain supported. Codex's built-in image allowance differs from the separate Sign in with ChatGPT plan-sharing route.
 
 ## Fastest usable vertical slice
 
@@ -53,11 +53,14 @@ Seed families and editable variants (NOT hardcoded enum); variant presets includ
 ### Phase 3 — Create / generation workflow (Codex 02)
 Character master selection, expression/action picker, deterministic prompt composer, prompt copy, external browser access, manual result import, preview and one-click approval. Typed provider abstraction with accurate capability flags. Acceptance: complete usable Create-to-approved-expression loop offline; no fake Generate action.
 
-### Phase 4 — motion MVP (Codex 03)
+### Phase 4 — Art Direction and Expression Identity (Codex 02B)
+Versioned project-wide rendering profiles, individual character identities/outfit distinctions and optional personal emotion-performance overrides, without changing approved Ada assets. Preserve current compact UI, ImageGen, timer and registered comparison. See `docs/ART_DIRECTION_AND_EXPRESSION_IDENTITY.md`.
+
+### Phase 5 — motion MVP (Codex 03)
 Keyframe clip model where frames reference imported approved variants/frames. Duration per frame, optional looping and preview. Import eye blink frames manually first. Acceptance: play/pause at selected FPS, export exact ordered PNG + JSON, same canvas dimensions and anchors; never deform master.
 
-### Phase 5 — optional true image generation provider
-A real image-capable provider may be implemented only through officially supported authenticated image-generation endpoints and explicit user consent. Sign in with ChatGPT alone is not permission to generate images; do not use undocumented endpoints/session scraping. No API key is required for the offline/manual workflow.
+### Native image generation — implemented
+Native official local Codex App Server ImageGen with managed ChatGPT login has passed controlled live generation and reference editing tests on the user's Linux installation. Require capability checks, explicit user action and safe import. Other systems/accounts are not proven; no session scraping or undocumented endpoints.
 
 ### Phase 6 — advanced editing
 Expression-specific masks and compositing, local Pixel Snapper only in Sprite Strict mode, optional mouth-layer sprites, animation atlases, automated consistency checks and platform packages.
