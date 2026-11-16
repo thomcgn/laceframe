@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Master, Project } from "../../shared/domain";
+import type { Project } from "../../shared/domain";
 import {
   MAX_MASK_PIXELS,
   commitMask,
@@ -15,15 +15,23 @@ export function MaskEditor({
   mask,
   onSave,
   onClose,
+  cutout = false,
+  initialWeights,
+  initialName,
 }: {
-  master: Master;
+  master: { id: string; width: number; height: number; version?: number };
+  cutout?: boolean;
+  initialWeights?: Uint8Array;
+  initialName?: string;
   mask?: Mask;
   onSave: (weights: Uint8Array, name: string) => Promise<void>;
   onClose: () => void;
 }) {
   const [history, setHistory] = useState<MaskHistory>({
     past: [],
-    present: new Uint8Array(master.width * master.height),
+    present: new Uint8Array(master.width * master.height).fill(
+      cutout ? 255 : 0,
+    ),
     future: [],
   });
   const pixels = useRef(history.present);
@@ -32,7 +40,9 @@ export function MaskEditor({
   const [ready, setReady] = useState(false),
     [saving, setSaving] = useState(false),
     [dirty, setDirty] = useState(false);
-  const [name, setName] = useState(mask?.name ?? "Gesicht"),
+  const [name, setName] = useState(
+      mask?.name ?? initialName ?? (cutout ? "Freistellung" : "Gesicht"),
+    ),
     [tool, setTool] = useState("paint");
   const [diameter, setDiameter] = useState(24),
     [strength, setStrength] = useState(255),
@@ -53,10 +63,19 @@ export function MaskEditor({
   } | null>(null);
   const fit = Math.min(size.width / master.width, size.height / master.height),
     scale = fit * zoom;
+  const originalPixels = useRef<Uint8ClampedArray | null>(null);
   function render(weights: Uint8Array) {
     const ctx = canvas.current?.getContext("2d");
     if (!ctx) return;
     const image = ctx.createImageData(master.width, master.height);
+    if (cutout && !overlay && originalPixels.current) {
+      image.data.set(originalPixels.current);
+      weights.forEach((w, i) => {
+        image.data[i * 4 + 3] = Math.round((image.data[i * 4 + 3] * w) / 255);
+      });
+      ctx.putImageData(image, 0, 0);
+      return;
+    }
     weights.forEach((w, i) => {
       image.data[i * 4] = 143;
       image.data[i * 4 + 1] = 173;
@@ -70,7 +89,20 @@ export function MaskEditor({
     void (async () => {
       const m = await window.laceframe.preview(master.id);
       if (!m.ok) throw new Error(m.error);
-      let weights = new Uint8Array(master.width * master.height);
+      let weights = initialWeights
+        ? new Uint8Array(initialWeights)
+        : new Uint8Array(master.width * master.height).fill(cutout ? 255 : 0);
+      if (cutout) {
+        const img = new Image();
+        img.src = m.value;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = master.width;
+        c.height = master.height;
+        const ctx = c.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        originalPixels.current = ctx.getImageData(0, 0, c.width, c.height).data;
+      }
       if (mask) {
         const r = await window.laceframe.preview(mask.id);
         if (!r.ok) throw new Error(r.error);
@@ -120,7 +152,7 @@ export function MaskEditor({
   useEffect(() => {
     pixels.current = history.present;
     render(history.present);
-  }, [history]);
+  }, [history, overlay, ready]);
   function apply(next: MaskHistory) {
     setHistory(next);
     setDirty(true);
@@ -168,12 +200,18 @@ export function MaskEditor({
         }}
         role="dialog"
         aria-modal="true"
-        aria-label="Bearbeitungsmaske"
+        aria-label={cutout ? "Freistellungsmaske" : "Bearbeitungsmaske"}
       >
-        <h2>Maske · Master V{master.version}</h2>
+        <h2>
+          {cutout
+            ? "Hintergrund freistellen"
+            : "Maske · Master V" + master.version}
+        </h2>
         <p>
-          Weiß erlaubt · Schwarz schützt · Grau überblendet. Gespeichert in{" "}
-          {master.width} × {master.height} Masterpixeln. Keine
+          {cutout
+            ? "Weiß erhält die Figur · Schwarz entfernt · Grau reduziert Alpha. Keine automatische Farbauswahl."
+            : "Weiß erlaubt · Schwarz schützt · Grau überblendet."}{" "}
+          Gespeichert in {master.width} × {master.height} Masterpixeln. Keine
           KI-Inpainting-Garantie.
         </p>
         {error && (
@@ -272,7 +310,12 @@ export function MaskEditor({
             <button
               onClick={() =>
                 apply(
-                  commitMask(history, new Uint8Array(history.present.length)),
+                  commitMask(
+                    history,
+                    new Uint8Array(history.present.length).fill(
+                      cutout ? 255 : 0,
+                    ),
+                  ),
                 )
               }
             >
@@ -367,7 +410,7 @@ export function MaskEditor({
                 transform: `translate(${(size.width - master.width * scale) / 2 + pan.x}px, ${(size.height - master.height * scale) / 2 + pan.y}px) scale(${scale})`,
               }}
             >
-              {src && (
+              {src && !cutout && (
                 <img
                   draggable={false}
                   alt="Masken-Master"
@@ -380,13 +423,16 @@ export function MaskEditor({
                 ref={canvas}
                 width={master.width}
                 height={master.height}
-                style={{ opacity: overlay ? 1 : 0 }}
+                style={{ opacity: cutout || overlay ? 1 : 0 }}
               />
             </div>
           </div>
           <small>
             Rad/Trackpad: verschieben · Strg+Rad: Zoom · Alt+Ziehen: Pan ·
-            Strg+Z / Strg+Umschalt+Z. Sage zeigt die erlaubten Pixel.
+            Strg+Z / Strg+Umschalt+Z.{" "}
+            {cutout
+              ? "Überlagerung ausschalten für die echte Alpha-Vorschau. Sage zeigt erhaltene Pixel."
+              : "Sage zeigt die erlaubten Pixel."}
           </small>
         </fieldset>
         <div className="button-row">
@@ -422,7 +468,9 @@ export function MaskEditor({
                 .finally(() => setSaving(false));
             }}
           >
-            Maskenrevision speichern
+            {cutout
+              ? "Freigestellten Kandidaten speichern"
+              : "Maskenrevision speichern"}
           </button>
         </div>
       </section>

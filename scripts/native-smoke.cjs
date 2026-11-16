@@ -281,7 +281,7 @@ const path = require("node:path");
       .getByRole("button", { name: "Ansicht zurücksetzen", exact: true })
       .click();
     await slider.scrollIntoViewIfNeeded();
-    let canvas = await page.locator(".compare-stage").boundingBox();
+    let canvas = await page.locator(".compare-stage:visible").boundingBox();
     let handle = await slider.locator("span").boundingBox();
     await page.mouse.move(
       handle.x + handle.width / 2,
@@ -316,7 +316,7 @@ const path = require("node:path");
     await cdp.detach();
     await page.getByLabel("Create Zoom", { exact: true }).selectOption("100");
     const rects = () =>
-      page.locator(".compare-stage img").evaluateAll((images) =>
+      page.locator(".compare-stage:visible img").evaluateAll((images) =>
         images.map((img) => {
           const r = img.getBoundingClientRect();
           return { x: r.x, y: r.y, width: r.width, height: r.height };
@@ -330,7 +330,7 @@ const path = require("node:path");
       height: 400,
     });
     expect(registered[1]).toMatchObject({ width: 400, height: 600 });
-    const viewport = page.locator(".compare-viewport");
+    const viewport = page.locator(".compare-viewport:visible");
     await viewport.focus();
     await page.keyboard.press("ArrowRight");
     const panned = await rects();
@@ -614,7 +614,7 @@ const path = require("node:path");
     ).toBeVisible();
     await expect(
       page.getByLabel("Arbeits-Prompt", { exact: true }),
-    ).not.toHaveValue(/STYLE LOCK/);
+    ).not.toHaveValue(/STYLE LOCK —/);
     await expect(generate).toBeEnabled();
     await generate.click();
     await expect(
@@ -855,9 +855,17 @@ const path = require("node:path");
               ? mp.data[i + c]
               : w === 255
                 ? rp.data[i + c]
-                : Math.round(
-                    (mp.data[i + c] * (255 - w) + rp.data[i + c] * w) / 255,
-                  );
+                : c === 3
+                  ? Math.round(
+                      (mp.data[i + 3] * (255 - w) + rp.data[i + 3] * w) / 255,
+                    )
+                  : mp.data[i + 3] * (255 - w) + rp.data[i + 3] * w
+                    ? Math.round(
+                        (mp.data[i + c] * mp.data[i + 3] * (255 - w) +
+                          rp.data[i + c] * rp.data[i + 3] * w) /
+                          (mp.data[i + 3] * (255 - w) + rp.data[i + 3] * w),
+                      )
+                    : mp.data[i + c];
           if (cp.data[i + c] !== expected)
             throw new Error(`Composite pixel mismatch ${i}/${c}`);
         }
@@ -942,7 +950,7 @@ const path = require("node:path");
     // switching style now updates it automatically rather than asking twice.
     await expect(
       page.getByLabel("Arbeits-Prompt", { exact: true }),
-    ).toHaveValue(/STYLE LOCK/);
+    ).toHaveValue(/STYLE LOCK — Shared Noir/);
     await page
       .getByText("Inspector · Stimmaktion, Intensität und Herkunft", {
         exact: true,

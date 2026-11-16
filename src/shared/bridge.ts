@@ -1,3 +1,4 @@
+import type { QualityReport, ExportAssetRequest } from "./asset-quality";
 import type { CharacterCreationDraft } from "./character-creation";
 import type {
   ProviderDescriptor,
@@ -12,6 +13,11 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  cutoutMask(id: string): Promise<Result<Uint8Array>>;
+  qualityReport(id: string): Promise<Result<QualityReport>>;
+  exportAsset(
+    request: ExportAssetRequest,
+  ): Promise<Result<{ name: string } | null>>;
   checkCodex(): Promise<Result<CodexStatus>>;
   startGeneration(
     draft: GenerationDraft | CharacterCreationDraft,

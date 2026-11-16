@@ -1,3 +1,4 @@
+import { AssetQuality } from "./components/AssetQuality";
 import { CharacterCreator } from "./views/CharacterCreator";
 import { MasterCandidateCompare } from "./components/MasterCandidateCompare";
 import { ImagePreview } from "./components/ImagePreview";
@@ -228,6 +229,13 @@ export function App() {
       previous?.focus();
     };
   }, [importing]);
+  function qualitySnapshot(value: Snapshot) {
+    setSnapshot(value);
+    setMessage(
+      "Qualitätsstand gespeichert. Originale und frühere Versionen bleiben erhalten.",
+    );
+    setError("");
+  }
   const p = snapshot?.project;
   const character = p?.characters.find((c) => c.id === p.selectedCharacterId);
   const master = p?.masters.find((m) => m.id === character?.masterId);
@@ -369,10 +377,19 @@ export function App() {
         </div>
       </div>
       <MasterCandidateCompare
-        master={master}
+        master={p?.masters.find((m) => m.id === asset?.masterId) ?? master}
         candidate={asset}
         previewPrefix="Inspect"
       />
+      {asset && p && (
+        <AssetQuality
+          key={asset.id}
+          source={asset}
+          project={p}
+          onSnapshot={setSnapshot}
+          disabled={busy || generationRunning}
+        />
+      )}
       {asset && (
         <div className="review">
           <div>
@@ -698,7 +715,7 @@ export function App() {
                     </div>
                     {master && (
                       <span className="badge approved">
-                        Master V1 · gesperrt
+                        Master V{master.version} · gesperrt
                       </span>
                     )}
                   </div>
@@ -746,7 +763,7 @@ export function App() {
                       </label>
                       <ImagePreview
                         id={master.id}
-                        caption="Freigegebener Master V1"
+                        caption={`Freigegebener Master V${master.version}`}
                         zoom={zoom}
                       />
                       <p>
@@ -755,6 +772,31 @@ export function App() {
                         {new Date(master.approvedAt).toLocaleString("de-DE")}
                       </p>
                       <p className="mono">SHA-256 {master.sha256}</p>
+                      {p && (
+                        <AssetQuality
+                          key={master.id}
+                          source={master}
+                          project={p}
+                          onSnapshot={qualitySnapshot}
+                          disabled={busy || generationRunning}
+                        />
+                      )}
+                      <details>
+                        <summary>
+                          Masterhistorie · alte Verknüpfungen bleiben erhalten
+                        </summary>
+                        {p?.masters
+                          .filter((m) => m.characterId === character?.id)
+                          .map((m) => (
+                            <div key={m.id}>
+                              <ImagePreview
+                                id={m.id}
+                                caption={`Master V${m.version} · ${m.id}`}
+                                zoom={25}
+                              />
+                            </div>
+                          ))}
+                      </details>
                       <p className="muted">
                         Die Originaldatei bleibt unverändert. Jede neue
                         Ausdrucksdatei verweist auf diesen Master.
@@ -1027,7 +1069,7 @@ export function App() {
             <p>
               {staged.variantId
                 ? "Das Bild wird als ungeprüfter Kandidat mit dem exakten Master verknüpft."
-                : "Bestätige, dass dieses Portrait als Master freigegeben ist. Master V1 kann danach nicht ersetzt werden. Die Quelldatei wird unverändert kopiert."}
+                : "Bestätige, dass dieses Portrait als Master freigegeben ist. Master V1 bleibt unverändert; Verbesserungen werden als neue Version freigegeben. Die Quelldatei wird unverändert kopiert."}
             </p>
             {staged.variantId && staged.image.format !== "png" && (
               <p className="warning">

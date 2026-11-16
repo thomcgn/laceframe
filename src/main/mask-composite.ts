@@ -86,6 +86,7 @@ export function compositePixels(
   master: Pixels,
   raw: Pixels,
   mask: Pixels,
+  version: 1 | 2 = 2,
 ): Pixels {
   if (
     [raw, mask].some(
@@ -100,10 +101,22 @@ export function compositePixels(
     );
   const weights = maskWeights(mask),
     data = new Uint8Array(master.data);
-  // Straight (unpremultiplied) RGBA, each channel rounded independently. Endpoints copied exactly.
+  // V2 blends premultiplied encoded RGB, then unpremultiplies. V1 remains reproducible. Endpoints copy exact RGBA including hidden RGB.
   for (let i = 0; i < weights.length; i++) {
     const w = weights[i];
     if (w === 0) continue;
+    if (version === 2 && w !== 255) {
+      const k = i * 4,
+        a = master.data[k + 3] * (255 - w),
+        b = raw.data[k + 3] * w,
+        alpha = a + b;
+      for (let c = 0; c < 3; c++)
+        data[k + c] = alpha
+          ? Math.round((master.data[k + c] * a + raw.data[k + c] * b) / alpha)
+          : master.data[k + c];
+      data[k + 3] = Math.round(alpha / 255);
+      continue;
+    }
     for (let c = 0; c < 4; c++) {
       const k = i * 4 + c;
       data[k] =

@@ -1,3 +1,7 @@
+import {
+  qualityDerivativeSchema,
+  resolutionProfileSchema,
+} from "./asset-quality";
 import { z } from "zod";
 import {
   masterAttemptSchema,
@@ -49,7 +53,9 @@ export const masterSchema = z
   .object({
     ...imageFields,
     characterId: idSchema,
-    version: z.literal(1),
+    version: z.number().int().positive(),
+    previousMasterId: idSchema.optional(),
+    qualitySourceId: idSchema.optional(),
     approvedAt: z.iso.datetime(),
     locked: z.literal(true),
   })
@@ -83,6 +89,7 @@ export const assetSchema = z
     promptRevisionId: idSchema.optional(),
     providerId: z.string().min(1).max(120).optional(),
     composite: compositeSchema.optional(),
+    qualitySourceId: idSchema.optional(),
   })
   .strict();
 export const familySchema = z
@@ -123,6 +130,8 @@ export const expressionPerformanceSchema = z
 const projectObject = z
   .object({
     schemaVersion: z.literal(2),
+    assetQualityVersion: z.literal(1).optional(),
+    qualityAssets: z.array(qualityDerivativeSchema).max(10000).default([]),
     id: idSchema,
     name: label,
     createdAt: z.iso.datetime(),
@@ -195,6 +204,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     ...[
       ...p.characters,
       ...p.masters,
+      ...p.qualityAssets,
       ...p.families,
       ...p.variants,
       ...p.assets,
@@ -219,14 +229,120 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
   for (const c of p.characters) {
     const masters = p.masters.filter((m) => m.characterId === c.id);
     if (
-      masters.length > 1 ||
-      (c.masterId ? masters[0]?.id !== c.masterId : masters.length !== 0)
+      (c.masterId ? masters.at(-1)?.id !== c.masterId : masters.length !== 0) ||
+      masters.some(
+        (m, i) =>
+          m.version !== i + 1 ||
+          (i
+            ? m.previousMasterId !== masters[i - 1].id
+            : Boolean(m.previousMasterId)),
+      )
     )
       fail("Invalid locked master selection");
   }
+  const qualitySources = [
+    ...p.masters,
+    ...p.assets,
+    ...p.masterCandidates,
+    ...p.qualityAssets,
+  ];
+  for (const q of p.qualityAssets) {
+    const source = qualitySources.find((a) => a.id === q.sourceId);
+    if (
+      !source ||
+      source.characterId !== q.characterId ||
+      source.sha256 !== q.sourceSha256 ||
+      q.sourceId === q.id ||
+      q.file !== assetFile("quality", q.sha256, "png")
+    )
+      fail("Invalid quality source");
+    if (
+      q.operation === "cutout"
+        ? !q.mask ||
+          Boolean(q.profile) ||
+          q.mask.file !== assetFile("cutout-masks", q.mask.sha256, "png") ||
+          source?.width !== q.width ||
+          source?.height !== q.height
+        : !q.profile ||
+          Boolean(q.mask) ||
+          q.profile.width !== q.width ||
+          q.profile.height !== q.height
+    )
+      fail("Invalid quality operation");
+    const seen = new Set([q.id]);
+    let ancestor = source;
+    while (ancestor && "sourceId" in ancestor) {
+      if (seen.has(ancestor.id)) {
+        fail("Cyclic quality source");
+        break;
+      }
+      seen.add(ancestor.id);
+      const parentId = ancestor.sourceId;
+      ancestor = qualitySources.find((a) => a.id === parentId);
+    }
+    if (
+      (q.status === "candidate") === Boolean(q.reviewedAt) ||
+      (q.status !== "approved" &&
+        (q.approvedMasterId || q.approvedExpressionId))
+    )
+      fail("Invalid quality review");
+    if (
+      q.approvedMasterId &&
+      !p.masters.some(
+        (m) =>
+          m.id === q.approvedMasterId &&
+          m.qualitySourceId === q.id &&
+          m.sha256 === q.sha256 &&
+          m.characterId === q.characterId,
+      )
+    )
+      fail("Invalid quality master");
+    if (
+      q.approvedExpressionId &&
+      !p.assets.some(
+        (a) =>
+          a.id === q.approvedExpressionId &&
+          a.qualitySourceId === q.id &&
+          a.sha256 === q.sha256 &&
+          a.characterId === q.characterId,
+      )
+    )
+      fail("Invalid quality expression");
+  }
+  for (const a of [...p.masters, ...p.assets])
+    if (
+      a.qualitySourceId &&
+      !p.qualityAssets.some(
+        (q) =>
+          q.id === a.qualitySourceId &&
+          q.sha256 === a.sha256 &&
+          q.status === "approved",
+      )
+    )
+      fail("Invalid quality approval provenance");
   for (const m of p.masters) {
     if (!p.characters.some((c) => c.id === m.characterId))
       fail("Unknown master character");
+    if (m.version > 1 && !m.qualitySourceId)
+      fail("New master version requires reviewed quality provenance");
+    if (m.qualitySourceId) {
+      let q = p.qualityAssets.find((q) => q.id === m.qualitySourceId);
+      const seen = new Set<string>();
+      while (q && p.qualityAssets.some((a) => a.id === q!.sourceId)) {
+        if (seen.has(q.id)) break;
+        seen.add(q.id);
+        q = p.qualityAssets.find((a) => a.id === q!.sourceId);
+      }
+      if (
+        !q ||
+        (m.previousMasterId
+          ? q.sourceId !== m.previousMasterId
+          : !p.masterCandidates.some(
+              (c) => c.id === q!.sourceId && c.characterId === m.characterId,
+            ))
+      )
+        fail("Invalid master improvement ancestry");
+    }
     if (m.file !== assetFile("originals", m.sha256, m.format))
       fail("Unsafe master path");
   }
@@ -468,8 +584,9 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     )
       fail("Completed generation has no result");
     if (
-      p.assets.filter((a) => a.attemptId === attempt.id && !a.composite)
-        .length > 1
+      p.assets.filter(
+        (a) => a.attemptId === attempt.id && !a.composite && !a.qualitySourceId,
+      ).length > 1
     )
       fail("An attempt has multiple results");
   }
@@ -508,7 +625,9 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       if (
         p.assets.filter(
           (r) =>
-            r.composite?.rawId === c.rawId && r.composite?.maskId === c.maskId,
+            !r.qualitySourceId &&
+            r.composite?.rawId === c.rawId &&
+            r.composite?.maskId === c.maskId,
         ).length !== 1
       )
         fail("Duplicate composite");
@@ -585,11 +704,44 @@ export type StagedIdentityImage = Omit<StagedImage, "format"> & {
 };
 export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 export const assetFile = (
-  kind: "originals" | "candidates" | "styles" | "masks" | "master-candidates",
+  kind:
+    | "originals"
+    | "candidates"
+    | "styles"
+    | "masks"
+    | "master-candidates"
+    | "quality"
+    | "cutout-masks",
   hash: string,
   format: "png" | "webp",
 ) => `assets/${kind}/${hash}.${format}`;
 export const commandSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("createCutout"),
+      sourceId: idSchema,
+      name: label.default("Freistellung"),
+      weights: z
+        .instanceof(Uint8Array)
+        .refine((v) => v.length <= MAX_MASK_PIXELS),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("deriveResolution"),
+      sourceId: idSchema,
+      profile: resolutionProfileSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("reviewQuality"),
+      id: idSchema,
+      status: z.enum(["approved", "rejected"]),
+      notes: z.string().trim().min(1).max(8000),
+      confirmStyleAndSilhouette: z.literal(true),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("importIdentityReference"),

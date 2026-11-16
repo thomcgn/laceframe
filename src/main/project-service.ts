@@ -1,3 +1,6 @@
+import { analyzePixels, cutoutPixels, resizePixels } from "./asset-quality";
+import { exportAssetSchema } from "../shared/asset-quality";
+import type { Pixels } from "./mask-composite";
 import {
   compositePixels,
   decodePixels,
@@ -169,6 +172,9 @@ export class ProjectService {
       height: number,
       format: "png" | "webp" | "jpg",
     ) => void | Promise<void> = () => {},
+    private readonly pixels: (
+      bytes: Uint8Array,
+    ) => Pixels | Promise<Pixels> = decodePixels,
   ) {}
   snapshot(): Snapshot {
     if (!this.project) throw new Error("Bitte zuerst ein Projekt öffnen.");
@@ -187,6 +193,7 @@ export class ProjectService {
       visualStyleVersion: 1,
       maskingVersion: 1,
       characterCreationVersion: 1,
+      assetQualityVersion: 1,
       identityAssets: [],
       masterAttempts: [],
       masterCandidates: [],
@@ -233,6 +240,7 @@ export class ProjectService {
       ...project.masks,
       ...project.identityAssets,
       ...project.masterCandidates,
+      ...project.qualityAssets,
     ]) {
       const contents = await readLimited(
         await safePath(root, image.file),
@@ -262,6 +270,19 @@ export class ProjectService {
         await this.decode(contents, info.width, info.height, info.format);
       }
     }
+    for (const q of project.qualityAssets)
+      if (q.mask) {
+        const b = await readLimited(
+          await safePath(root, q.mask.file),
+          MAX_IMAGE_BYTES,
+        );
+        if (hashBytes(b) !== q.mask.sha256)
+          throw new Error("Freistellungsmaske verändert.");
+        const mask = decodePixels(b);
+        if (mask.width !== q.width || mask.height !== q.height)
+          throw new Error("Falsche Freistellungsmaske.");
+        maskWeights(mask);
+      }
     const source = raw as Record<string, unknown>;
     const versionOne = source.schemaVersion === 1;
     const needsArtMigration =
@@ -272,7 +293,8 @@ export class ProjectService {
       needsArtMigration ||
       source.visualStyleVersion !== 1 ||
       source.maskingVersion !== 1 ||
-      source.characterCreationVersion !== 1
+      source.characterCreationVersion !== 1 ||
+      source.assetQualityVersion !== 1
         ? bytes
         : undefined;
     this.legacyBackupName = versionOne
@@ -283,7 +305,9 @@ export class ProjectService {
           ? "laceframe.v2.pre-visual-style.backup.json"
           : source.maskingVersion !== 1
             ? "laceframe.v2.pre-masking.backup.json"
-            : "laceframe.v2.pre-character-creation.backup.json";
+            : source.characterCreationVersion !== 1
+              ? "laceframe.v2.pre-character-creation.backup.json"
+              : "laceframe.v2.pre-asset-quality.backup.json";
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -332,14 +356,21 @@ export class ProjectService {
     return this.staged;
   }
   private async store(
-    kind: "originals" | "candidates" | "styles" | "masks" | "master-candidates",
+    kind:
+      | "originals"
+      | "candidates"
+      | "styles"
+      | "masks"
+      | "master-candidates"
+      | "quality"
+      | "cutout-masks",
     token: string,
   ) {
     const { image, bytes } = this.pending(token);
     if (image.format === "jpg")
       throw new Error("JPEG ist nur als Identitätsreferenz erlaubt.");
     const relative = assetFile(kind, image.sha256, image.format);
-    if (kind === "styles" || kind === "masks" || kind === "master-candidates")
+    if (kind !== "originals" && kind !== "candidates")
       await fs.mkdir(await safePath(this.directory, `assets/${kind}`), {
         recursive: true,
       });
@@ -366,6 +397,7 @@ export class ProjectService {
       ...project,
       maskingVersion: 1,
       characterCreationVersion: 1,
+      assetQualityVersion: 1,
     });
     const destination = await safePath(this.directory, manifestName);
     if (
@@ -425,6 +457,198 @@ export class ProjectService {
     };
     let removeFile: { file: string; sha256: string } | undefined;
     switch (cmd.type) {
+      case "createCutout":
+      case "deriveResolution": {
+        if (this.staged)
+          throw new Error("Zuerst den ausstehenden Bildimport abschließen.");
+        const source = this.qualitySource(cmd.sourceId),
+          bytes = await this.verifiedBytes(source.id),
+          pixels = await this.pixels(bytes);
+        const output =
+          cmd.type === "createCutout"
+            ? cutoutPixels(pixels, cmd.weights)
+            : resizePixels(pixels, cmd.profile);
+        if (cmd.type === "createCutout") {
+          let root = source;
+          const seen = new Set<string>();
+          while ("sourceId" in root) {
+            if (seen.has(root.id)) throw new Error("Zyklische Herkunft.");
+            seen.add(root.id);
+            root = this.qualitySource(root.sourceId);
+          }
+          const expression = p.assets.find((a) => a.id === root.id),
+            attempt = p.attempts.find((a) => a.id === expression?.attemptId);
+          if (attempt?.mask) {
+            if (!expression?.composite)
+              throw new Error("Hard Lock: Rohbild zuerst compositen.");
+            const master = p.masters.find((a) => a.id === expression.masterId)!,
+              saved = p.masks.find((a) => a.id === attempt.mask!.id)!;
+            const m = decodePixels(await this.verifiedBytes(master.id)),
+              weights = maskWeights(
+                decodePixels(await this.verifiedBytes(saved.id)),
+              );
+            if (output.width !== m.width || output.height !== m.height)
+              throw new Error(
+                "Hard Lock: Freistellung benötigt ursprüngliche Pixelkoordinaten.",
+              );
+            for (let i = 0; i < weights.length; i++)
+              if (
+                weights[i] === 0 &&
+                [0, 1, 2, 3].some(
+                  (c) => output.data[i * 4 + c] !== m.data[i * 4 + c],
+                )
+              )
+                throw new Error(
+                  "Hard Lock schützt diese Pixel. Für Hintergrundkorrektur eine neue Masterversion freistellen.",
+                );
+          }
+        }
+        let mask:
+          | {
+              sha256: string;
+              file: string;
+              type: "foreground-alpha";
+              name: string;
+            }
+          | undefined;
+        if (cmd.type === "createCutout") {
+          const b = encodeMask(source.width, source.height, cmd.weights),
+            image = await this.stage(b, "foreground-mask.png");
+          try {
+            const stored = await this.store("cutout-masks", image.token);
+            mask = {
+              sha256: stored.sha256,
+              file: stored.file,
+              type: "foreground-alpha",
+              name: cmd.name,
+            };
+          } finally {
+            this.discard(image.token);
+          }
+        }
+        const image = await this.stage(encodePixels(output), "quality.png");
+        try {
+          p.qualityAssets.push({
+            ...(await this.store("quality", image.token)),
+            format: "png",
+            id: randomUUID(),
+            characterId: source.characterId,
+            sourceId: source.id,
+            sourceSha256: source.sha256,
+            operation: cmd.type === "createCutout" ? "cutout" : "resolution",
+            version: 1,
+            createdAt: new Date().toISOString(),
+            status: "candidate",
+            ...(mask ? { mask } : {}),
+            ...(cmd.type === "deriveResolution"
+              ? { profile: cmd.profile }
+              : {}),
+          });
+        } finally {
+          this.discard(image.token);
+        }
+        break;
+      }
+      case "reviewQuality": {
+        const q = p.qualityAssets.find((a) => a.id === cmd.id);
+        if (!q || q.status !== "candidate")
+          throw new Error("Ungeprüfte Qualitätsversion auswählen.");
+        if (cmd.status === "approved") {
+          const report = await this.qualityReport(q.id);
+          if (report.status !== "transparent")
+            throw new Error(
+              "Freistellung erforderlich: deckende, leere oder verdächtige Bilder sind nicht produktionsfertig.",
+            );
+          let source = this.qualitySource(q.sourceId);
+          let resized = q.operation === "resolution";
+          const visited = new Set<string>();
+          while ("sourceId" in source) {
+            if (visited.has(source.id)) throw new Error("Zyklische Herkunft.");
+            visited.add(source.id);
+            resized ||= source.operation === "resolution";
+            source = this.qualitySource(source.sourceId);
+          }
+          const c = character(q.characterId),
+            now = new Date().toISOString();
+          if (this.staged)
+            throw new Error("Zuerst den ausstehenden Bildimport abschließen.");
+          const staged = await this.stage(
+            await this.verifiedBytes(q.id),
+            "quality-approved.png",
+          );
+          try {
+            const expression = p.assets.find((a) => a.id === source.id);
+            // This gate also applies to export-only scaled derivatives, never just promoted expressions.
+            if (
+              expression &&
+              !expression.composite &&
+              p.attempts.find((a) => a.id === expression.attemptId)?.mask
+            )
+              throw new Error(
+                "Hard Lock: zuerst ein Composite erstellen; Qualitätsvarianten umgehen den Schutz nicht.",
+              );
+            // Resolution derivatives remain independent exports; only native-coordinate cutouts promote assets.
+            if (expression && !resized) {
+              const id = randomUUID();
+              p.assets.push({
+                ...expression,
+                ...(await this.store("candidates", staged.token)),
+                id,
+                qualitySourceId: q.id,
+                status: "approved",
+                createdAt: now,
+                reviewedAt: now,
+              });
+              q.approvedExpressionId = id;
+            } else if (!resized) {
+              const previous = p.masters.find((m) => m.id === source.id),
+                candidate = p.masterCandidates.find((m) => m.id === source.id);
+              if (
+                previous
+                  ? c.masterId !== previous.id
+                  : !candidate || Boolean(c.masterId)
+              )
+                throw new Error(
+                  "Nur den aktuellen Master verbessern; veraltete oder fremde Kandidaten ersetzen keinen gesperrten Master.",
+                );
+              const id = randomUUID();
+              p.masters.push({
+                ...(await this.store("originals", staged.token)),
+                id,
+                characterId: c.id,
+                version: previous ? previous.version + 1 : 1,
+                ...(previous ? { previousMasterId: previous.id } : {}),
+                qualitySourceId: q.id,
+                locked: true,
+                approvedAt: now,
+              });
+              c.masterId = id;
+              q.approvedMasterId = id;
+              if (candidate) {
+                const attempt = p.masterAttempts.find(
+                  (a) => a.id === candidate.attemptId,
+                )!;
+                c.profile = attempt.composition.profile;
+                c.styleSelection = attempt.artDirectionId
+                  ? { mode: "profile", profileId: attempt.artDirectionId }
+                  : { mode: "master" };
+                p.outfits.push({
+                  id: randomUUID(),
+                  characterId: c.id,
+                  name: "Master V1 outfit",
+                  notes: attempt.outfit,
+                });
+              }
+            }
+          } finally {
+            this.discard(staged.token);
+          }
+        }
+        q.status = cmd.status;
+        q.notes = cmd.notes;
+        q.reviewedAt = new Date().toISOString();
+        break;
+      }
       case "importIdentityReference": {
         const c = character(cmd.characterId);
         if (c.masterId)
@@ -671,8 +895,8 @@ export class ProjectService {
               maskId: mask.id,
               maskSha256: mask.sha256,
               maskRevision: mask.revision,
-              version: 1,
-              rule: "rgba8-straight-round",
+              version: 2,
+              rule: "rgba8-premultiplied-round",
               registration: "user-confirmed-origin",
             },
           });
@@ -1108,6 +1332,7 @@ export class ProjectService {
       ...p.masks,
       ...p.identityAssets,
       ...p.masterCandidates,
+      ...p.qualityAssets,
     ].find((a) => a.id === id);
     if (!image) throw new Error("Unbekanntes Bild.");
     const bytes = await readLimited(
@@ -1117,6 +1342,110 @@ export class ProjectService {
     if (hashBytes(bytes) !== image.sha256)
       throw new Error("Bildintegrität verletzt.");
     return bytes;
+  }
+  private qualitySource(id: string) {
+    const p = this.snapshot().project;
+    const image = [
+      ...p.masters,
+      ...p.assets,
+      ...p.masterCandidates,
+      ...p.qualityAssets,
+    ].find((a) => a.id === id);
+    if (!image) throw new Error("Kein Charakterasset ausgewählt.");
+    return image;
+  }
+  async cutoutMask(id: string) {
+    const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);
+    if (!q?.mask) throw new Error("Keine Freistellungsmaske.");
+    const b = await readLimited(
+      await safePath(this.directory, q.mask.file),
+      MAX_IMAGE_BYTES,
+    );
+    if (hashBytes(b) !== q.mask.sha256) throw new Error("Maske verändert.");
+    return maskWeights(decodePixels(b));
+  }
+  async qualityReport(id: string) {
+    const source = this.qualitySourceOrStyle(id);
+    return analyzePixels(
+      await this.pixels(await this.verifiedBytes(id)),
+      source.format,
+    );
+  }
+  private qualitySourceOrStyle(id: string) {
+    const p = this.snapshot().project;
+    const a = [
+      ...p.masters,
+      ...p.assets,
+      ...p.masterCandidates,
+      ...p.qualityAssets,
+      ...p.styleAssets,
+    ].find((a) => a.id === id);
+    if (!a) throw new Error("Unbekanntes Charakter-/Stilasset.");
+    return a;
+  }
+  /** Main-only export payload; renderer supplies IDs, never destination paths or bytes. */
+  async exportPayload(input: unknown) {
+    const request = exportAssetSchema.parse(input),
+      source = this.qualitySource(request.id),
+      p = this.snapshot().project;
+    const bytes = await this.verifiedBytes(source.id),
+      pixels = await this.pixels(bytes),
+      report = analyzePixels(pixels, source.format);
+    const approved =
+      "locked" in source ||
+      ("status" in source && source.status === "approved");
+    if (!request.raw && (!approved || report.status !== "transparent"))
+      throw new Error(
+        "Kein freigegebenes transparentes Produktionsasset. Freistellen/prüfen oder ausdrücklich als Rohbild exportieren.",
+      );
+    const c = p.characters.find((c) => c.id === source.characterId)!;
+    const safe = (text: string) =>
+      text
+        .normalize("NFKD")
+        .replace(/[^a-zA-Z0-9_-]+/g, "_")
+        .slice(0, 100) || "Character";
+    const kind =
+      "version" in source && "locked" in source
+        ? `Master_V${source.version}`
+        : "variantId" in source
+          ? safe(
+              p.variants.find((v) => v.id === source.variantId)?.label ??
+                "Expression",
+            )
+          : "Candidate";
+    const name = `${safe(c.name)}_${kind}_${source.width}x${source.height}${request.raw ? "_RAW" : ""}.png`;
+    const output = source.format === "png" ? bytes : encodePixels(pixels);
+    return {
+      name,
+      bytes: output,
+      provenance: request.provenance
+        ? JSON.stringify(
+            {
+              exportVersion: 1,
+              exportedSha256: hashBytes(output),
+              pixelDecoding:
+                source.format === "png"
+                  ? "exact RGBA8 samples"
+                  : "Chromium WebP RGBA; hidden transparent RGB may be normalized",
+              raw: request.raw,
+              source,
+              quality: report,
+              character: { id: c.id, name: c.name },
+              masters: p.masters.filter((m) => m.characterId === c.id),
+              derivatives: p.qualityAssets.filter(
+                (q) => q.characterId === c.id,
+              ),
+              attempts: p.attempts.filter((a) => a.characterId === c.id),
+              masterAttempts: p.masterAttempts.filter(
+                (a) => a.characterId === c.id,
+              ),
+              outfits: p.outfits.filter((a) => a.characterId === c.id),
+            },
+            null,
+            2,
+          )
+        : undefined,
+    };
   }
   async masterFile(id: string): Promise<string> {
     const master = this.snapshot().project.masters.find((m) => m.id === id);
@@ -1133,6 +1462,7 @@ export class ProjectService {
       ...p.masks,
       ...p.identityAssets,
       ...p.masterCandidates,
+      ...p.qualityAssets,
     ].find((a) => a.id === id);
     if (!image) throw new Error("Unbekanntes Bild.");
     const bytes = await readLimited(

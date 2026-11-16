@@ -1037,3 +1037,17 @@ footer span {
     grid-template-columns: 1fr;
   }
 }
+
+/* Quality evidence remains compact; editing reuses the existing registered viewport. */
+.quality-container { margin-block: .5rem; min-width: 0; }
+.quality-evidence { display: grid; gap: .25rem; padding: .55rem; border-left: 3px solid #8fada6; background: #242d3a; }
+.quality-evidence[data-quality-status="opaque"], .quality-evidence[data-quality-status="suspicious"], .quality-evidence[data-quality-status="empty"] { border-color: #d9a77e; }
+.quality-evidence small { color: #c4c8ca; overflow-wrap: anywhere; }
+.quality-palette { display:flex; gap:3px; flex-wrap:wrap; }
+.quality-palette span { width:22px; height:16px; border:1px solid #f0e5d366; }
+.asset-quality { padding: .4rem; border: 1px solid #8fada644; }
+.asset-quality details { margin-block:.5rem; }
+.asset-quality .inline-form { flex-wrap:wrap; }
+.asset-quality .inline-form input { max-width:180px; }
+.quality-review { display:grid; gap:.5rem; padding:.5rem; }
+.asset-quality .button-row { flex-wrap:wrap; }

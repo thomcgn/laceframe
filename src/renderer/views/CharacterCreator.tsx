@@ -1,3 +1,5 @@
+import { AssetQuality } from "../components/AssetQuality";
+import { RESOLUTION_PROFILES } from "../../shared/asset-quality";
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { Snapshot, Command } from "../../shared/domain";
@@ -6,6 +8,7 @@ import {
   composeCharacterPrompt,
   DEFAULT_COMPOSITION,
   type CharacterCreationDraft,
+  type Composition,
 } from "../../shared/character-creation";
 import {
   executionLabel,
@@ -64,9 +67,10 @@ export function CharacterCreator({
   const [identityNotes, setIdentityNotes] = useState(
     latest?.identityNotes ?? "",
   );
-  const [composition, setComposition] = useState(
-    latest?.composition ?? DEFAULT_COMPOSITION,
-  );
+  const [composition, setComposition] = useState<Composition>({
+    ...(latest?.composition ?? DEFAULT_COMPOSITION),
+    background: DEFAULT_COMPOSITION.background,
+  });
   const [activeId, setActiveId] = useState(latest?.id ?? "");
   const active = attempts.find((a) => a.id === activeId),
     candidate = p.masterCandidates.find((c) => c.attemptId === active?.id);
@@ -487,11 +491,40 @@ export function CharacterCreator({
               </label>
               <details>
                 <summary>4 · Master Composition</summary>
+                <p>
+                  Hintergrund: echte Alpha-Transparenz, keine Kulisse. Das
+                  tatsächliche Ergebnis wird vor dem Review geprüft.
+                </p>
+                <label>
+                  Zielauflösungsprofil
+                  <select
+                    aria-label="Creator Auflösungsprofil"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const p = RESOLUTION_PROFILES[Number(e.target.value)];
+                      if (p)
+                        setComposition((c) => ({
+                          ...c,
+                          targetWidth: p.width,
+                          targetHeight: p.height,
+                          targetResolution: p,
+                        }));
+                    }}
+                  >
+                    <option value="" disabled>
+                      Benutzerdefiniertes Ziel
+                    </option>
+                    {RESOLUTION_PROFILES.map((p, i) => (
+                      <option key={p.name} value={i}>
+                        {p.name} · {p.width}×{p.height}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 {(
                   [
                     ["pose", "Neutrale Pose"],
                     ["framing", "Bildausschnitt"],
-                    ["background", "Hintergrund"],
                   ] as const
                 ).map(([key, label]) => (
                   <label key={key}>
@@ -499,7 +532,7 @@ export function CharacterCreator({
                     <textarea
                       aria-label={`Creator ${label}`}
                       rows={2}
-                      maxLength={key === "background" ? 2000 : 4000}
+                      maxLength={4000}
                       value={composition[key]}
                       onChange={(e) =>
                         setComposition((c) => ({ ...c, [key]: e.target.value }))
@@ -537,6 +570,7 @@ export function CharacterCreator({
                           setComposition((c) => ({
                             ...c,
                             [key]: Number(e.target.value),
+                            targetResolution: undefined,
                           }))
                         }
                       />
@@ -628,6 +662,13 @@ export function CharacterCreator({
                   {active?.composition.targetHeight}. Vergleich ist keine
                   Identitätsfreigabe.
                 </p>
+                <AssetQuality
+                  key={candidate.id}
+                  source={candidate}
+                  project={p}
+                  onSnapshot={onSnapshot}
+                  disabled={busy || running}
+                />
                 {candidate.status === "candidate" && (
                   <div className="button-row">
                     <button
@@ -668,7 +709,7 @@ export function CharacterCreator({
                     </button>
                   </div>
                 )}
-                {candidate.status === "approved" && (
+                {Boolean(character.masterId) && (
                   <button className="primary" onClick={onExpressions}>
                     Expressions mit diesem Master erstellen
                   </button>

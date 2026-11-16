@@ -15,11 +15,16 @@ export const compositeSchema = z
     maskId: z.uuid(),
     maskSha256: z.string().regex(/^[a-f0-9]{64}$/),
     maskRevision: z.number().int().positive(),
-    version: z.literal(1),
-    rule: z.literal("rgba8-straight-round"),
+    version: z.union([z.literal(1), z.literal(2)]),
+    rule: z.enum(["rgba8-straight-round", "rgba8-premultiplied-round"]),
     registration: z.literal("user-confirmed-origin"),
   })
-  .strict();
+  .strict()
+  .refine((c) =>
+    c.version === 1
+      ? c.rule === "rgba8-straight-round"
+      : c.rule === "rgba8-premultiplied-round",
+  );
 export type Point = { x: number; y: number };
 /** Native pixel centres, circular brush, interpolated strokes; no viewport coordinates. */
 export function paintStroke(

@@ -1,3 +1,5 @@
+import { exportAssetSchema } from "../shared/asset-quality";
+import { writeExport } from "./asset-export";
 import {
   app,
   BrowserWindow,
@@ -20,7 +22,7 @@ import { chatgptPlanProvider } from "./services/providers/chatgptPlan";
 import { manualImportProvider } from "./services/providers/manualImport";
 import { CodexImageGenerationProvider } from "./services/providers/codexImageGeneration";
 import { GenerationController } from "./services/generation-controller";
-import { decodeImage } from "./decode-image";
+import { decodeImage, decodeAssetPixels } from "./decode-image";
 import type { Result } from "../shared/bridge";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -37,7 +39,7 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 let window: BrowserWindow;
-const service = new ProjectService(decodeImage);
+const service = new ProjectService(decodeImage, decodeAssetPixels);
 const generation = new GenerationController(
   service,
   new CodexImageGenerationProvider(),
@@ -66,6 +68,7 @@ function handle<T>(
               "generation:cancel",
               "generation:providers",
               "image:preview",
+              "image:quality",
             ].includes(channel)
           )
             throw new Error(
@@ -95,6 +98,26 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC() {
+  handle("image:cutout-mask", (input) =>
+    service.cutoutMask(idSchema.parse(input)),
+  );
+  handle("image:quality", (input) =>
+    service.qualityReport(idSchema.parse(input)),
+  );
+  handle("image:export", async (input) => {
+    const payload = await service.exportPayload(exportAssetSchema.parse(input));
+    const selected = await dialog.showOpenDialog(window, {
+      title: "Exportordner auswählen (neue Dateien, kein Überschreiben)",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (selected.canceled) return null;
+    await writeExport(
+      selected.filePaths[0],
+      service.snapshot().directory,
+      payload,
+    );
+    return { name: payload.name };
+  });
   handle("generation:check", (input) => {
     z.undefined().parse(input);
     return generation.check();

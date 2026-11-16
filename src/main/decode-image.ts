@@ -59,3 +59,50 @@ export async function decodeImage(
     if (!decoder.isDestroyed()) decoder.destroy();
   }
 }
+
+/** PNG keeps exact hidden RGB; WebP uses Chromium's decoded RGBA, never changes source bytes. */
+export async function decodeAssetPixels(bytes: Uint8Array) {
+  const { decodePixels } = await import("./mask-composite");
+  const { imageSize } = await import("image-size");
+  const info = imageSize(bytes);
+  if (!info.width || !info.height || info.width * info.height > 16_000_000)
+    throw new Error("Qualitätsprüfung/Verarbeitung: maximal 16 Megapixel.");
+  if (info.type === "png") return decodePixels(bytes);
+  if (info.type !== "webp")
+    throw new Error("Qualitätsprüfung unterstützt PNG/WebP.");
+  const decoder = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+    },
+  });
+  decoder.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  decoder.webContents.on("will-navigate", (e) => e.preventDefault());
+  const timeout = setTimeout(() => {
+    if (!decoder.isDestroyed()) decoder.destroy();
+  }, 15000);
+  try {
+    await decoder.loadURL(
+      "data:text/html," +
+        encodeURIComponent(
+          "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; base-uri 'none'; form-action 'none'\">",
+        ),
+    );
+    const data: Uint8Array = await decoder.webContents.executeJavaScript(
+      `(async()=>{const b=Uint8Array.from(atob(${JSON.stringify(Buffer.from(bytes).toString("base64"))}),c=>c.charCodeAt(0));const img=await createImageBitmap(new Blob([b],{type:'image/webp'}));const c=new OffscreenCanvas(img.width,img.height);const ctx=c.getContext('2d');ctx.drawImage(img,0,0);img.close();return new Uint8Array(ctx.getImageData(0,0,c.width,c.height).data);})()`,
+    );
+    if (data.length !== info.width * info.height * 4)
+      throw new Error("Ungültige RGBA-Daten.");
+    return {
+      width: info.width,
+      height: info.height,
+      data: new Uint8Array(data),
+    };
+  } finally {
+    clearTimeout(timeout);
+    if (!decoder.isDestroyed()) decoder.destroy();
+  }
+}
