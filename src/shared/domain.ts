@@ -1,3 +1,4 @@
+import { relightInputSchema, MAX_RELIGHT_PIXELS } from "./relighting";
 import {
   qualityDerivativeSchema,
   resolutionProfileSchema,
@@ -257,16 +258,30 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     )
       fail("Invalid quality source");
     if (
-      q.operation === "cutout"
-        ? !q.mask ||
-          Boolean(q.profile) ||
-          q.mask.file !== assetFile("cutout-masks", q.mask.sha256, "png") ||
-          source?.width !== q.width ||
-          source?.height !== q.height
-        : !q.profile ||
+      q.operation === "relighting"
+        ? !q.relighting ||
           Boolean(q.mask) ||
-          q.profile.width !== q.width ||
-          q.profile.height !== q.height
+          Boolean(q.profile) ||
+          source?.width !== q.width ||
+          source?.height !== q.height ||
+          q.width * q.height > MAX_RELIGHT_PIXELS ||
+          new Set(q.relighting.regions.map((r) => r.id)).size !==
+            q.relighting.regions.length ||
+          q.relighting.regions.some(
+            (r) =>
+              r.mask.file !== assetFile("relight-masks", r.mask.sha256, "png"),
+          )
+        : q.relighting ||
+          (q.operation === "cutout"
+            ? !q.mask ||
+              Boolean(q.profile) ||
+              q.mask.file !== assetFile("cutout-masks", q.mask.sha256, "png") ||
+              source?.width !== q.width ||
+              source?.height !== q.height
+            : !q.profile ||
+              Boolean(q.mask) ||
+              q.profile.width !== q.width ||
+              q.profile.height !== q.height)
     )
       fail("Invalid quality operation");
     const seen = new Set([q.id]);
@@ -711,11 +726,13 @@ export const assetFile = (
     | "masks"
     | "master-candidates"
     | "quality"
-    | "cutout-masks",
+    | "cutout-masks"
+    | "relight-masks",
   hash: string,
   format: "png" | "webp",
 ) => `assets/${kind}/${hash}.${format}`;
 export const commandSchema = z.discriminatedUnion("type", [
+  relightInputSchema.extend({ type: z.literal("createRelighting") }),
   z
     .object({
       type: z.literal("createCutout"),

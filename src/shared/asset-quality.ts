@@ -1,3 +1,4 @@
+import { relightRecordSchema } from "./relighting";
 import { z } from "zod";
 export const TRANSPARENT_CHARACTER_INSTRUCTION =
   "Generate the isolated character only, on a genuinely transparent background with alpha transparency. No black, white, gray, colored, studio, gradient or illustrated background. No drop shadow, vignette, floor, environmental scenery or decorative backdrop. The character silhouette must remain complete and cleanly separated from the transparent canvas.";
@@ -58,7 +59,7 @@ export const qualityDerivativeSchema = z
       .positive()
       .max(4096 * 4),
     format: z.literal("png"),
-    operation: z.enum(["cutout", "resolution"]),
+    operation: z.enum(["cutout", "resolution", "relighting"]),
     version: z.literal(1),
     createdAt: z.iso.datetime(),
     mask: z
@@ -71,6 +72,7 @@ export const qualityDerivativeSchema = z
       .strict()
       .optional(),
     profile: resolutionProfileSchema.optional(),
+    relighting: relightRecordSchema.optional(),
     status: z.enum(["candidate", "approved", "rejected"]),
     reviewedAt: z.iso.datetime().optional(),
     notes: z.string().max(8000).optional(),

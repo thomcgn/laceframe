@@ -1,3 +1,9 @@
+import {
+  relightPixels,
+  validateRelightSize,
+  RELIGHT_VERSION,
+  type RelightRecord,
+} from "../shared/relighting";
 import { analyzePixels, cutoutPixels, resizePixels } from "./asset-quality";
 import { exportAssetSchema } from "../shared/asset-quality";
 import type { Pixels } from "./mask-composite";
@@ -283,6 +289,26 @@ export class ProjectService {
           throw new Error("Falsche Freistellungsmaske.");
         maskWeights(mask);
       }
+    for (const q of project.qualityAssets)
+      if (q.relighting) {
+        const image = decodePixels(
+          await readLimited(await safePath(root, q.file), MAX_IMAGE_BYTES),
+        );
+        if (hashBytes(image.data) !== q.relighting.pixelSha256)
+          throw new Error("Licht-Pixelprovenienz verändert.");
+        for (const r of q.relighting.regions) {
+          const b = await readLimited(
+            await safePath(root, r.mask.file),
+            MAX_IMAGE_BYTES,
+          );
+          if (hashBytes(b) !== r.mask.sha256)
+            throw new Error("Lichtmaske verändert.");
+          const m = decodePixels(b);
+          if (m.width !== q.width || m.height !== q.height)
+            throw new Error("Falsche Lichtmaske.");
+          maskWeights(m);
+        }
+      }
     const source = raw as Record<string, unknown>;
     const versionOne = source.schemaVersion === 1;
     const needsArtMigration =
@@ -363,7 +389,8 @@ export class ProjectService {
       | "masks"
       | "master-candidates"
       | "quality"
-      | "cutout-masks",
+      | "cutout-masks"
+      | "relight-masks",
     token: string,
   ) {
     const { image, bytes } = this.pending(token);
@@ -457,6 +484,105 @@ export class ProjectService {
     };
     let removeFile: { file: string; sha256: string } | undefined;
     switch (cmd.type) {
+      case "createRelighting": {
+        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        const source = this.qualitySource(cmd.sourceId);
+        const pixels = await this.relightSource(source.id);
+        const ids = new Set(cmd.regions.map((r) => r.id));
+        if (ids.size !== cmd.regions.length)
+          throw new Error("Doppelte Lichtregion.");
+        for (const r of cmd.regions)
+          if (r.reusedExpressionMask) {
+            const m = p.masks.find((m) => m.id === r.reusedExpressionMask!.id);
+            if (
+              !m ||
+              m.characterId !== source.characterId ||
+              m.width !== source.width ||
+              m.height !== source.height ||
+              m.sha256 !== r.reusedExpressionMask.sha256 ||
+              m.revision !== r.reusedExpressionMask.revision
+            )
+              throw new Error("Ungültige wiederverwendete Bearbeitungsmaske.");
+            const original = maskWeights(
+              decodePixels(await this.verifiedBytes(m.id)),
+            );
+            if (!Buffer.from(original).equals(Buffer.from(r.weights)))
+              throw new Error(
+                "Wiederverwendete Maske wurde verändert; als eigene Lichtrevision speichern.",
+              );
+          }
+        const output = relightPixels(pixels, cmd.light, cmd.regions);
+        this.assertRelightLock(
+          output,
+          await this.relightProtectedPixels(source.id),
+        );
+        if (hashBytes(output.data) !== cmd.previewPixelSha256)
+          throw new Error(
+            "Lichtvorschau veraltet. Aktuelle Berechnung abwarten.",
+          );
+        // First semantic relighting write keeps an exact pre-feature manifest for older strict readers.
+        if (!p.qualityAssets.some((q) => q.relighting) && !this.legacyBytes) {
+          this.legacyBytes = await readLimited(
+            await safePath(this.directory, manifestName),
+            MAX_MANIFEST_BYTES,
+          );
+          this.legacyBackupName = "laceframe.v2.pre-relighting.backup.json";
+        }
+        const regions: RelightRecord["regions"] = [];
+        for (const { weights, ...r } of cmd.regions) {
+          const image = await this.stage(
+            encodeMask(source.width, source.height, weights),
+            "lighting-mask.png",
+          );
+          try {
+            const m = await this.store("relight-masks", image.token);
+            const previous = p.qualityAssets
+              .flatMap((q) => q.relighting?.regions ?? [])
+              .filter((old) => old.id === r.id)
+              .sort((a, b) => b.revision - a.revision)[0];
+            regions.push({
+              ...r,
+              revision: previous
+                ? previous.mask.sha256 === m.sha256
+                  ? previous.revision
+                  : previous.revision + 1
+                : 1,
+              mask: { sha256: m.sha256, file: m.file, type: "lighting-weight" },
+            });
+          } finally {
+            this.discard(image.token);
+          }
+        }
+        const image = await this.stage(encodePixels(output), "relit.png");
+        try {
+          p.qualityAssets.push({
+            ...(await this.store("quality", image.token)),
+            format: "png",
+            id: randomUUID(),
+            characterId: source.characterId,
+            sourceId: source.id,
+            sourceSha256: source.sha256,
+            operation: "relighting",
+            version: 1,
+            createdAt: new Date().toISOString(),
+            status: "candidate",
+            relighting: {
+              revision:
+                p.qualityAssets.filter(
+                  (q) => q.sourceId === source.id && q.relighting,
+                ).length + 1,
+              algorithm: RELIGHT_VERSION,
+              geometry: "2d-gradient-no-normals",
+              light: cmd.light,
+              pixelSha256: hashBytes(output.data),
+              regions,
+            },
+          });
+        } finally {
+          this.discard(image.token);
+        }
+        break;
+      }
       case "createCutout":
       case "deriveResolution": {
         if (this.staged)
@@ -1353,6 +1479,76 @@ export class ProjectService {
     ].find((a) => a.id === id);
     if (!image) throw new Error("Kein Charakterasset ausgewählt.");
     return image;
+  }
+  async relightSource(id: string) {
+    const source = this.qualitySource(id);
+    if (source.width * source.height > 4_194_304)
+      throw new Error(
+        "Live Relighting: maximal 4 Megapixel; keine automatische Verkleinerung.",
+      );
+    const pixels = await this.pixels(await this.verifiedBytes(source.id));
+    validateRelightSize(pixels);
+    return {
+      width: pixels.width,
+      height: pixels.height,
+      data: new Uint8Array(pixels.data),
+    };
+  }
+  async relightRecipe(id: string) {
+    const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);
+    if (!q?.relighting) throw new Error("Keine gespeicherte Lichtrevision.");
+    const weights = [];
+    for (const r of q.relighting.regions) {
+      const b = await readLimited(
+        await safePath(this.directory, r.mask.file),
+        MAX_IMAGE_BYTES,
+      );
+      if (hashBytes(b) !== r.mask.sha256)
+        throw new Error("Lichtmaske verändert.");
+      const m = decodePixels(b);
+      if (m.width !== q.width || m.height !== q.height)
+        throw new Error("Falsche Lichtmaske.");
+      weights.push(maskWeights(m));
+    }
+    return { recipe: q.relighting, weights };
+  }
+  private async relightProtectedPixels(id: string) {
+    const p = this.snapshot().project;
+    let source = this.qualitySource(id);
+    const seen = new Set<string>();
+    while ("sourceId" in source) {
+      if (seen.has(source.id)) throw new Error("Zyklische Herkunft.");
+      seen.add(source.id);
+      source = this.qualitySource(source.sourceId);
+    }
+    const expression = p.assets.find((a) => a.id === source.id);
+    const attempt = p.attempts.find((a) => a.id === expression?.attemptId);
+    if (!attempt?.mask) return undefined;
+    if (!expression?.composite)
+      throw new Error("Hard Lock: Rohbild zuerst compositen.");
+    const mask = p.masks.find((m) => m.id === attempt.mask!.id)!;
+    return {
+      master: decodePixels(await this.verifiedBytes(expression.masterId)),
+      weights: maskWeights(decodePixels(await this.verifiedBytes(mask.id))),
+    };
+  }
+  private assertRelightLock(
+    output: Pixels,
+    lock?: { master: Pixels; weights: Uint8Array },
+  ) {
+    if (!lock) return;
+    if (
+      output.width !== lock.master.width ||
+      output.height !== lock.master.height
+    )
+      throw new Error("Hard Lock benötigt ursprüngliche Pixelkoordinaten.");
+    for (let i = 0; i < lock.weights.length; i++)
+      if (lock.weights[i] === 0)
+        for (let c = 0; c < 4; c++)
+          if (output.data[i * 4 + c] !== lock.master.data[i * 4 + c])
+            throw new Error(
+              "Hard Lock schützt diese Pixel. Lichtregion auf erlaubte Pixel begrenzen oder neuen Master verwenden.",
+            );
   }
   async cutoutMask(id: string) {
     const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);

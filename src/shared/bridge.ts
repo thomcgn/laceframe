@@ -1,3 +1,4 @@
+import type { RelightPixels, RelightRecord } from "./relighting";
 import type { QualityReport, ExportAssetRequest } from "./asset-quality";
 import type { CharacterCreationDraft } from "./character-creation";
 import type {
@@ -13,6 +14,10 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  relightSource(id: string): Promise<Result<RelightPixels>>;
+  relightRecipe(
+    id: string,
+  ): Promise<Result<{ recipe: RelightRecord; weights: Uint8Array[] }>>;
   cutoutMask(id: string): Promise<Result<Uint8Array>>;
   qualityReport(id: string): Promise<Result<QualityReport>>;
   exportAsset(

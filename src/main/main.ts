@@ -98,6 +98,12 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC() {
+  handle("image:relight-source", (input) =>
+    service.relightSource(idSchema.parse(input)),
+  );
+  handle("image:relight-recipe", (input) =>
+    service.relightRecipe(idSchema.parse(input)),
+  );
   handle("image:cutout-mask", (input) =>
     service.cutoutMask(idSchema.parse(input)),
   );
@@ -285,7 +291,7 @@ else {
       const headers = new Headers(response.headers);
       headers.set(
         "Content-Security-Policy",
-        "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
+        "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
       );
       return new Response(response.body, { status: response.status, headers });
     });
