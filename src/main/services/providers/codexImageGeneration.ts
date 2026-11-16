@@ -168,6 +168,8 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         masterId: draft.masterId,
         masterSha256: draft.masterSha256,
         styleOnlyReferences: draft.styleReferences ?? [],
+        localHardLock: draft.mask,
+        inpaintingMaskSent: false,
         referenceRoles:
           "First image = identity/edit target; all subsequent images = rendering only. Never transfer face, hair or outfit.",
       }),

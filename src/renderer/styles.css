@@ -924,3 +924,69 @@ footer span {
 .style-library .button-row {
   margin: 6px 0;
 }
+
+.mask-controls,
+.mask-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.6rem;
+  margin: 0.5rem 0;
+}
+.mask-controls label,
+.mask-toolbar label {
+  min-width: 110px;
+  flex: 1;
+}
+.mask-controls small,
+.mask-controls .warning {
+  flex-basis: 100%;
+}
+.mask-controls input[type="checkbox"],
+.mask-toolbar input[type="checkbox"] {
+  width: auto;
+}
+.mask-editor {
+  width: min(1200px, 96vw);
+  max-width: 96vw;
+  max-height: 96vh;
+  overflow: auto;
+}
+.mask-editor h2,
+.mask-editor p {
+  margin: 0.3rem 0;
+}
+.mask-editor fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}
+.mask-editor .button-row {
+  position: sticky;
+  bottom: 0;
+  padding: 0.6rem;
+  background: var(--ink, #141820);
+}
+.mask-viewport {
+  height: clamp(200px, 44vh, 600px);
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+}
+.mask-stage {
+  position: absolute;
+  transform-origin: 0 0;
+}
+.mask-stage img,
+.mask-stage canvas {
+  position: absolute;
+  inset: 0;
+  max-width: none;
+  image-rendering: pixelated;
+}
+.mask-preview-overlay {
+  opacity: 0.5;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}

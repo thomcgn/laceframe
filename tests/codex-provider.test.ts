@@ -472,3 +472,88 @@ describe("savedPath validation", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("native hard-lock attempt snapshots", () => {
+  async function maskedDraft() {
+    const m = service.snapshot().project.masters[0];
+    await service.command({
+      type: "saveMask",
+      masterId: m.id,
+      name: "Native face mask",
+      weights: new Uint8Array(m.width * m.height).fill(128),
+    });
+    const mask = service.snapshot().project.masks[0];
+    return {
+      ...draft,
+      mask: {
+        id: mask.id,
+        sha256: mask.sha256,
+        revision: mask.revision,
+        mode: "hard" as const,
+      },
+    };
+  }
+  it("passes explicit local-only mask provenance, preserves raw result, and supports another generation", async () => {
+    const d = await maskedDraft();
+    await fs.writeFile(
+      path.join(root, "generated_images", thread, "result.png"),
+      png(17, 31, 210),
+    );
+    const c = new GenerationController(service, makeProvider());
+    await c.start(d);
+    await wait(c);
+    const p = service.snapshot().project,
+      raw = p.assets[0];
+    expect(p.attempts[0].mask).toEqual(d.mask);
+    expect(raw.composite).toBeUndefined();
+    const turn = (await trace()).find((m) => m.method === "turn/start");
+    expect(
+      turn.params.input.filter(
+        (i: { type: string }) => i.type === "localImage",
+      ),
+    ).toHaveLength(1);
+    expect(turn.params.input[0].text).toContain('"inpaintingMaskSent":false');
+    expect(turn.params.input[0].text).toContain(d.mask.sha256);
+    const result = await service.command({
+      type: "createComposite",
+      rawId: raw.id,
+      registrationConfirmed: true,
+    });
+    expect(result.project.assets[1].composite?.maskId).toBe(d.mask.id);
+    expect(result.project.assets[1].status).toBe("candidate");
+    await c.start(d);
+    await wait(c);
+    expect(c.status().state).toBe("completed");
+    expect(service.snapshot().project.assets).toHaveLength(3);
+    expect(
+      (
+        await new ProjectService().open(service.snapshot().directory)
+      ).project.attempts.map((a) => a.mask),
+    ).toEqual([d.mask, d.mask]);
+    await c.close();
+  });
+  it("does not produce raw/composite assets on failure or cancellation with a saved mask", async () => {
+    const d = await maskedDraft(),
+      c = new GenerationController(service, makeProvider("image-failed"));
+    await c.start(d);
+    await wait(c);
+    expect(c.status().state).toBe("failed");
+    await fs.writeFile(path.join(root, "scenario"), "hang");
+    await c.start(d);
+    await c.cancel();
+    expect(c.status().state).toBe("cancelled");
+    const reopened = await new ProjectService().open(
+      service.snapshot().directory,
+    );
+    expect(reopened.project.assets).toEqual([]);
+    expect(reopened.project.attempts.map((a) => a.execution?.status)).toEqual([
+      "failed",
+      "cancelled",
+    ]);
+    expect(reopened.project.attempts.map((a) => a.mask)).toEqual([
+      d.mask,
+      d.mask,
+    ]);
+    await c.close();
+  });
+});

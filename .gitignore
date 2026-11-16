@@ -14,3 +14,5 @@ artifacts/
 
 **/assets/styles/
 **/laceframe.*.backup.json
+**/assets/masks/
+**/laceframe.v2.pre-masking.backup.json

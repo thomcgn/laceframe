@@ -1,3 +1,10 @@
+import {
+  compositePixels,
+  decodePixels,
+  encodeMask,
+  encodePixels,
+  maskWeights,
+} from "./mask-composite";
 import { constants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -151,6 +158,8 @@ export class ProjectService {
     const project = projectSchema.parse({
       schemaVersion: 2,
       visualStyleVersion: 1,
+      maskingVersion: 1,
+      masks: [],
       styleAssets: [],
       artDirectionRevisions: [],
       outfits: [],
@@ -190,6 +199,7 @@ export class ProjectService {
       ...project.masters,
       ...project.assets,
       ...project.styleAssets,
+      ...project.masks,
     ]) {
       const contents = await readLimited(
         await safePath(root, image.file),
@@ -206,6 +216,8 @@ export class ProjectService {
         info.format !== image.format
       )
         throw new Error("Bildmetadaten stimmen nicht überein.");
+      if (project.masks.some((m) => m.id === image.id))
+        maskWeights(decodePixels(contents));
       if (project.styleAssets.some((a) => a.id === image.id)) {
         if (contents.length > MAX_STYLE_BYTES)
           throw new Error("Stilreferenz überschreitet 8 MiB.");
@@ -218,14 +230,19 @@ export class ProjectService {
       !Object.hasOwn(source, "artDirections") ||
       !Object.hasOwn(source, "expressionPerformances");
     this.legacyBytes =
-      versionOne || needsArtMigration || source.visualStyleVersion !== 1
+      versionOne ||
+      needsArtMigration ||
+      source.visualStyleVersion !== 1 ||
+      source.maskingVersion !== 1
         ? bytes
         : undefined;
     this.legacyBackupName = versionOne
       ? "laceframe.v1.backup.json"
       : needsArtMigration
         ? "laceframe.v2.pre-art-direction.backup.json"
-        : "laceframe.v2.pre-visual-style.backup.json";
+        : source.visualStyleVersion !== 1
+          ? "laceframe.v2.pre-visual-style.backup.json"
+          : "laceframe.v2.pre-masking.backup.json";
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -256,13 +273,13 @@ export class ProjectService {
     return this.staged;
   }
   private async store(
-    kind: "originals" | "candidates" | "styles",
+    kind: "originals" | "candidates" | "styles" | "masks",
     token: string,
   ) {
     const { image, bytes } = this.pending(token);
     const relative = assetFile(kind, image.sha256, image.format);
-    if (kind === "styles")
-      await fs.mkdir(await safePath(this.directory, "assets/styles"), {
+    if (kind === "styles" || kind === "masks")
+      await fs.mkdir(await safePath(this.directory, `assets/${kind}`), {
         recursive: true,
       });
     const file = await safePath(this.directory, relative);
@@ -284,7 +301,7 @@ export class ProjectService {
     };
   }
   private async save(project: Project) {
-    const validated = projectSchema.parse(project);
+    const validated = projectSchema.parse({ ...project, maskingVersion: 1 });
     const destination = await safePath(this.directory, manifestName);
     if (
       hashBytes(await readLimited(destination, MAX_MANIFEST_BYTES)) !==
@@ -342,9 +359,135 @@ export class ProjectService {
       return c;
     };
     switch (cmd.type) {
+      case "saveMask": {
+        const master = p.masters.find((m) => m.id === cmd.masterId);
+        const previous = p.masks.find((m) => m.id === cmd.previousId);
+        if (
+          !master ||
+          (cmd.previousId && (!previous || previous.masterId !== master.id))
+        )
+          throw new Error("Ungültige Masken-/Masterzuordnung.");
+        if (
+          previous &&
+          p.masks.some(
+            (m) =>
+              m.seriesId === previous.seriesId &&
+              m.revision > previous.revision,
+          )
+        )
+          throw new Error(
+            "Maske wurde inzwischen geändert. Aktuelle Revision laden.",
+          );
+        await this.preview(master.id);
+        const bytes = encodeMask(master.width, master.height, cmd.weights);
+        // Derived asset has its own staging lifecycle; never replace the user's pending import.
+        if (this.staged)
+          throw new Error("Zuerst den ausstehenden Bildimport abschließen.");
+        const staged = await this.stage(bytes, "mask.png");
+        try {
+          p.masks.push({
+            ...(await this.store("masks", staged.token)),
+            format: "png",
+            id: randomUUID(),
+            name: cmd.name,
+            characterId: master.characterId,
+            masterId: master.id,
+            masterSha256: master.sha256,
+            seriesId: previous?.seriesId ?? randomUUID(),
+            revision: (previous?.revision ?? 0) + 1,
+            createdAt: new Date().toISOString(),
+          });
+        } finally {
+          this.discard(staged.token);
+        }
+        break;
+      }
+      case "createComposite": {
+        const raw = p.assets.find((a) => a.id === cmd.rawId && !a.composite);
+        const attempt = p.attempts.find((a) => a.id === raw?.attemptId);
+        const mask = p.masks.find((m) => m.id === attempt?.mask?.id);
+        const master = p.masters.find((m) => m.id === raw?.masterId);
+        if (
+          !raw ||
+          !attempt?.mask ||
+          !mask ||
+          !master ||
+          mask.masterId !== master.id
+        )
+          throw new Error(
+            "Gespeicherten Rohkandidaten und zugeordnete Maske auswählen.",
+          );
+        if (attempt.execution && attempt.execution.status !== "completed")
+          throw new Error("Generierung ist nicht erfolgreich abgeschlossen.");
+        if (
+          p.assets.some(
+            (a) =>
+              a.composite?.rawId === raw.id && a.composite.maskId === mask.id,
+          )
+        )
+          throw new Error("Composite existiert bereits.");
+        if (raw.width !== master.width || raw.height !== master.height)
+          throw new Error(
+            "Hard Lock blockiert: unterschiedliche Abmessungen. Keine Skalierung.",
+          );
+        const pixels = await Promise.all(
+          [master, raw, mask].map(async (image) => {
+            await this.preview(image.id);
+            const b = await readLimited(
+              await safePath(this.directory, image.file),
+              MAX_IMAGE_BYTES,
+            );
+            if (hashBytes(b) !== image.sha256)
+              throw new Error("Bildintegrität verletzt.");
+            return decodePixels(b);
+          }),
+        );
+        const output = encodePixels(
+          compositePixels(pixels[0], pixels[1], pixels[2]),
+        );
+        if (this.staged)
+          throw new Error("Zuerst den ausstehenden Bildimport abschließen.");
+        const staged = await this.stage(output, "composite.png");
+        try {
+          const { reviewedAt: _, composite: __, ...source } = raw;
+          void _;
+          void __;
+          p.assets.push({
+            ...source,
+            ...(await this.store("candidates", staged.token)),
+            id: randomUUID(),
+            status: "candidate",
+            createdAt: new Date().toISOString(),
+            composite: {
+              rawId: raw.id,
+              rawSha256: raw.sha256,
+              maskId: mask.id,
+              maskSha256: mask.sha256,
+              maskRevision: mask.revision,
+              version: 1,
+              rule: "rgba8-straight-round",
+              registration: "user-confirmed-origin",
+            },
+          });
+        } finally {
+          this.discard(staged.token);
+        }
+        break;
+      }
       case "prepareAttempt": {
         manualImportProvider.prepare(p, cmd.draft);
         await this.preview(cmd.draft.masterId);
+        if (cmd.draft.mask) {
+          await this.preview(cmd.draft.mask.id);
+          const master = p.masters.find((m) => m.id === cmd.draft.masterId)!;
+          const bytes = await readLimited(
+            await safePath(this.directory, master.file),
+            MAX_IMAGE_BYTES,
+          );
+          if (hashBytes(bytes) !== master.sha256)
+            throw new Error("Bildintegrität verletzt.");
+          decodePixels(bytes); // Unsupported master formats fail before any native image turn.
+        }
         const { basePrompt, prompt, supplementaryInstructions, ...selection } =
           cmd.draft;
         const now = new Date().toISOString();
@@ -571,6 +714,15 @@ export class ProjectService {
       case "review": {
         const index = p.assets.findIndex((a) => a.id === cmd.id);
         if (index < 0) throw new Error("Kandidat fehlt.");
+        const item = p.assets[index];
+        if (
+          cmd.status === "approved" &&
+          !item.composite &&
+          p.attempts.find((a) => a.id === item.attemptId)?.mask
+        )
+          throw new Error(
+            "Hard-Lock-Rohkandidat: zuerst Composite erstellen und manuell prüfen.",
+          );
         p.assets[index] = review(p.assets[index], cmd.status);
         break;
       }
@@ -682,9 +834,12 @@ export class ProjectService {
   }
   async preview(id: string): Promise<string> {
     const p = this.snapshot().project;
-    const image = [...p.masters, ...p.assets, ...p.styleAssets].find(
-      (a) => a.id === id,
-    );
+    const image = [
+      ...p.masters,
+      ...p.assets,
+      ...p.styleAssets,
+      ...p.masks,
+    ].find((a) => a.id === id);
     if (!image) throw new Error("Unbekanntes Bild.");
     const bytes = await readLimited(
       await safePath(this.directory, image.file),
@@ -699,6 +854,7 @@ export class ProjectService {
       info.format !== image.format
     )
       throw new Error("Bildmetadaten stimmen nicht überein.");
+    if (p.masks.some((m) => m.id === id)) maskWeights(decodePixels(bytes));
     if (p.styleAssets.some((a) => a.id === id))
       await this.decode(bytes, info.width, info.height, info.format);
     return preview(bytes, image.format);

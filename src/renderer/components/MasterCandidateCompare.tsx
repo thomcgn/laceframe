@@ -36,10 +36,14 @@ function usePreview(id?: string) {
 export function MasterCandidateCompare({
   master,
   candidate,
+  mask,
 }: {
   master?: Image;
   candidate?: Image;
+  mask?: Image;
 }) {
+  const maskPreview = usePreview(mask?.id);
+  const [normalized, setNormalized] = useState(false);
   const before = usePreview(master?.id),
     after = usePreview(candidate?.id);
   const [mode, setMode] = useState("slider");
@@ -70,7 +74,10 @@ export function MasterCandidateCompare({
   useEffect(() => {
     setPan({ x: 0, y: 0 });
   }, [master?.id, candidate?.id]);
-  const canvas = comparisonCanvas(master ?? { width: 1, height: 1 }, candidate),
+  const canvas = comparisonCanvas(
+      master ?? { width: 1, height: 1 },
+      normalized ? undefined : candidate,
+    ),
     view = comparisonTransform(canvas, size, zoom, pan);
   function moveSlider(x: number) {
     const rect = stage.current?.getBoundingClientRect();
@@ -96,6 +103,22 @@ export function MasterCandidateCompare({
           >
             <option value="slider">Before / After</option>
             <option value="overlay">Overlay</option>
+          </select>
+        </label>
+        <label>
+          Registrierung
+          <select
+            aria-label="Vergleichsregistrierung"
+            value={normalized ? "visual" : "native"}
+            onChange={(e) => {
+              setNormalized(e.target.value === "visual");
+              setPan({ x: 0, y: 0 });
+            }}
+          >
+            <option value="native">Native Pixel · Ursprung 0,0</option>
+            <option value="visual">
+              Visuell normalisiert · keine Pixelgarantie
+            </option>
           </select>
         </label>
         <label>
@@ -226,11 +249,23 @@ export function MasterCandidateCompare({
                   draggable={false}
                   alt="Create · Ergebnisvorschau"
                   src={after.src}
-                  width={candidate.width}
-                  height={candidate.height}
+                  width={normalized && master ? master.width : candidate.width}
+                  height={
+                    normalized && master ? master.height : candidate.height
+                  }
                   style={{ opacity: mode === "overlay" ? opacity / 100 : 1 }}
                 />
               )}
+            </div>
+          )}
+          {maskPreview.src && mask && (
+            <div className="compare-layer mask-preview-overlay">
+              <img
+                alt="Gespeicherte Maske"
+                src={maskPreview.src}
+                width={mask.width}
+                height={mask.height}
+              />
             </div>
           )}
           {mode === "slider" && candidate && (
@@ -315,7 +350,15 @@ export function MasterCandidateCompare({
           Pfeiltasten
         </small>
       </div>
-      {canvas.mismatch && (
+      {normalized && (
+        <p className="warning">
+          Nur visuelle Normalisierung auf Mastergröße. Darstellung kann verzerrt
+          sein; keine Änderung der Dateien, keine Pixelregistrierung und keine
+          Freigabe für Hard Lock.
+        </p>
+      )}
+      {comparisonCanvas(master ?? { width: 1, height: 1 }, candidate)
+        .mismatch && (
         <p className="warning">
           Abweichende Abmessungen: Master {master?.width} × {master?.height},
           Ergebnis {candidate?.width} × {candidate?.height}. Keine automatische

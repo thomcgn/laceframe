@@ -1,3 +1,4 @@
+import { MasterCandidateCompare } from "./components/MasterCandidateCompare";
 import { ImagePreview } from "./components/ImagePreview";
 import { CreateView } from "./views/CreateView";
 import { useEffect, useState } from "react";
@@ -361,33 +362,8 @@ export function App() {
             Qualitätsbewertung.
           </p>
         </div>
-        <label>
-          Zoom
-          <select
-            aria-label="Zoom"
-            value={zoom}
-            onChange={(e) => setZoom(Number(e.target.value))}
-          >
-            {[25, 50, 100, 150, 200, 400].map((z) => (
-              <option key={z} value={z}>
-                {z}%
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
-      <div className="comparison">
-        <ImagePreview
-          id={master?.id}
-          caption="Master V1 · gesperrt"
-          zoom={zoom}
-        />
-        <ImagePreview
-          id={asset?.id}
-          caption={asset ? statusLabel[asset.status] : "Kandidat"}
-          zoom={zoom}
-        />
-      </div>
+      <MasterCandidateCompare master={master} candidate={asset} />
       {asset && (
         <div className="review">
           <div>
@@ -402,6 +378,18 @@ export function App() {
               {asset.width} × {asset.height} px · SHA-256 {asset.sha256}
             </p>
             <p className="mono">Master-Quelle: {asset.masterSha256}</p>
+            {asset.composite ? (
+              <p className="mono">
+                Composite V{asset.composite.version} · Maske R
+                {asset.composite.maskRevision} / {asset.composite.maskSha256} ·
+                Rohbild {asset.composite.rawId} / {asset.composite.rawSha256}
+              </p>
+            ) : p?.attempts.find((a) => a.id === asset.attemptId)?.mask ? (
+              <p className="warning">
+                KI-Rohkandidat ohne Pixel Lock. Composite in Create erstellen
+                und prüfen; der Rohkandidat kann nicht freigegeben werden.
+              </p>
+            ) : null}
             {master &&
               (master.width !== asset.width ||
                 master.height !== asset.height) && (
@@ -415,6 +403,10 @@ export function App() {
             <div className="button-row">
               <button
                 className="primary"
+                disabled={Boolean(
+                  !asset.composite &&
+                    p?.attempts.find((a) => a.id === asset.attemptId)?.mask,
+                )}
                 onClick={() => reviewAsset(asset, "approved")}
               >
                 Freigeben
@@ -913,6 +905,12 @@ export function App() {
                       {assets.map((a) => (
                         <option key={a.id} value={a.id}>
                           {p.variants.find((v) => v.id === a.variantId)?.label}{" "}
+                          ·{" "}
+                          {a.composite
+                            ? "Composite"
+                            : p.attempts.find((t) => t.id === a.attemptId)?.mask
+                              ? "Rohkandidat"
+                              : "Ausdruck"}{" "}
                           · {statusLabel[a.status]} · {a.id.slice(0, 8)}
                         </option>
                       ))}

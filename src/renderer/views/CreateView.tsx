@@ -1,3 +1,5 @@
+import { MaskEditor } from "../components/MaskEditor";
+import { MAX_MASK_PIXELS } from "../../shared/masking";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import type {
@@ -89,9 +91,27 @@ export function CreateView({
   const [instructions, setInstructions] = useState(
     latest?.promptRevision.supplementaryInstructions ?? "",
   );
+  const [editMode, setEditMode] = useState<"none" | "hard" | "soft">(
+    latest?.mask ? "hard" : "none",
+  );
+  const [maskId, setMaskId] = useState(latest?.mask?.id ?? "");
+  const masks = p.masks.filter((m) => m.masterId === master?.id);
+  const mask = masks.find((m) => m.id === maskId);
+  const selectedMask =
+    editMode === "hard" && mask
+      ? {
+          id: mask.id,
+          sha256: mask.sha256,
+          revision: mask.revision,
+          mode: "hard" as const,
+        }
+      : undefined;
+  const [maskEditor, setMaskEditor] = useState(false);
+  const [candidateKind, setCandidateKind] = useState("composite");
   const base =
     master && character && variant && family
       ? composePrompt({
+          mask: selectedMask,
           characterName: character.name,
           master,
           variant,
@@ -121,9 +141,15 @@ export function CreateView({
   );
   const [activeId, setActiveId] = useState(latest?.id ?? "");
   const active = attempts.find((a) => a.id === activeId);
-  const asset = active
-    ? p.assets.find((a) => a.attemptId === active.id)
+  const raw = active
+    ? p.assets.find((a) => a.attemptId === active.id && !a.composite)
     : undefined;
+  const composite = active
+    ? p.assets.find((a) => a.attemptId === active.id && a.composite)
+    : undefined;
+  const asset = candidateKind === "composite" ? (composite ?? raw) : raw;
+  const activeMask = p.masks.find((m) => m.id === active?.mask?.id);
+  const [maskOverlay, setMaskOverlay] = useState(false);
   const [providers, setProviders] = useState<ProviderDescriptor[]>([]);
   const [providerError, setProviderError] = useState("");
   useEffect(() => {
@@ -235,6 +261,7 @@ export function CreateView({
   const draft: GenerationDraft | undefined =
     master && character && variant
       ? {
+          mask: selectedMask,
           characterId: character.id,
           masterId: master.id,
           masterSha256: master.sha256,
@@ -255,6 +282,13 @@ export function CreateView({
     (provider?.capabilities.canImportResult ||
       ((codex.available ?? provider?.capabilities.canGenerate) &&
         codex.state !== "running")) &&
+      editMode !== "soft" &&
+      (editMode !== "hard" ||
+        Boolean(
+          selectedMask &&
+            master?.format === "png" &&
+            master.width * master.height <= MAX_MASK_PIXELS,
+        )) &&
       draft &&
       generationDraftSchema.safeParse(draft).success &&
       composer.pendingBase === undefined &&
@@ -389,6 +423,9 @@ export function CreateView({
     const attempt = attempts.find((a) => a.id === id);
     if (!attempt) return;
     setActiveId(id);
+    setEditMode(attempt.mask ? "hard" : "none");
+    setMaskId(attempt.mask?.id ?? "");
+    setCandidateKind("composite");
     setProviderId(attempt.providerId);
     setMasterId(attempt.masterId);
     setFamilyId(
@@ -727,6 +764,103 @@ export function CreateView({
           </small>
         )}
       </div>
+      {master && (
+        <div className="mask-controls">
+          <label>
+            Bearbeitungsmodus
+            <select
+              aria-label="Bearbeitungsmodus"
+              value={editMode}
+              onChange={(e) =>
+                editOptions(() =>
+                  setEditMode(e.target.value as typeof editMode),
+                )
+              }
+            >
+              <option value="none">Ohne Maske</option>
+              <option value="soft">Soft Lock · nicht verfügbar</option>
+              <option value="hard">Hard Pixel Lock · lokal</option>
+            </select>
+          </label>
+          {editMode === "soft" && (
+            <p className="warning">
+              Keine dokumentierte Inpainting-Maskeneingabe im unterstützten
+              Codex-Protokoll. Soft Lock nicht verfügbar; kein Auftrag wird
+              gesendet.
+            </p>
+          )}
+          {editMode === "hard" && (
+            <>
+              {(master.format !== "png" ||
+                master.width * master.height > MAX_MASK_PIXELS) && (
+                <p className="warning">
+                  Hard Lock für diesen Master nicht verfügbar: benötigt PNG bis
+                  8 Bit pro Kanal und 16 Megapixel. Ohne Maske weiterarbeiten;
+                  das Original wird nicht konvertiert.
+                </p>
+              )}
+              <label>
+                Maskenrevision
+                <select
+                  aria-label="Maskenrevision"
+                  value={mask?.id ?? ""}
+                  onChange={(e) => editOptions(() => setMaskId(e.target.value))}
+                >
+                  <option value="">Maske wählen</option>
+                  {masks.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} · R{m.revision} · {m.sha256.slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                disabled={master.width * master.height > MAX_MASK_PIXELS}
+                onClick={() => setMaskEditor(true)}
+              >
+                {mask ? "Maske bearbeiten" : "Maske erstellen"}
+              </button>
+              {mask && (
+                <button
+                  onClick={() => {
+                    setMaskId("");
+                    setMaskEditor(true);
+                  }}
+                >
+                  Neue Maske
+                </button>
+              )}
+              <small>
+                KI liefert Rohbild ohne Inpainting-Maske. Hard Lock berechnet
+                danach Originalpixel lokal; identische Abmessungen und
+                bestätigte Registrierung erforderlich. PNG bis 8 Bit / 16 MP.
+              </small>
+            </>
+          )}
+        </div>
+      )}
+      {maskEditor && master && (
+        <MaskEditor
+          key={`${master.id}/${mask?.id ?? "new"}`}
+          master={master}
+          mask={mask}
+          onClose={() => setMaskEditor(false)}
+          onSave={async (weights, name) => {
+            const saved = await unwrap(
+              window.laceframe.command({
+                type: "saveMask",
+                masterId: master.id,
+                previousId: mask?.id,
+                name,
+                weights: new Uint8Array(weights),
+              }),
+            );
+            onSnapshot(saved);
+            setMaskId(saved.project.masks.at(-1)!.id);
+            setActiveId("");
+          }}
+        />
+      )}
       <section
         className={`create-result ${dragging ? "drag-active" : ""}`}
         onDragOver={(e) => {
@@ -757,7 +891,80 @@ export function CreateView({
           <h2>Master / Kandidat</h2>
           <span className={`badge ${asset?.status ?? ""}`}>{status}</span>
         </div>
-        <MasterCandidateCompare master={master} candidate={asset} />
+        {active?.mask && (
+          <div className="mask-controls">
+            <label>
+              Ergebnisansicht
+              <select
+                aria-label="Rohkandidat oder Composite"
+                value={candidateKind}
+                onChange={(e) => setCandidateKind(e.target.value)}
+              >
+                <option value="raw">Rohkandidat</option>
+                <option value="composite">
+                  Composite{!composite ? " · noch nicht erstellt" : ""}
+                </option>
+              </select>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={maskOverlay}
+                onChange={(e) => setMaskOverlay(e.target.checked)}
+              />
+              Gespeicherte Maskenüberlagerung
+            </label>
+            <small>
+              Maskensnapshot: {activeMask?.name} · R{active.mask.revision} ·{" "}
+              {active.mask.sha256.slice(0, 12)} ·{" "}
+              {composite && asset?.composite
+                ? `Composite · ${asset.status === "approved" ? "freigegeben" : asset.status === "rejected" ? "abgelehnt" : "ungeprüft"}`
+                : "KI-Rohbild · kein Pixel Lock"}
+            </small>
+            {raw && !composite && (
+              <>
+                {raw.width !== master?.width ||
+                raw.height !== master?.height ? (
+                  <p className="warning">
+                    Hard Lock blockiert: unterschiedliche Abmessungen. Keine
+                    automatische Skalierung oder Registrierung.
+                  </p>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Identische Maße beweisen keine Ausrichtung. Stimmen Ursprung (0,0), Ausschnitt und Gesichtslage überein? Nur bei bestätigter Registrierung das Composite erstellen.",
+                        )
+                      ) {
+                        void perform(
+                          () =>
+                            window.laceframe.command({
+                              type: "createComposite",
+                              rawId: raw.id,
+                              registrationConfirmed: true,
+                            }),
+                          (value) => {
+                            onSnapshot(value);
+                            setCandidateKind("composite");
+                          },
+                          "Composite erstellt. Manuelle Prüfung erforderlich.",
+                        );
+                      }
+                    }}
+                  >
+                    Registrierung bestätigen & Composite erstellen
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        <MasterCandidateCompare
+          master={master}
+          candidate={asset}
+          mask={maskOverlay ? activeMask : undefined}
+        />
         {!master && (
           <button onClick={onCharacters}>
             Freigegebenen Master importieren
@@ -814,6 +1021,7 @@ export function CreateView({
                 </button>
                 <button
                   className="primary"
+                  disabled={Boolean(active?.mask && !asset.composite)}
                   onClick={() =>
                     command(
                       { type: "review", id: asset.id, status: "approved" },
@@ -919,6 +1127,19 @@ export function CreateView({
         </details>
         <details className="panel create-inspector">
           <summary>Inspector · Stimmaktion, Intensität und Herkunft</summary>
+          {active?.mask && (
+            <p className="mono">
+              Maske {active.mask.id} · Revision {active.mask.revision} · SHA-256{" "}
+              {active.mask.sha256}
+            </p>
+          )}
+          {asset?.composite && (
+            <p className="mono">
+              Composite V{asset.composite.version} · {asset.composite.rule} ·
+              Rohbild {asset.composite.rawId} / {asset.composite.rawSha256} ·
+              Registrierung manuell bestätigt
+            </p>
+          )}
           <div className="inspector-options">
             <label>
               Stimmaktion

@@ -58,6 +58,19 @@ export const manualImportProvider: ImageGenerationProvider = {
     );
     if (!master || !project.variants.some((v) => v.id === draft.variantId))
       throw new Error("Freigegebenen Master und gültige Variante auswählen.");
+    if (draft.mask) {
+      const mask = project.masks.find((m) => m.id === draft.mask!.id);
+      if (
+        !mask ||
+        mask.masterId !== master.id ||
+        mask.characterId !== draft.characterId ||
+        mask.sha256 !== draft.mask.sha256 ||
+        mask.revision !== draft.mask.revision
+      )
+        throw new Error(
+          "Maske gehört nicht zum ausgewählten Master oder wurde verändert.",
+        );
+    }
     const style = effectiveStyle(project, draft.characterId);
     if (
       JSON.stringify(draft.styleReferences ?? []) !==
