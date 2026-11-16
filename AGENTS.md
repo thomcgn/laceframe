@@ -22,4 +22,8 @@ Read `docs/MVP_PLAN.md` and `docs/CHARACTER_EXPRESSIONS.md` before editing. The 
 Dark, calm and responsive. Laceframe colors: Ink #141820, Slate #242D3A, Sage #8FADA6, Copper #D9A77E, Ivory #F0E5D3. Clearly communicate import, candidate, approved and rejected states.
 
 ## Current target
-Task 01 (Characters/Expressions) is implemented. **Next: Task 02 Create Workspace** in `docs/CODEX_02_CREATE.md`, then **Task 03 Motion** in `docs/CODEX_03_MOTION.md`. Do not work on Motion before Create is validated. Build an honest manual-generation loop (master reference → prompt → external ChatGPT → local result → approval), not a fake integrated generator.
+Task 01 and Task 02 (including live native Codex ImageGen) are implemented per developer report. The 2026-11-16 quality pass reports 91 passing tests, monotonic timing, compact Create UI and registered comparison; see `docs/CODEX_02_UX_VALIDATION_2026-11-16.md`. Verify the quality-pass PR is integrated before Task 02B. Preserve the working provider, timer/status, sticky controls, image registration, overlay and project compatibility. Next Task 02B Art Direction / Expression Identity; then Task 03 Motion.
+
+## Additive roadmap: Art Direction / Expression Identity
+
+After the current Create workspace / compact UX work is integrated, implement `docs/CODEX_02B_ART_DIRECTION.md` using `docs/ART_DIRECTION_AND_EXPRESSION_IDENTITY.md`. Preserve approved masters and image-generation support from the live feature branch. Art style is project-level; character identity, outfit and personal emotion behavior are independent. Per-character overrides must never overwrite shared emotion definitions or another character's settings. Do not attempt the full photo-to-master wizard until this layer is stable.
