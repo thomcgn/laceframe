@@ -1,6 +1,6 @@
 # Laceframe — MVP implementation plan
 
-**Status:** approved planning baseline, not implemented. **Goal:** a usable offline portrait/expression/animation desktop studio first; generative AI added behind a replaceable provider once its officially supported capabilities are verified.
+**Status:** Task 01 offline portrait/expression workspace implemented; upcoming tasks prioritize a real Create workflow, then Motion. **Goal:** a usable offline studio with prompt composition and candidate imports first; direct generative AI is a separate optional integration only if official capabilities support image generation.
 
 ## Product decisions
 
@@ -24,7 +24,7 @@
 **Atlas** — PNG/spritesheet/JSON export.
 **Settings** — project paths, default export profiles, external providers.
 
-MVP prioritizes Characters / Expressions / Motion / Inspect / export. Create supports *manual image import* immediately. Do not mock a working ChatGPT login.
+**Updated execution order:** Task 01 (existing) → **Task 02 Create** (`docs/CODEX_02_CREATE.md`) → **Task 03 Motion** (`docs/CODEX_03_MOTION.md`). Create supports master-linked prompts, external ChatGPT opening, local result import, preview and approval. Do not mock ChatGPT login or image generation.
 
 ## Fastest usable vertical slice
 
@@ -50,13 +50,16 @@ Project create/open, dragged local PNG/WebP, preview, immutable master, hashed c
 ### Phase 2 — expression designer
 Seed families and editable variants (NOT hardcoded enum); variant presets include controlled anger and shouting. Link candidate to master, split/overlay view, status transitions. Acceptance: can add family/variant, import candidate, reject and approve, reopen, export with manifest.
 
-### Phase 3 — motion MVP
+### Phase 3 — Create / generation workflow (Codex 02)
+Character master selection, expression/action picker, deterministic prompt composer, prompt copy, external browser access, manual result import, preview and one-click approval. Typed provider abstraction with accurate capability flags. Acceptance: complete usable Create-to-approved-expression loop offline; no fake Generate action.
+
+### Phase 4 — motion MVP (Codex 03)
 Keyframe clip model where frames reference imported approved variants/frames. Duration per frame, optional looping and preview. Import eye blink frames manually first. Acceptance: play/pause at selected FPS, export exact ordered PNG + JSON, same canvas dimensions and anchors; never deform master.
 
-### Phase 4 — image generation integration
-Provider interface, prompt composer, reference/master selection, preview candidate, non-destructive accept to pipeline. Official Sign in with ChatGPT is *a possible integration only for eligible supported image capabilities*. Sign-in alone is NOT image API authorization; do not implement undocumented endpoints/session scraping. Keep manual import fully functional regardless.
+### Phase 5 — optional true image generation provider
+A real image-capable provider may be implemented only through officially supported authenticated image-generation endpoints and explicit user consent. Sign in with ChatGPT alone is not permission to generate images; do not use undocumented endpoints/session scraping. No API key is required for the offline/manual workflow.
 
-### Phase 5 — advanced editing
+### Phase 6 — advanced editing
 Expression-specific masks and compositing, local Pixel Snapper only in Sprite Strict mode, optional mouth-layer sprites, animation atlases, automated consistency checks and platform packages.
 
 ## Definition of done for initial MVP
