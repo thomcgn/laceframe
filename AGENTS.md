@@ -23,3 +23,7 @@ Dark, calm and responsive. Laceframe colors: Ink #141820, Slate #242D3A, Sage #8
 
 ## Current target
 Task 01 (Characters/Expressions) is implemented. **Next: Task 02 Create Workspace** in `docs/CODEX_02_CREATE.md`, then **Task 03 Motion** in `docs/CODEX_03_MOTION.md`. Do not work on Motion before Create is validated. Build an honest manual-generation loop (master reference → prompt → external ChatGPT → local result → approval), not a fake integrated generator.
+
+## Additive roadmap: Art Direction / Expression Identity
+
+After the current Create workspace / compact UX work is integrated, implement `docs/CODEX_02B_ART_DIRECTION.md` using `docs/ART_DIRECTION_AND_EXPRESSION_IDENTITY.md`. Preserve approved masters and image-generation support from the live feature branch. Art style is project-level; character identity, outfit and personal emotion behavior are independent. Per-character overrides must never overwrite shared emotion definitions or another character's settings. Do not attempt the full photo-to-master wizard until this layer is stable.
