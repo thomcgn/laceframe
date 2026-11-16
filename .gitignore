@@ -23,3 +23,5 @@ artifacts/
 **/assets/quality/
 **/assets/cutout-masks/
 **/laceframe.v2.pre-asset-quality.backup.json
+
+**/assets/relight-masks/

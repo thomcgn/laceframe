@@ -1,3 +1,4 @@
+import { RelightingEditor } from "./RelightingEditor";
 import { useEffect, useState } from "react";
 import type { Command, Project, Snapshot } from "../../shared/domain";
 import { effectiveStyle } from "../../shared/domain";
@@ -85,6 +86,10 @@ export function AssetQuality({
   onSnapshot: (s: Snapshot) => void;
   disabled?: boolean;
 }) {
+  const [relighting, setRelighting] = useState<{
+    source: Asset;
+    recipeId?: string;
+  }>();
   const [selected, setSelected] = useState(""),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -166,6 +171,11 @@ export function AssetQuality({
   const styleIds = attempt
     ? (attempt.styleReferences?.map((r) => r.id) ?? [])
     : (currentStyle?.styleReferenceIds ?? []);
+  const lightingRecipe = derivative?.relighting
+    ? derivative
+    : sourceQuality?.relighting
+      ? sourceQuality
+      : undefined;
   const busy = disabled || working;
   async function command(c: Command) {
     setWorking(true);
@@ -258,7 +268,9 @@ export function AssetQuality({
               {derivative
                 ? derivative.operation === "cutout"
                   ? "Freigestellter Kandidat"
-                  : "Separate Auflösungsvariante"
+                  : derivative.operation === "relighting"
+                    ? `2D-Lichtkandidat · R${derivative.relighting?.revision}`
+                    : "Separate Auflösungsvariante"
                 : sourceQuality
                   ? "Freigegebene abgeleitete Version"
                   : "Unverändertes Rohbild"}
@@ -277,6 +289,31 @@ export function AssetQuality({
                 : "Eine bestehende Freigabe belegt keine Transparenz. Deckende Assets bleiben als Rohbilder nutzbar."}
             </p>
             <div className="button-row">
+              <button
+                disabled={busy}
+                onClick={() => setRelighting({ source: active })}
+              >
+                Live Relighting öffnen
+              </button>
+              {lightingRecipe && (
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    const parent = [
+                      ...project.masters,
+                      ...project.assets,
+                      ...project.masterCandidates,
+                      ...project.qualityAssets,
+                    ].find((a) => a.id === lightingRecipe.sourceId)!;
+                    setRelighting({
+                      source: parent,
+                      recipeId: lightingRecipe.id,
+                    });
+                  }}
+                >
+                  Lichtrevision bearbeiten
+                </button>
+              )}
               <button disabled={busy} onClick={() => void beginCutout()}>
                 Hintergrund freistellen
               </button>
@@ -531,6 +568,18 @@ export function AssetQuality({
                   </div>
                 ))}
             </details>
+            {relighting && (
+              <RelightingEditor
+                source={relighting.source}
+                recipeId={relighting.recipeId}
+                project={project}
+                onClose={() => setRelighting(undefined)}
+                onSaved={(s) => {
+                  onSnapshot(s);
+                  setSelected(s.project.qualityAssets.at(-1)!.id);
+                }}
+              />
+            )}
             {editor && (
               <MaskEditor
                 master={editor.source}

@@ -83,3 +83,7 @@ Expression-specific masks and compositing, local Pixel Snapper only in Sprite St
 - Project and source files remain unchanged and recoverable.
 - Unit tests for schema, immutable master, filenames, status state machine, timeline export.
 - Accessible controls, no color-only state, no hardcoded app paths.
+
+## Live Relighting follow-up
+
+After merged PR #12 and UX-01 (#14), bounded non-destructive 2D relighting adds a shared worker/main algorithm, GPU presentation/CPU fallback, manual lighting regions and separately reviewed immutable quality candidates. Native image generation and existing Alpha/Hard Lock/export remain in use. No physical 3D lighting, automatic normals, second light or new model dependency. See `docs/LIVE_RELIGHTING_VALIDATION.md` for actual tests and limits.
