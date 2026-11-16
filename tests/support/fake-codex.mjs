@@ -4,6 +4,41 @@ import readline from "node:readline";
 import process from "node:process";
 import fs from "node:fs";
 import path from "node:path";
+// Schema-only capability probe fixture; it never starts a generation.
+if (process.argv.includes("generate-json-schema")) {
+  const out = process.argv[process.argv.indexOf("--out") + 1];
+  fs.mkdirSync(path.join(out, "v2"), { recursive: true });
+  const control = path.join(process.env.LACEFRAME_TEST_ROOT, "scenario");
+  if (
+    fs.existsSync(control) &&
+    fs.readFileSync(control, "utf8").trim() === "no-multi"
+  ) {
+    fs.writeFileSync(path.join(out, "v2", "TurnStartParams.json"), "{}");
+    process.exit(0);
+  }
+  fs.writeFileSync(
+    path.join(out, "v2", "TurnStartParams.json"),
+    JSON.stringify({
+      properties: {
+        input: { type: "array", items: { $ref: "#/definitions/UserInput" } },
+      },
+      definitions: {
+        UserInput: {
+          oneOf: [
+            {
+              properties: {
+                type: { enum: ["localImage"] },
+                path: { type: "string" },
+              },
+              required: ["path", "type"],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  process.exit(0);
+}
 let scenario = process.env.LACEFRAME_TEST_SCENARIO;
 const root = process.env.LACEFRAME_TEST_ROOT;
 const thread = "00000000-0000-4000-8000-000000000123";

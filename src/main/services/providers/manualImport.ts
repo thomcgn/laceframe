@@ -1,3 +1,4 @@
+import { effectiveStyle, referencesForStyle } from "../../../shared/domain";
 import type { ImageGenerationProvider } from "../../../shared/generation";
 export const manualImportProvider: ImageGenerationProvider = {
   descriptor: {
@@ -57,9 +58,14 @@ export const manualImportProvider: ImageGenerationProvider = {
     );
     if (!master || !project.variants.some((v) => v.id === draft.variantId))
       throw new Error("Freigegebenen Master und gültige Variante auswählen.");
-    const style = project.artDirections.find(
-      (a) => a.id === project.defaultArtDirectionId,
-    );
+    const style = effectiveStyle(project, draft.characterId);
+    if (
+      JSON.stringify(draft.styleReferences ?? []) !==
+      JSON.stringify(referencesForStyle(project, style))
+    )
+      throw new Error(
+        "Stilreferenzen wurden geändert. Prompt erneut aufbauen.",
+      );
     if (
       draft.artDirectionId !== style?.id ||
       draft.artDirectionRevision !== style?.revision

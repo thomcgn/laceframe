@@ -44,6 +44,8 @@ export class GenerationController {
     return {
       ...this.state,
       available: this.provider.getCapabilities().canGenerate,
+      multipleReferences:
+        this.provider.getCapabilities().supportsMultipleReferences,
       execution: this.clock?.snapshot(),
     };
   }
@@ -80,6 +82,12 @@ export class GenerationController {
       const request = this.provider.prepare(saved.project, draft);
       request.referenceAssetPath = await this.service.masterFile(
         draft.masterId,
+      );
+      request.styleReferenceFiles = await Promise.all(
+        (draft.styleReferences ?? []).map(async (r) => ({
+          ...r,
+          path: await this.service.styleFile(r.id, r.sha256),
+        })),
       );
       this.task = (async () => {
         try {

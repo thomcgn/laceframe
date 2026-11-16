@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { styleReferenceSchema } from "./style";
 import type { Master, Variant, VocalAction, Project } from "./domain";
 
 export const generationDraftSchema = z
@@ -10,6 +11,7 @@ export const generationDraftSchema = z
     artDirectionId: z.uuid().optional(),
     artDirectionRevision: z.number().int().positive().optional(),
     expressionPerformance: z.string().max(8000).optional(),
+    styleReferences: z.array(styleReferenceSchema).max(6).optional(),
     action: z.enum(["silent", "speaking", "shouting"]),
     intensity: z.number().min(0).max(1).optional(),
     supplementaryInstructions: z.string().max(8000),
@@ -90,6 +92,7 @@ export type GenerationCapability = {
   canGenerate: boolean;
   supportsReferenceImages: boolean;
   supportsEditingMasks: boolean;
+  supportsMultipleReferences?: boolean;
   canImportResult: boolean;
 };
 export type ProviderDescriptor = {
@@ -103,6 +106,7 @@ export type GenerationRequest = GenerationDraft & {
   projectId: string;
   referenceAssetPath: string;
   selectionContext?: string;
+  styleReferenceFiles?: { id: string; sha256: string; path: string }[];
 };
 export type GenerationResult = {
   providerId: string;
@@ -148,6 +152,7 @@ export function composePrompt(input: {
     colorRules?: string;
     framingRules?: string;
   };
+  styleReferences?: { id: string; sha256: string }[];
   expressionPerformance?: string;
   action: VocalAction;
   intensity?: number;
@@ -156,12 +161,17 @@ export function composePrompt(input: {
   const { master, variant } = input;
   return [
     input.artDirection
-      ? `STYLE LOCK — ${input.artDirection.name}\nRendering: ${input.artDirection.renderRules}\nLighting: ${input.artDirection.lightingRules ?? "Follow the master"}\nColor: ${input.artDirection.colorRules ?? "Follow the master"}\nFraming: ${input.artDirection.framingRules ?? "Follow the master"}\nThis is the project's illustration style, NOT an instruction to copy another character's face, clothes or personality.`
+      ? `STYLE LOCK — ${input.artDirection.name}\nRendering: ${input.artDirection.renderRules}\nLighting: ${input.artDirection.lightingRules?.trim() || "Follow the master"}\nColor: ${input.artDirection.colorRules?.trim() || "Follow the master"}\nFraming: ${input.artDirection.framingRules?.trim() || "Follow the master"}\nThis is the project's illustration style, NOT an instruction to copy another character's face, clothes or personality.`
+      : "",
+    input.styleReferences?.length
+      ? `REFERENCE ROLES: Image 1 is the IDENTITY MASTER. Images 2–${input.styleReferences.length + 1} are STYLE ONLY, in the listed order: ${input.styleReferences.map((r, i) => `image ${i + 2}: ID ${r.id}, SHA-256 ${r.sha256}`).join("; ")}. Borrow rendering, lighting and palette treatment only. NEVER copy faces, hair, freckles, gender presentation, clothing, accessories, poses or personality from style references. Identity and outfit come ONLY from image 1. Edit image 1; style pictures are not edit targets.`
       : "",
     "CHARACTER LOCK — EDIT THE PROVIDED APPROVED MASTER IMAGE",
     `Attach the actual approved master image as the reference. A filename, ID or hash alone is NOT an image reference. Use the PROVIDED IMAGE of ${input.characterName}; do not invent or redesign the character.`,
     `Master V${master.version} | ID: ${master.id} | SHA-256: ${master.sha256}`,
-    `Preserve the original ${master.width} × ${master.height} pixel canvas, framing, camera, art style, palette, background and transparency. Do not resample, crop, quantize or convert to a 64×64 sprite.`,
+    input.artDirection
+      ? `Preserve the original ${master.width} × ${master.height} pixel canvas, framing, camera, background and transparency. Apply the selected STYLE LOCK to rendering, lighting and color treatment only. Preserve the identity, hair, clothing and accessories of the identity master. Do not resample, crop, quantize or convert to a 64×64 sprite.`
+      : `Preserve the original ${master.width} × ${master.height} pixel canvas, framing, camera, art style, palette, background and transparency. Do not resample, crop, quantize or convert to a 64×64 sprite.`,
     "Keep facial identity, hair, freckles/skin details, clothes and accessories unchanged. Change only the facial features needed for the requested expression. If an edit mask is provided, edit only inside it; no mask is supplied automatically. These instructions do not guarantee pixel or identity preservation: manual review is required.",
     `EMOTION: ${input.familyLabel} / ${variant.label} (${variant.slug}).`,
     input.expressionPerformance?.trim()
@@ -254,6 +264,7 @@ export type CodexStatus = {
   message: string;
   attemptId?: string;
   available?: boolean;
+  multipleReferences?: boolean;
   phase?: GenerationPhase;
   execution?: GenerationExecution;
 };

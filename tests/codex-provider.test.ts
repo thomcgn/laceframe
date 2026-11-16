@@ -14,6 +14,8 @@ import {
   draftFromAttempt,
   type GenerationDraft,
 } from "../src/shared/generation";
+import { effectiveStyle, referencesForStyle } from "../src/shared/domain";
+import { composePrompt } from "../src/shared/generation";
 import { png } from "./fixtures";
 let root: string, service: ProjectService, draft: GenerationDraft;
 const thread = "00000000-0000-4000-8000-000000000123";
@@ -54,7 +56,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
-function makeProvider(scenario = "success", timeout = 2000) {
+function makeProvider(scenario = "success", timeout = 2000, multiple = true) {
   const launch: SpawnServer = (cwd) =>
     spawn(process.execPath, [path.resolve("tests/support/fake-codex.mjs")], {
       cwd,
@@ -67,6 +69,7 @@ function makeProvider(scenario = "success", timeout = 2000) {
     });
   return new CodexImageGenerationProvider({
     launch,
+    probeReferences: async () => multiple,
     resultRoot: path.join(root, "generated_images"),
     timeout,
   });
@@ -323,6 +326,92 @@ describe("native project ingestion", () => {
     await expect(
       service.command({ type: "importGeneratedResult", path: "/etc/passwd" }),
     ).rejects.toThrow();
+  });
+});
+describe("native separated identity/style references", () => {
+  async function styledDraft() {
+    await service.command({
+      type: "addArtDirection",
+      name: "Rendering only",
+      renderRules: "Crisp contours",
+    });
+    const id = service.snapshot().project.defaultArtDirectionId!;
+    for (const shade of [80, 180]) {
+      const staged = await service.stage(png(12, 16, shade), "style.png");
+      await service.command({
+        type: "importStyleReference",
+        profileId: id,
+        token: staged.token,
+      });
+    }
+    const p = service.snapshot().project,
+      style = effectiveStyle(p, draft.characterId)!;
+    const refs = referencesForStyle(p, style);
+    const prompt = composePrompt({
+      characterName: p.characters[0].name,
+      master: p.masters[0],
+      variant: p.variants[0],
+      familyLabel: p.families[0].label,
+      artDirection: style,
+      styleReferences: refs,
+      action: "silent",
+      supplementaryInstructions: "",
+    });
+    return {
+      ...draft,
+      artDirectionId: style.id,
+      artDirectionRevision: style.revision,
+      styleReferences: refs,
+      basePrompt: prompt,
+      prompt,
+    };
+  }
+  it("submits one identity followed by two immutable style copies and persists exact provenance", async () => {
+    const d = await styledDraft(),
+      c = new GenerationController(service, makeProvider());
+    await c.start(d);
+    await wait(c);
+    expect(c.status().state).toBe("completed");
+    const turn = (await trace()).find((m) => m.method === "turn/start");
+    expect(
+      turn.params.input.filter(
+        (i: { type: string }) => i.type === "localImage",
+      ),
+    ).toHaveLength(3);
+    expect(path.basename(turn.params.input[1].path)).toBe("master.png");
+    expect(path.basename(turn.params.input[2].path)).toBe("style-1.png");
+    expect(path.basename(turn.params.input[3].path)).toBe("style-2.png");
+    expect(turn.params.input[0].text).toContain("STYLE ONLY");
+    expect(service.snapshot().project.attempts[0].styleReferences).toEqual(
+      d.styleReferences,
+    );
+    for (const a of service.snapshot().project.styleAssets)
+      expect(
+        hashBytes(await fs.readFile(path.join(root, "project", a.file))),
+      ).toBe(a.sha256);
+  });
+  it("blocks unconfirmed multiple images before sending any image turn, then allows master-only", async () => {
+    const d = await styledDraft(),
+      c = new GenerationController(
+        service,
+        makeProvider("success", 2000, false),
+      );
+    await c.start(d);
+    await wait(c);
+    expect(c.status()).toMatchObject({
+      state: "failed",
+      multipleReferences: false,
+      available: true,
+    });
+    expect((await trace()).some((m) => m.method === "turn/start")).toBe(false);
+    await service.command({
+      type: "setCharacterStyle",
+      characterId: d.characterId,
+      selection: { mode: "master" },
+    });
+    await c.start(draft);
+    await wait(c);
+    expect(c.status().state).toBe("completed");
   });
 });
 describe("savedPath validation", () => {

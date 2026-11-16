@@ -1,3 +1,4 @@
+import { constants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import path from "node:path";
@@ -9,6 +10,7 @@ import {
   projectSchema,
   parseProject,
   review,
+  type ArtDirection,
   type Project,
   type Snapshot,
   type StagedImage,
@@ -19,6 +21,7 @@ import {
   type GenerationExecution,
   generationExecutionSchema,
 } from "../shared/generation";
+import { MAX_STYLE_BYTES, MAX_STYLE_PIXELS } from "../shared/style";
 import { createPresets } from "../shared/presets";
 
 export const hashBytes = (bytes: Uint8Array) =>
@@ -58,13 +61,40 @@ export async function safePath(
   }
   return current;
 }
-async function readLimited(file: string, max: number): Promise<Buffer> {
-  const stat = await fs.lstat(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > max)
+export async function readLimited(file: string, max: number): Promise<Buffer> {
+  const info = await fs.lstat(file);
+  if (!info.isFile() || info.isSymbolicLink() || info.size > max)
     throw new Error("Datei fehlt, ist unsicher oder zu groß.");
-  const bytes = await fs.readFile(file);
-  if (bytes.length > max) throw new Error("Datei zu groß.");
-  return bytes;
+  const handle = await fs.open(
+    file,
+    constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+  );
+  try {
+    const stat = await handle.stat();
+    if (
+      !stat.isFile() ||
+      stat.size > max ||
+      stat.ino !== info.ino ||
+      stat.dev !== info.dev
+    )
+      throw new Error("Datei ist unsicher oder zu groß.");
+    const bytes = Buffer.alloc(Math.min(stat.size, max) + 1);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const { bytesRead } = await handle.read(
+        bytes,
+        offset,
+        bytes.length - offset,
+        offset,
+      );
+      if (!bytesRead) break;
+      offset += bytesRead;
+    }
+    if (offset > max) throw new Error("Datei zu groß.");
+    return bytes.subarray(0, offset);
+  } finally {
+    await handle.close();
+  }
 }
 export function inspectImage(bytes: Uint8Array): {
   width: number;
@@ -120,6 +150,10 @@ export class ProjectService {
     const now = new Date().toISOString();
     const project = projectSchema.parse({
       schemaVersion: 2,
+      visualStyleVersion: 1,
+      styleAssets: [],
+      artDirectionRevisions: [],
+      outfits: [],
       id: randomUUID(),
       name,
       createdAt: now,
@@ -152,7 +186,11 @@ export class ProjectService {
     );
     const raw: unknown = JSON.parse(bytes.toString("utf8"));
     const project = parseProject(raw);
-    for (const image of [...project.masters, ...project.assets]) {
+    for (const image of [
+      ...project.masters,
+      ...project.assets,
+      ...project.styleAssets,
+    ]) {
       const contents = await readLimited(
         await safePath(root, image.file),
         MAX_IMAGE_BYTES,
@@ -168,16 +206,26 @@ export class ProjectService {
         info.format !== image.format
       )
         throw new Error("Bildmetadaten stimmen nicht überein.");
+      if (project.styleAssets.some((a) => a.id === image.id)) {
+        if (contents.length > MAX_STYLE_BYTES)
+          throw new Error("Stilreferenz überschreitet 8 MiB.");
+        await this.decode(contents, info.width, info.height, info.format);
+      }
     }
     const source = raw as Record<string, unknown>;
     const versionOne = source.schemaVersion === 1;
     const needsArtMigration =
       !Object.hasOwn(source, "artDirections") ||
       !Object.hasOwn(source, "expressionPerformances");
-    this.legacyBytes = versionOne || needsArtMigration ? bytes : undefined;
+    this.legacyBytes =
+      versionOne || needsArtMigration || source.visualStyleVersion !== 1
+        ? bytes
+        : undefined;
     this.legacyBackupName = versionOne
       ? "laceframe.v1.backup.json"
-      : "laceframe.v2.pre-art-direction.backup.json";
+      : needsArtMigration
+        ? "laceframe.v2.pre-art-direction.backup.json"
+        : "laceframe.v2.pre-visual-style.backup.json";
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -207,9 +255,16 @@ export class ProjectService {
       throw new Error("Importvorschau abgelaufen. Bild erneut wählen.");
     return this.staged;
   }
-  private async store(kind: "originals" | "candidates", token: string) {
+  private async store(
+    kind: "originals" | "candidates" | "styles",
+    token: string,
+  ) {
     const { image, bytes } = this.pending(token);
     const relative = assetFile(kind, image.sha256, image.format);
+    if (kind === "styles")
+      await fs.mkdir(await safePath(this.directory, "assets/styles"), {
+        recursive: true,
+      });
     const file = await safePath(this.directory, relative);
     try {
       await fs.writeFile(file, bytes, { flag: "wx", mode: 0o444 });
@@ -324,21 +379,81 @@ export class ProjectService {
       }
       case "addArtDirection": {
         const id = randomUUID();
-        p.artDirections.push({
-          id,
-          name: cmd.name,
-          revision: 1,
-          renderRules: cmd.renderRules,
-        });
+        const { type: _, ...fields } = cmd;
+        void _;
+        for (const ref of fields.styleReferenceIds ?? [])
+          await this.preview(ref);
+        const profile = { id, revision: 1, ...fields };
+        p.artDirections.push(profile);
+        this.archiveStyle(p, profile);
         if (!p.defaultArtDirectionId) p.defaultArtDirectionId = id;
         break;
       }
       case "updateArtDirection": {
         const profile = p.artDirections.find((a) => a.id === cmd.id);
         if (!profile) throw new Error("Art Direction fehlt.");
-        profile.name = cmd.name;
-        profile.renderRules = cmd.renderRules;
+        const { type: _, id: __, ...fields } = cmd;
+        void _;
+        void __;
+        for (const ref of fields.styleReferenceIds ?? [])
+          await this.preview(ref);
+        Object.assign(profile, fields);
         profile.revision += 1;
+        this.archiveStyle(p, profile);
+        break;
+      }
+      case "setCharacterStyle": {
+        const c = character(cmd.characterId);
+        c.styleSelection = cmd.selection;
+        break;
+      }
+      case "importStyleReference": {
+        const profile = p.artDirections.find((a) => a.id === cmd.profileId);
+        if (!profile || (profile.styleReferenceIds ?? []).length >= 6)
+          throw new Error(
+            "Stilprofil fehlt oder hat bereits sechs Referenzen.",
+          );
+        const staged = this.pending(cmd.token);
+        if (staged.image.width * staged.image.height > MAX_STYLE_PIXELS)
+          throw new Error(
+            "Stilreferenzen dürfen höchstens 16 Megapixel haben.",
+          );
+        if (staged.bytes.length > MAX_STYLE_BYTES)
+          throw new Error("Stilreferenzen dürfen höchstens 8 MiB groß sein.");
+        const image = await this.store("styles", cmd.token);
+        let asset = p.styleAssets.find(
+          (a) => a.sha256 === image.sha256 && a.format === image.format,
+        );
+        if (!asset) {
+          asset = {
+            ...image,
+            id: randomUUID(),
+            name: staged.image.name.slice(0, 120),
+            createdAt: new Date().toISOString(),
+          };
+          p.styleAssets.push(asset);
+        }
+        if ((profile.styleReferenceIds ?? []).includes(asset.id))
+          throw new Error("Stilreferenz ist bereits zugeordnet.");
+        profile.styleReferenceIds = [
+          ...(profile.styleReferenceIds ?? []),
+          asset.id,
+        ];
+        profile.revision++;
+        this.archiveStyle(p, profile);
+        break;
+      }
+      case "setStyleReferences": {
+        const profile = p.artDirections.find((a) => a.id === cmd.profileId);
+        if (!profile) throw new Error("Stilprofil fehlt.");
+        for (const id of cmd.ids) {
+          const asset = p.styleAssets.find((a) => a.id === id);
+          if (!asset) throw new Error("Stilreferenz fehlt.");
+          await this.preview(id);
+        }
+        profile.styleReferenceIds = cmd.ids;
+        profile.revision++;
+        this.archiveStyle(p, profile);
         break;
       }
       case "setArtDirection": {
@@ -465,10 +580,23 @@ export class ProjectService {
     if (
       cmd.type === "confirmMaster" ||
       cmd.type === "importCandidate" ||
-      cmd.type === "importResult"
+      cmd.type === "importResult" ||
+      cmd.type === "importStyleReference"
     )
       this.staged = undefined;
     return this.snapshot();
+  }
+  private archiveStyle(p: Project, profile: ArtDirection) {
+    const { id, ...fields } = profile;
+    p.artDirectionRevisions.push(structuredClone({ ...fields, profileId: id }));
+  }
+  async styleFile(id: string, sha256: string) {
+    const asset = this.snapshot().project.styleAssets.find(
+      (a) => a.id === id && a.sha256 === sha256,
+    );
+    if (!asset) throw new Error("Stilreferenz fehlt oder wurde verändert.");
+    await this.preview(id);
+    return safePath(this.directory, asset.file);
   }
   private async attachResult(
     p: Project,
@@ -554,7 +682,9 @@ export class ProjectService {
   }
   async preview(id: string): Promise<string> {
     const p = this.snapshot().project;
-    const image = [...p.masters, ...p.assets].find((a) => a.id === id);
+    const image = [...p.masters, ...p.assets, ...p.styleAssets].find(
+      (a) => a.id === id,
+    );
     if (!image) throw new Error("Unbekanntes Bild.");
     const bytes = await readLimited(
       await safePath(this.directory, image.file),
@@ -562,6 +692,15 @@ export class ProjectService {
     );
     if (hashBytes(bytes) !== image.sha256)
       throw new Error("Bildintegrität verletzt.");
+    const info = inspectImage(bytes);
+    if (
+      info.width !== image.width ||
+      info.height !== image.height ||
+      info.format !== image.format
+    )
+      throw new Error("Bildmetadaten stimmen nicht überein.");
+    if (p.styleAssets.some((a) => a.id === id))
+      await this.decode(bytes, info.width, info.height, info.format);
     return preview(bytes, image.format);
   }
 }

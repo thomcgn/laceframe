@@ -143,6 +143,87 @@ const path = require("node:path");
     await page
       .getByLabel("Create Art Direction", { exact: true })
       .selectOption({ label: "Shared Noir · V1" });
+    // Real file chooser and WebP drop into the style library; no portrait data.
+    const styleSource = path.join(root, "style-a.png");
+    await fs.writeFile(styleSource, Buffer.from(bytes));
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [file],
+      });
+    }, styleSource);
+    await page
+      .getByRole("button", { name: "Stilbild importieren …", exact: true })
+      .click();
+    await expect(
+      page.getByAltText("Stil 1 · style-a.png", { exact: true }),
+    ).toBeVisible();
+    await page.evaluate(async (bytes) => {
+      const bitmap = await window.createImageBitmap(
+        new window.Blob([new Uint8Array(bytes)], { type: "image/png" }),
+      );
+      const canvas = document.createElement("canvas");
+      canvas.width = 16;
+      canvas.height = 24;
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, 16, 24);
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, "image/webp"),
+      );
+      const transfer = new DataTransfer();
+      transfer.items.add(
+        new File([blob], "style-b.webp", { type: "image/webp" }),
+      );
+      document
+        .querySelector(".style-reference-drop")
+        .dispatchEvent(
+          new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
+        );
+    }, resultBytes);
+    await expect(
+      page.getByAltText("Stil 2 · style-b.webp", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Stilreferenz 1 entfernen", exact: true })
+      .click();
+    await expect(
+      page.getByAltText("Stil 1 · style-b.webp", { exact: true }),
+    ).toBeVisible();
+    const reuse = page.getByLabel("Stilreferenz wiederverwenden", {
+      exact: true,
+    });
+    await reuse.selectOption(
+      await reuse
+        .locator("option")
+        .filter({ hasText: /style-a.png/ })
+        .getAttribute("value"),
+    );
+    await expect(
+      page.getByAltText("Stil 2 · style-a.png", { exact: true }),
+    ).toBeVisible();
+    const styleRevision = JSON.parse(
+      await fs.readFile(path.join(project, "laceframe.json"), "utf8"),
+    ).artDirections.find((a) => a.name === "Shared Noir").revision;
+    await page
+      .getByLabel("Stilrevision ansehen", { exact: true })
+      .selectOption("2");
+    await expect(
+      page.getByRole("button", { name: "Stilrevision speichern", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByAltText("Stil 1 · style-a.png", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByLabel("Stilrevision ansehen", { exact: true })
+      .selectOption(String(styleRevision));
+    await expect(
+      page.getByRole("button", { name: "Stilrevision speichern", exact: true }),
+    ).toBeEnabled();
+    await app.evaluate(({ dialog }, directory) => {
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [directory],
+      });
+    }, project);
     await page
       .locator("summary")
       .filter({ hasText: /^Expression Identity/ })
@@ -326,7 +407,7 @@ const path = require("node:path");
     );
     expect(p.attempts[0]).toMatchObject({
       artDirectionId: p.defaultArtDirectionId,
-      artDirectionRevision: 1,
+      artDirectionRevision: styleRevision,
       expressionPerformance: "Direct unwavering gaze for first character.",
     });
     expect(p.attempts[0].promptRevision.prompt).toContain(
@@ -343,8 +424,17 @@ const path = require("node:path");
       rpc.find((m) => m.method === "turn/start").params.input[0].text,
     ).toContain("Shared crisp contours only.");
     expect(
-      rpc.find((m) => m.method === "turn/start").params.input[1].type,
-    ).toBe("localImage");
+      rpc
+        .find((m) => m.method === "turn/start")
+        .params.input.filter((i) => i.type === "localImage"),
+    ).toHaveLength(3);
+    expect(p.attempts[0].styleReferences).toHaveLength(2);
+    expect(
+      rpc
+        .find((m) => m.method === "turn/start")
+        .params.input.filter((i) => i.type === "localImage"),
+    ).toHaveLength(3);
+    expect(p.attempts[0].styleReferences).toHaveLength(2);
     await fs.writeFile(path.join(root, "scenario"), "image-failed");
     await generate.click();
     await expect(
@@ -416,6 +506,9 @@ const path = require("node:path");
       .getByRole("button", { name: "Stilrevision speichern", exact: true })
       .click();
     await expect(
+      page.getByLabel("Stilrevision ansehen", { exact: true }),
+    ).toHaveValue(String(styleRevision + 1));
+    await expect(
       page.getByRole("button", {
         name: "Neue Vorlage übernehmen",
         exact: true,
@@ -485,7 +578,7 @@ const path = require("node:path");
       second = two.attempts.at(-1);
     expect(two.attempts.slice(0, 4)).toEqual(historical);
     expect(second.artDirectionId).toBe(two.defaultArtDirectionId);
-    expect(second.artDirectionRevision).toBe(2);
+    expect(second.artDirectionRevision).toBe(styleRevision + 1);
     expect(second.promptRevision.prompt).toContain(
       "Lowered gaze for second character.",
     );
@@ -511,12 +604,73 @@ const path = require("node:path");
     });
     await expect(adopt).toBeVisible();
     await adopt.click();
-    await fs.writeFile(path.join(root, "scenario"), "no-auth");
+    await page
+      .getByLabel("Charakter Stilzuordnung", { exact: true })
+      .selectOption("master");
+    await expect(
+      page.getByText("Codex erhält nur den Identitäts-Master.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Arbeits-Prompt", { exact: true }),
+    ).not.toHaveValue(/STYLE LOCK/);
+    await expect(generate).toBeEnabled();
+    await generate.click();
+    await expect(
+      page.getByRole("status", { name: "Codex Status" }),
+    ).toContainText("Generierung abgeschlossen");
+    const masterOnly = (await manifest()).attempts.at(-1);
+    expect(masterOnly.styleReferences).toEqual([]);
+    expect(masterOnly.artDirectionId).toBeUndefined();
+    const lastRpc = (await fs.readFile(path.join(root, "trace.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map(JSON.parse)
+      .filter((m) => m.method === "turn/start")
+      .at(-1);
+    expect(
+      lastRpc.params.input.filter((i) => i.type === "localImage"),
+    ).toHaveLength(1);
+    // An unconfirmed schema blocks style-image submission, with an explicit master-only route.
+    const turnsBefore = (
+      await fs.readFile(path.join(root, "trace.jsonl"), "utf8")
+    )
+      .trim()
+      .split("\n")
+      .map(JSON.parse)
+      .filter((m) => m.method === "turn/start").length;
+    await fs.writeFile(path.join(root, "scenario"), "no-multi");
+    await page
+      .getByLabel("Charakter Stilzuordnung", { exact: true })
+      .selectOption("project");
+    await page
+      .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
+      .click();
     await page
       .getByText("Inspector · Stimmaktion, Intensität und Herkunft", {
         exact: true,
       })
       .click();
+    await page
+      .getByRole("button", { name: "Codex-Verfügbarkeit prüfen", exact: true })
+      .click();
+    await expect(
+      page.getByText(/Mehrfachreferenzen nicht bestätigt/),
+    ).toBeVisible();
+    await expect(generate).toBeDisabled();
+    await page
+      .getByLabel("Charakter Stilzuordnung", { exact: true })
+      .selectOption("master");
+    await expect(generate).toBeEnabled();
+    expect(
+      (await fs.readFile(path.join(root, "trace.jsonl"), "utf8"))
+        .trim()
+        .split("\n")
+        .map(JSON.parse)
+        .filter((m) => m.method === "turn/start"),
+    ).toHaveLength(turnsBefore);
+    await fs.writeFile(path.join(root, "scenario"), "no-auth");
     await page
       .getByRole("button", { name: "Codex-Verfügbarkeit prüfen", exact: true })
       .click();
@@ -531,7 +685,7 @@ const path = require("node:path");
     });
     expect(errors).toEqual([]);
     console.log(
-      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel/regeneration, monotonic timer metadata, real slider keyboard/mouse/touch, shared zoom/pan/overlay, two style profiles and isolated character expression prompts/master references, 960px layout, project lock, provenance, approval, auth gating. No live AI calls.",
+      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel/regeneration, monotonic timer metadata, real slider keyboard/mouse/touch, shared zoom/pan/overlay, PNG/WebP style chooser/drop/thumbnails/history/reuse, ordered multi-reference and master-only jobs, isolated character expression prompts/master references, 960px layout, project lock, provenance, approval, auth gating. No live AI calls.",
     );
   } catch (error) {
     if (app) {
