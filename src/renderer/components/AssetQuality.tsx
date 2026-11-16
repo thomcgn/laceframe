@@ -1,3 +1,4 @@
+import { StyleComparison } from "./StyleComparison";
 import { RelightingEditor } from "./RelightingEditor";
 import { useEffect, useState } from "react";
 import type { Command, Project, Snapshot } from "../../shared/domain";
@@ -257,6 +258,7 @@ export function AssetQuality({
         </summary>
         {expanded && (
           <>
+            <StyleComparison project={project} sourceId={active.id} />
             {error && (
               <p role="alert" className="error">
                 {error}

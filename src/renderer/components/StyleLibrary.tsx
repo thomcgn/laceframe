@@ -1,10 +1,11 @@
+import { StyleAnalyzer } from "./StyleAnalyzer";
 import { useEffect, useState } from "react";
 import type { Snapshot } from "../../shared/domain";
 import { effectiveStyle } from "../../shared/domain";
 import type { Result } from "../../shared/bridge";
 import { MAX_STYLE_BYTES } from "../../shared/style";
 import { ImagePreview } from "./ImagePreview";
-type Perform = <T>(
+export type Perform = <T>(
   work: () => Promise<Result<T>>,
   success: (value: T) => void,
   notice?: string,
@@ -39,9 +40,16 @@ export function StyleLibrary({
   const [creating, setCreating] = useState(false),
     [revision, setRevision] = useState<number | undefined>();
   const [dirty, setDirty] = useState(false);
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  const [analysisDirty, setAnalysisDirty] = useState(false);
+  useEffect(
+    () => onDirtyChange(dirty || analysisDirty),
+    [dirty, analysisDirty, onDirtyChange],
+  );
   function canDiscard() {
-    if (dirty && !window.confirm("Ungespeicherte Stilregeln verwerfen?"))
+    if (
+      (dirty || analysisDirty) &&
+      !window.confirm("Ungespeicherte Stilregeln verwerfen?")
+    )
       return false;
     setDirty(false);
     return true;
@@ -113,6 +121,18 @@ export function StyleLibrary({
   return (
     <section className="panel style-library" aria-label="Stilbibliothek">
       <h2>Art Direction · gemeinsamer Spielstil</h2>
+      {profile && !creating && !historical && (
+        <button
+          onClick={(e) =>
+            e.currentTarget
+              .closest(".style-library")
+              ?.querySelector(".style-analyzer")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+        >
+          Stil analysieren ↓
+        </button>
+      )}
       <p className="muted">
         Stilbilder bestimmen Rendering, Licht und Farbbehandlung. Gesicht,
         Haare, Kleidung und Persönlichkeit stammen ausschließlich vom
@@ -397,6 +417,17 @@ export function StyleLibrary({
             </p>
           )}
         </section>
+      )}
+      {profile && !creating && !historical && (
+        <StyleAnalyzer
+          key={profile.id}
+          snapshot={snapshot}
+          profileId={profile.id}
+          perform={perform}
+          busy={busy || dirty}
+          onSnapshot={onSnapshot}
+          onDirtyChange={setAnalysisDirty}
+        />
       )}
       <section className="style-assignments">
         <h3>Charakterzuordnung & Projektstandard</h3>

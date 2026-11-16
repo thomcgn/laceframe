@@ -1,4 +1,13 @@
 import {
+  ANALYSIS_VERSION,
+  MAX_ANALYSIS_PIXELS,
+  parameters,
+  measureStyle,
+  suggestRules,
+  adoptedRules,
+  type AnalysisResult,
+} from "../shared/style-analysis";
+import {
   relightPixels,
   validateRelightSize,
   RELIGHT_VERSION,
@@ -320,7 +329,8 @@ export class ProjectService {
       source.visualStyleVersion !== 1 ||
       source.maskingVersion !== 1 ||
       source.characterCreationVersion !== 1 ||
-      source.assetQualityVersion !== 1
+      source.assetQualityVersion !== 1 ||
+      !Object.hasOwn(source, "styleAnalyses")
         ? bytes
         : undefined;
     this.legacyBackupName = versionOne
@@ -333,7 +343,9 @@ export class ProjectService {
             ? "laceframe.v2.pre-masking.backup.json"
             : source.characterCreationVersion !== 1
               ? "laceframe.v2.pre-character-creation.backup.json"
-              : "laceframe.v2.pre-asset-quality.backup.json";
+              : source.assetQualityVersion !== 1
+                ? "laceframe.v2.pre-asset-quality.backup.json"
+                : "laceframe.v2.pre-style-analysis.backup.json";
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -1077,6 +1089,103 @@ export class ProjectService {
         await this.attachResult(p, attempt, cmd.token);
         break;
       }
+      case "adoptStyleAnalysis": {
+        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        const profile = p.artDirections.find((a) => a.id === cmd.profileId);
+        if (!profile || profile.revision !== cmd.expectedRevision)
+          throw new Error("Stilrevision wurde geändert. Analyse neu prüfen.");
+        if (p.styleAnalyses.length >= 100)
+          throw new Error("Maximal 100 gespeicherte Analysen pro Projekt.");
+        const references: AnalysisResult[] = [];
+        for (const ref of cmd.references) {
+          const source = await this.analysisSource(ref.id);
+          references.push({
+            ...ref,
+            sha256: source.sha256,
+            metrics: measureStyle(source, ref.roi),
+          });
+        }
+        const suggestions = suggestRules(references);
+        const fields = adoptedRules(suggestions, cmd.edits);
+        if (!fields.renderRules.trim())
+          throw new Error(
+            "Mindestens eine Rendering-Regel oder eigene Regel erforderlich.",
+          );
+        if (!p.styleAnalyses.length && !this.legacyBytes) {
+          this.legacyBytes = await readLimited(
+            await safePath(this.directory, manifestName),
+            MAX_MANIFEST_BYTES,
+          );
+          this.legacyBackupName = "laceframe.v2.pre-style-analysis.backup.json";
+        }
+        // Explicit adoption also binds these immutable originals as style-only references.
+        const images = [];
+        for (const ref of references) {
+          const source = this.qualitySourceOrStyle(ref.id);
+          const bytes = await this.verifiedBytes(ref.id);
+          if (bytes.length > MAX_STYLE_BYTES)
+            throw new Error(
+              "Analysefreigabe: Stilreferenzen dürfen höchstens 8 MiB haben.",
+            );
+          images.push({ source, bytes, type: ref.type });
+        }
+        const newHashes = new Set(
+          images
+            .filter(
+              (i) =>
+                !p.styleAssets.some(
+                  (a) =>
+                    a.sha256 === i.source.sha256 &&
+                    a.format === i.source.format,
+                ),
+            )
+            .map((i) => i.source.sha256),
+        );
+        if (p.styleAssets.length + newHashes.size > 128)
+          throw new Error("Maximal 128 Stilassets pro Projekt.");
+        const ids: string[] = [];
+        for (const { source, bytes, type } of images) {
+          let asset = p.styleAssets.find(
+            (a) => a.sha256 === source.sha256 && a.format === source.format,
+          );
+          if (!asset) {
+            const staged = await this.stage(
+              bytes,
+              `${type}-${source.id.slice(0, 8)}.${source.format}`,
+            );
+            try {
+              asset = {
+                ...(await this.store("styles", staged.token)),
+                id: randomUUID(),
+                name: staged.name,
+                createdAt: new Date().toISOString(),
+              };
+              p.styleAssets.push(asset);
+            } finally {
+              this.discard(staged.token);
+            }
+          }
+          if (!ids.includes(asset.id)) ids.push(asset.id);
+        }
+        Object.assign(profile, fields, { styleReferenceIds: ids });
+        profile.revision++;
+        this.archiveStyle(p, profile);
+        p.styleAnalyses.push({
+          id: randomUUID(),
+          version: ANALYSIS_VERSION,
+          profileId: profile.id,
+          profileRevision: profile.revision,
+          createdAt: new Date().toISOString(),
+          parameters: {
+            ...parameters,
+            comparisonSteps: [...parameters.comparisonSteps],
+          },
+          references,
+          suggestions,
+          edits: structuredClone(cmd.edits),
+        });
+        break;
+      }
       case "addArtDirection": {
         const id = randomUUID();
         const { type: _, ...fields } = cmd;
@@ -1479,6 +1588,20 @@ export class ProjectService {
     ].find((a) => a.id === id);
     if (!image) throw new Error("Kein Charakterasset ausgewählt.");
     return image;
+  }
+  async analysisSource(id: string) {
+    const source = this.qualitySourceOrStyle(id);
+    if (source.width * source.height > MAX_ANALYSIS_PIXELS)
+      throw new Error(
+        "Stilanalyse: maximal 4 Megapixel pro Bild. Keine automatische Skalierung.",
+      );
+    const pixels = await this.pixels(await this.verifiedBytes(id));
+    return {
+      width: pixels.width,
+      height: pixels.height,
+      data: new Uint8Array(pixels.data),
+      sha256: source.sha256,
+    };
   }
   async relightSource(id: string) {
     const source = this.qualitySource(id);

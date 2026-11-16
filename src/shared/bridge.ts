@@ -14,6 +14,9 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  analysisSource(
+    id: string,
+  ): Promise<Result<RelightPixels & { sha256: string }>>;
   relightSource(id: string): Promise<Result<RelightPixels>>;
   relightRecipe(
     id: string,

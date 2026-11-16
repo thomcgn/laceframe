@@ -87,3 +87,7 @@ Expression-specific masks and compositing, local Pixel Snapper only in Sprite St
 ## Live Relighting follow-up
 
 After merged PR #12 and UX-01 (#14), bounded non-destructive 2D relighting adds a shared worker/main algorithm, GPU presentation/CPU fallback, manual lighting regions and separately reviewed immutable quality candidates. Native image generation and existing Alpha/Hard Lock/export remain in use. No physical 3D lighting, automatic normals, second light or new model dependency. See `docs/LIVE_RELIGHTING_VALIDATION.md` for actual tests and limits.
+
+## Style Intelligence follow-up (Codex 02I)
+
+After merged relighting PR #15, Art Direction includes bounded deterministic offline reference analysis, per-type/ROI metrics, editable rule/palette proposals, explicit immutable profile adoption and pairwise numeric style review. The existing StyleLibrary, provider, prompt snapshots and human asset approval remain authoritative. No model, automatic identity/style score or live generation is introduced. See `docs/CODEX_02I_VALIDATION.md` for actual methods, tests, performance and limitations; Motion remains a separate next milestone.

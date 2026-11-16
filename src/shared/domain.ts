@@ -1,3 +1,10 @@
+import {
+  analysisRecordSchema,
+  analysisInputsSchema,
+  analysisEditsSchema,
+  suggestRules,
+  adoptedRules,
+} from "./style-analysis";
 import { relightInputSchema, MAX_RELIGHT_PIXELS } from "./relighting";
 import {
   qualityDerivativeSchema,
@@ -131,6 +138,7 @@ export const expressionPerformanceSchema = z
 const projectObject = z
   .object({
     schemaVersion: z.literal(2),
+    styleAnalyses: z.array(analysisRecordSchema).max(100).default([]),
     assetQualityVersion: z.literal(1).optional(),
     qualityAssets: z.array(qualityDerivativeSchema).max(10000).default([]),
     id: idSchema,
@@ -203,6 +211,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
   const allIds = [
     p.id,
     ...[
+      ...p.styleAnalyses,
       ...p.characters,
       ...p.masters,
       ...p.qualityAssets,
@@ -405,6 +414,73 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     )
       fail("Invalid style references");
   };
+  const analysisIds = new Set<string>();
+  for (const analysis of p.styleAnalyses) {
+    if (analysisIds.has(analysis.id))
+      ctx.addIssue({ code: "custom", message: "Duplicate analysis ID" });
+    analysisIds.add(analysis.id);
+    if (
+      !p.artDirectionRevisions.some(
+        (r) =>
+          r.profileId === analysis.profileId &&
+          r.revision === analysis.profileRevision,
+      )
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Missing analysis profile revision",
+      });
+    const savedRevision = p.artDirectionRevisions.find(
+      (r) =>
+        r.profileId === analysis.profileId &&
+        r.revision === analysis.profileRevision,
+    );
+    try {
+      if (
+        JSON.stringify(suggestRules(analysis.references)) !==
+        JSON.stringify(analysis.suggestions)
+      )
+        fail("Invalid generated analysis rules");
+      const fields = adoptedRules(analysis.suggestions, analysis.edits);
+      if (
+        savedRevision &&
+        Object.entries(fields).some(
+          ([key, value]) => savedRevision[key as keyof typeof fields] !== value,
+        )
+      )
+        fail("Analysis rules do not match saved style revision");
+      const expected = [...new Set(analysis.references.map((r) => r.sha256))];
+      const actual = savedRevision?.styleReferenceIds?.map(
+        (id) => p.styleAssets.find((a) => a.id === id)?.sha256,
+      );
+      if (JSON.stringify(expected) !== JSON.stringify(actual))
+        fail("Analysis style references do not match source hashes/order");
+    } catch {
+      fail("Invalid adopted analysis rules");
+    }
+    for (const ref of analysis.references) {
+      const source = [
+        ...p.styleAssets,
+        ...p.masters,
+        ...p.assets,
+        ...p.masterCandidates,
+        ...p.qualityAssets,
+      ].find((a) => a.id === ref.id);
+      if (
+        !source ||
+        source.sha256 !== ref.sha256 ||
+        source.width !== ref.metrics.width ||
+        source.height !== ref.metrics.height ||
+        JSON.stringify(
+          ref.roi ?? { x: 0, y: 0, width: source.width, height: source.height },
+        ) !== JSON.stringify(ref.metrics.roi)
+      )
+        ctx.addIssue({
+          code: "custom",
+          message: "Invalid analysis provenance",
+        });
+    }
+  }
   for (const a of p.artDirections) validateStyleRefs(a.styleReferenceIds);
   const keys = p.artDirectionRevisions.map(
     (r) => `${r.profileId}/${r.revision}`,
@@ -808,6 +884,15 @@ export const commandSchema = z.discriminatedUnion("type", [
       type: z.literal("importResult"),
       attemptId: idSchema,
       token: idSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("adoptStyleAnalysis"),
+      profileId: idSchema,
+      expectedRevision: z.number().int().positive(),
+      references: analysisInputsSchema,
+      edits: analysisEditsSchema,
     })
     .strict(),
   z.object({ type: z.literal("addCharacter"), name: label }).strict(),

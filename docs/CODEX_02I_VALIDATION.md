@@ -1,0 +1,87 @@
+# Codex 02I — offline Style Intelligence validation
+
+2026-11-17 (work started 2026-11-16). Branch `feat/task-02i-style-intelligence`, based on merged PR #15 at `origin/main` `a057335`. Existing repository only; no worktree, main checkout or main commit. GitHub's open-PR search returned no open PRs at the start. The pre-existing staged `.vscode/settings.json` remains byte-identical and is excluded from this change. All projects/images used for validation are temporary synthetic fixtures; no private portrait, Ada asset, existing user project or copyrighted game screenshot was opened or committed.
+
+## Working workflow
+
+**Art Direction → Stil analysieren ↓** opens the analyzer inside the existing StyleLibrary. The real steps are Referenzen → local Analyse → Ergebnisse → Regeln → Freigabe. Step buttons preserve drafts, and results/rules are separated to reduce scrolling. Existing profile editing, revision history, project default, character assignments and UX-01 navigation remain available.
+
+Select up to six existing style images, approved masters, master candidates or expression assets; each has an independent reference type (dialogue, portrait/master, full-body, sprite, environment, UI). A multi-file input imports actual PNG/WebP through existing staging, bounded validation, native decoding, SHA-256 storage and immutable style revisions. Successful files remain imported if a subsequent file fails; no batch transaction is claimed. Existing single-file chooser/drop import remains available above the analyzer. Missing/corrupt/oversized sources fail rather than being substituted or silently resized.
+
+Each reference has an optional native-coordinate rectangular ROI, including reset to full image. This is manual region selection, not semantic segmentation. Thumbnails identify the source. Reference types can be changed and individual images excluded before rerunning. Results remain individual and type-scoped; a potential detail outlier is marked relative to the mean edge density of other references of the same type (absolute deviation > 0.15). Environment/UI do not supply portrait framing rules or unlabelled skin/hair rules.
+
+Every generated rule displays its measurement basis and has an editable text field and an enable checkbox. The review palette can be corrected with color inputs or omitted entirely. Own artistic/material instructions are separate. Only **Geprüfte Regeln als Stilrevision übernehmen** saves an analysis and replaces the selected profile's current rules/reference membership with a new immutable revision. It never approves character images. Existing image references are reused by hash; selected character assets are copied byte-for-byte into the existing immutable style store. Sources, masters, identities, outfits, personal performances and historical prompts are unchanged.
+
+**Important:** ROI affects measurement only. Subsequent native generation receives the full original style images, explicitly labelled rendering-only, through the unchanged provider. The approval step explains this before saving. No reference is cropped, recolored or replaced by a synthesized image. Reference transport still requires the existing native multi-image capability gate. Both current Studio prompt composers consume the resulting actual profile revision and style references; historical attempts retain their original snapshots. No image generation is necessary for this workflow.
+
+Saved analyses have a historical selector. Their original suggestions and user corrections are immutable; reanalysis creates a fresh measurement and explicit adoption creates another revision. Older profiles without analyses still work and show no invented metrics. Named game styles are ordinary existing profile names; a title alone produces no measurements. Rights/use guidance is visible; no third-party reference presets/art are shipped.
+
+## Architecture and trust boundary
+
+- `shared/style-analysis.ts` owns the versioned `rgba8-style-v1` measurement/rule/comparison contract and strict Zod schemas. The exported `LocalStyleAnalyzer` interface isolates future local engines. No training, LoRA, model download, dataset export UI, cloud engine or inactive module/button is implemented.
+- A bundled dedicated renderer worker performs the actual deterministic calculation. One reference is processed at a time and its transferred RGBA buffer is released before the next. Cancel terminates the current worker and invalidates in-flight source reads/results; no analysis record is written. The same controls allow a new analysis after cancellation/failure. There are no percentages or fabricated intermediate metrics.
+- Preload adds **only `analysisSource(assetId)`**. Main validates a UUID and resolves an existing project asset, rejects oversized inputs before decoding, verifies bounded bytes/hash/canonical path/non-symlink provenance, and uses the existing PNG/WebP decoder. Renderer receives bounded pixel bytes/hash, no file paths, tokens, process access or filesystem API. Existing sender/frame/origin checks, sandbox, context isolation and generation project lock remain in force.
+- Explicit adoption runs through the existing application busy/error wrapper, preventing concurrent project changes/import operations. Main re-reads and recomputes all input metrics itself; renderer-supplied measurements are never authoritative. Expected profile revision prevents stale adoption. Rule IDs, profile fields and ordered reference hashes are validated; normal content-addressed exclusive read-only style copies and atomic manifest persistence are reused.
+- `styleAnalyses` is an additive default-empty project collection, limited to 100 records. Each record contains its UUID/version, profile ID/exact revision, timestamp, structured algorithm parameters, ordered source IDs/hashes/types/ROIs, metrics, warnings, generated suggestions and edited/disabled rules, corrected palette and manual additions. Opening validates analysis/profile/revision/source links, metric consistency, rule regeneration, adopted text and reference order/hashes. Historical records cannot be updated by a command.
+- Opening old projects writes nothing. On the first write of a manifest without `styleAnalyses`, main creates an exclusive byte-exact `laceframe.v2.pre-style-analysis.backup.json`; earlier migration backup precedence remains intact. First adoption in an otherwise current empty-analysis project also preserves a pre-analysis backup. Existing master/candidate files, IDs, approvals, masks, relighting recipes and prompts retain their normal validation. Older strict-schema binaries can reject new fields; reverting requires the original backup plus complete asset directories. No destructive garbage collector.
+
+## Actual methods and uncertainty
+
+All metrics refer to the decoded native RGBA8 pixels inside the ROI. No analysis resampling overwrites an asset.
+
+| Area | Implemented method |
+| --- | --- |
+| Visibility | Exclude alpha=0 entirely; count alpha 1–254 separately. Visible samples have equal weight, not alpha weighting. |
+| Palette | Exact visible RGB uniqueness via a bounded sorted Uint32 buffer; 5-bit-per-channel histogram with deterministic count/key ordering, top 12 groups/counts/shares. Group centers are quantized representatives, not exact original colors. A separate complete 2-bit-per-channel histogram supplies 64-bin comparison distributions, including rare groups outside the dominant palette. |
+| Tone/color | 16-bin luminance histogram; encoded-sRGB `0.2126R+0.7152G+0.0722B`; mean, max−min span; mean HSV saturation; R>B warm, B>R cool and R=B neutral indicators. These are numeric color indicators, not perceptual color-temperature or material estimates. |
+| Native structure | Identical visible horizontal/vertical RGB pairs; combined native horizontal/vertical equal-color run histogram (1–31 and ≥32). A possible 2–16 px run-period candidate requires ≥8 bounded runs and ≥80% divisible run support. This is run-length evidence, **not a proven global grid, original sprite resolution or pixelart classification**; ROI cuts/flat regions can produce misleading periods. |
+| Transitions | Fraction of changed pairs, mean maximum-channel RGB difference, hard jumps ≥0.2, nonzero similar jumps ≤0.04. Quadrant brightness/change rates use native ROI coordinates, not detected face/hair/clothes. |
+| Diagonal/dither-like | Exact alternating two-color 2×2 cells; diagonal same/near-color corner pairs with two hard orthogonal jumps. These are local patterns, not reconstruction of an artist's technique or a complete traced-contour model. |
+| Block artifact indicator | Mean RGB contrast across global 8-pixel boundaries minus the mean inside blocks. A positive result can arise from intended repeated geometry; **not a JPEG/WebP compression detector**. Missing boundary/interior pairs produce zero. |
+| Fine/coarse detail | Changed RGB-pair rates at native nearest sample steps 1, 2 and 4, plus native quadrant statistics. Sampling aliasing is possible. No interpolation, downscaled asset, quality ranking or virtual resolution inference. |
+| Rules | Separate Rendering / Color / Lighting / Framing / Constraints per reference type, with source ID/hash evidence. Numeric detail/tonal targets, run candidates and crop ratios; material intent and lighting geometry remain manual. No game-title inference or cinematic/masterpiece filler. |
+
+PNG uses the existing nonanimated ≤8-bit decoder. WebP uses Chromium's RGBA decode and may normalize hidden RGB. JPEG remains identity-only and is not an analyzer/style import format. Scaling, compression, backgrounds, partial alpha and color profiles may distort measurements; warnings persist with the record. No ICC/HDR, physical-light, subject/artist, exact artistic shading-level, guaranteed style cloning or identity claim. Greater detail never means greater quality. An empty ROI produces no artistic suggestions.
+
+## Comparison and human review
+
+The same new `StyleComparison` is available from Art Direction and the existing **Assetqualität** disclosure. Choose a saved approved analysis revision, a specific reference within that set and a character asset (master, master candidate, expression or quality derivative). Enter the candidate's declared type and native ROI, then explicitly measure it with the same worker. This is **pairwise inspection within the saved set**, not an undocumented pooled style score. All references in the set remain selectable.
+
+The existing real Before/After/overlay/zoom/pan component is reused. Numeric tables show actual reference/candidate/delta luminance, saturation, contrast, neighbour/detail/edge/dither/block indicators, complete coarse color distributions and step 1/2/4 detail differences. Type, native-size, ROI-aspect and visible-area mismatches are flagged. Images are not automatically registered or semantically aligned. Similar dimensions/metrics cannot prove comparable backgrounds, the same artist or identity approval. Human approval remains explicit through the existing quality/master/expression workflow.
+
+The future manual Ada/Cameo acceptance path is available: select local approved Ada masters, mark portrait types, measure/correct/adopt the rules, assign that profile to a new character, then compare its actual master against each saved portrait reference using corresponding ROIs. **No Ada/Cameo fidelity or live generation test was performed.**
+
+## Executed Linux checks
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` | Passed |
+| `npm run lint` | Passed, zero warnings |
+| `npm test` | **223 passed, 12 files** (208 baseline + 15 new) |
+| `npm run build` | Passed, packaged Linux x64 application and bundled analyzer worker |
+| `npm run test:desktop` | Passed: manual + quality + relighting + new style analysis smoke |
+| `npm run test:desktop:native` | Passed: native provider/mask/composite suite and Creator/UX suite |
+| `git diff --check` | Passed |
+
+New unit/integration tests cover alpha exclusion/partial alpha, exact colors/histograms/quantization, native ROI/background exclusion, empty input, deterministic results, runs/diagonals/dither-like patterns, mild/hard transitions and quadrants, 8px block indicators, mixed reference types and rule scope/evidence, palette/manual edits/disabled rules, comparison warnings, 4MP bounds, missing/corrupted/symlinked references, stale revision rejection, byte-identical backup and style copies, immutable repeated analyses/revisions, restart and unchanged masters/characters/outfits/personal-performance/historical attempts.
+
+The actual packaged analyzer smoke performs a multi-file PNG/WebP import, selects an approved synthetic master and ROI, separates portrait/environment types, verifies analysis writes no manifest, edits/disables rules and palette, explicitly adopts a revision, inspects actual comparison metrics/widget, cancels/reruns without changing stored analyses, restores history after restart, checks both Studio prompt composers with complete prerequisites, and measures the actual 4MP worker. It exercises 960×720 and 1440×900 with no horizontal overflow. After the complete four-suite desktop run passed, the final fixture-only isolation/zero-turn assertion was also rerun successfully with `node scripts/style-analysis-smoke.cjs`. Source decoding, hashing, storage, worker, UI and persistence are real.
+
+Native suites use the existing explicitly labelled `tests/support/fake-codex.mjs` protocol double, injected only into temporary test PATH. The final analyzer smoke also uses that fixture with **no-auth** for inherited Studio availability checks and asserts **zero `turn/start` messages**: the analyzer/prompt inspection works offline without a signed-in generator. This is not a production fallback. Earlier exploratory analyzer runs allowed the existing read-only Studio availability check; no Generate action or image turn was invoked. **No live image generation, Codex image allowance, external analysis API or separately billed image API was used.**
+
+Development checks caught an obsolete test draft property, a palette test assuming obsolete bin order, a relative Playwright disclosure selector, a temporary missing typed boundary parameter, and an unused initialization. The first complete smoke also correctly rejected a Creator prompt assertion without identity/outfit prerequisites; the fixture now imports a synthetic identity for a separate draft character and supplies its outfit, preserving that gate. These were corrected; final results above refer to corrected runs.
+
+## Performance, bounds and screenshots
+
+Analysis is limited to **4,194,304 native pixels per image**, six inputs, 100 saved analyses/project, existing six-reference/profile and 128-style-asset/project limits, 8 MiB per adopted style image and the existing 4 MiB manifest bound. No automatic resize to make an oversized image fit. One reference/worker is processed at a time in each analyzer; comparisons own one independently cancellable worker. Cancellation during source decode waits only for the bounded main read/decode to return and discards the result; worker computation is terminated immediately.
+
+A 2048×2048 all-visible synthetic image in the actual packaged worker took approximately **1.1–1.3 seconds** on this host during successful runs. RGBA input is 16 MiB, fixed exact-color scratch 16 MiB and 5-bit count bins 128 KiB, plus bounded decoder/IPC/worker/JS overhead. Explicit main verification/adoption remains synchronous per image and can briefly occupy main; it is not claimed to be a cancellable background save or a 60-FPS preview. Up to six bounded original files are retained during the adoption copy phase (≤48 MiB). Time/memory depend on colors, host and image content.
+
+Observed Electron working sets after the analyzer/Studio/4MP run were approximately 210 MiB Browser/main, 137 MiB GPU, 79 MiB Utility and 173 MiB Tab, with Tab peak around 207 MiB. These include Electron, shared pages, decoders, both Studio modes and Playwright; they are **not unique incremental analyzer allocations or an additive RAM guarantee**. Raw final measurements are in ignored `artifacts/style-analysis-performance.json`; synthetic projects remain under the printed `/tmp/laceframe-analysis-ui-*` paths.
+
+Screenshots contain only synthetic flat-color geometry. They were inspected at the actual window sizes; the step header remains usable and measurements wrap without horizontal overflow:
+
+- [Analyzer 960×720](screenshots/style-intelligence/analyzer-960.png)
+- [Analyzer 1440×900](screenshots/style-intelligence/analyzer-1440.png)
+
+Linux x64 only. Windows/macOS behavior/packaging, JPEG style import, semantic masks/recognition, spatial grid proof, virtual source resolution, reliable compression identification, real game/character visual quality, local vision/training/dataset tools and Motion remain unvalidated or outside this implementation. No new runtime dependency or cloud/account requirement.
