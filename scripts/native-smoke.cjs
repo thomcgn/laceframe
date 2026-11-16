@@ -26,7 +26,7 @@ const path = require("node:path");
     PATH: bin + path.delimiter + process.env.PATH,
     CODEX_HOME: root,
     LACEFRAME_TEST_ROOT: root,
-    LACEFRAME_TEST_SCENARIO: "success",
+    LACEFRAME_TEST_SCENARIO: "delayed",
   };
   delete env.ELECTRON_RUN_AS_NODE;
   let app;
@@ -64,9 +64,9 @@ const path = require("node:path");
     ).toBeVisible();
     const bytes = await app.evaluate(({ nativeImage }) => [
       ...nativeImage
-        .createFromBitmap(Buffer.alloc(24 * 32 * 4, 160), {
-          width: 24,
-          height: 32,
+        .createFromBitmap(Buffer.alloc(600 * 400 * 4, 160), {
+          width: 600,
+          height: 400,
         })
         .toPNG(),
     ]);
@@ -90,14 +90,26 @@ const path = require("node:path");
     const thread = "00000000-0000-4000-8000-000000000123";
     const output = path.join(root, "generated_images", thread);
     await fs.mkdir(output, { recursive: true });
-    await fs.writeFile(path.join(output, "result.png"), Buffer.from(bytes));
+    const resultBytes = await app.evaluate(({ nativeImage }) => [
+      ...nativeImage
+        .createFromBitmap(Buffer.alloc(400 * 600 * 4, 210), {
+          width: 400,
+          height: 600,
+        })
+        .toPNG(),
+    ]);
+    await fs.writeFile(
+      path.join(output, "result.png"),
+      Buffer.from(resultBytes),
+    );
     await page.getByRole("button", { name: /Create$/ }).click();
-    await expect(
-      page.getByRole("status", { name: "Codex Status" }),
-    ).toContainText("Codex bereit");
     await page
       .getByLabel("Create Anbieter", { exact: true })
       .selectOption("codex-native");
+    await expect(
+      page.getByRole("status", { name: "Codex Status" }),
+    ).toContainText("Codex bereit");
+    await page.getByText("Prompteditor", { exact: true }).click();
     await page
       .getByLabel("Ergänzende Anweisung", { exact: true })
       .fill("Native pipeline assertion.");
@@ -107,10 +119,142 @@ const path = require("node:path");
     });
     await expect(generate).toBeEnabled();
     await generate.click();
+    await expect(generate).toBeDisabled();
+    await expect(
+      page.getByRole("status", { name: "Codex Status" }),
+    ).toContainText("Bildwerkzeug arbeitet");
+    await expect(
+      page.getByLabel("Generierungszeit", { exact: true }),
+    ).toContainText(/Laufzeit 00:00:0[1-9]/);
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Generierung abgeschlossen", { timeout: 15000 });
     await expect(page.getByAltText("Create · Ergebnisvorschau")).toBeVisible();
+    await expect(generate).toBeEnabled();
+    await expect(
+      page.getByLabel("Generierungszeit", { exact: true }),
+    ).toContainText(/Generiert in 00:00:0[1-9]/);
+    // Actual registered canvas, native dimensions, keyboard/mouse/touch and shared zoom/pan.
+    const slider = page.getByRole("slider", {
+      name: "Before/After-Vergleich",
+      exact: true,
+    });
+    await expect(slider).toHaveAttribute("aria-valuenow", "50");
+    await slider.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(slider).toHaveAttribute("aria-valuenow", "51");
+    await page.keyboard.press("Shift+ArrowLeft");
+    await expect(slider).toHaveAttribute("aria-valuenow", "41");
+    await page.keyboard.press("Home");
+    await expect(slider).toHaveAttribute("aria-valuenow", "0");
+    await page.keyboard.press("End");
+    await expect(slider).toHaveAttribute("aria-valuenow", "100");
+    await page
+      .getByRole("button", { name: "Ansicht zurücksetzen", exact: true })
+      .click();
+    await slider.scrollIntoViewIfNeeded();
+    let canvas = await page.locator(".compare-stage").boundingBox();
+    let handle = await slider.locator("span").boundingBox();
+    await page.mouse.move(
+      handle.x + handle.width / 2,
+      handle.y + handle.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      canvas.x + canvas.width * 0.75,
+      handle.y + handle.height / 2,
+      { steps: 8 },
+    );
+    await page.mouse.up();
+    await expect(slider).toHaveAttribute("aria-valuenow", /7[45]/);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
+    handle = await slider.locator("span").boundingBox();
+    const y = handle.y + handle.height / 2;
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: handle.x + handle.width / 2, y }],
+    });
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: canvas.x + canvas.width * 0.25, y }],
+    });
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await expect(slider).toHaveAttribute("aria-valuenow", /2[45]/);
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+    await cdp.detach();
+    await page.getByLabel("Create Zoom", { exact: true }).selectOption("100");
+    const rects = () =>
+      page.locator(".compare-stage img").evaluateAll((images) =>
+        images.map((img) => {
+          const r = img.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        }),
+      );
+    let registered = await rects();
+    expect(registered[0]).toMatchObject({
+      x: registered[1].x,
+      y: registered[1].y,
+      width: 600,
+      height: 400,
+    });
+    expect(registered[1]).toMatchObject({ width: 400, height: 600 });
+    const viewport = page.locator(".compare-viewport");
+    await viewport.focus();
+    await page.keyboard.press("ArrowRight");
+    const panned = await rects();
+    expect(panned[0].x).toBe(registered[0].x - 24);
+    expect(panned[1].x).toBe(panned[0].x);
+    const box = await viewport.boundingBox();
+    await page.mouse.move(box.x + 20, box.y + 30);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 50, box.y + 50);
+    await page.mouse.up();
+    registered = await rects();
+    expect(registered[0].x).toBe(panned[0].x + 30);
+    expect(registered[1].y).toBe(registered[0].y);
+    await page
+      .getByLabel("Vergleichsmodus", { exact: true })
+      .selectOption("overlay");
+    await page.getByLabel("Overlay-Deckkraft", { exact: true }).fill("25");
+    await expect(page.getByAltText("Create · Ergebnisvorschau")).toHaveCSS(
+      "opacity",
+      "0.25",
+    );
+    await expect(
+      page.getByText(/Abweichende Abmessungen: Master/),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Ansicht zurücksetzen", exact: true })
+      .click();
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setSize(960, 720),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+    await fs.mkdir("artifacts", { recursive: true });
+    await page.getByText("Prompteditor", { exact: true }).click();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({
+      path: "artifacts/create-quality-960.png",
+      fullPage: true,
+    });
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setSize(1440, 1000),
+    );
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({
+      path: "artifacts/create-quality-1440.png",
+      fullPage: true,
+    });
     await page
       .getByRole("button", { name: "Als Expression freigeben", exact: true })
       .click();
@@ -141,18 +285,31 @@ const path = require("node:path");
     p = await manifest();
     expect(p.assets).toHaveLength(1);
     expect(p.attempts).toHaveLength(2);
-    await fs.writeFile(path.join(root, "scenario"), "hang");
-    await page
-      .getByRole("button", { name: "Codex-Verfügbarkeit prüfen", exact: true })
-      .click();
+    expect(p.attempts[0].execution).toMatchObject({
+      status: "completed",
+      durationMs: expect.any(Number),
+      startedAt: expect.any(String),
+      endedAt: expect.any(String),
+    });
+    expect(p.attempts[1].execution.status).toBe("failed");
     await expect(
-      page.getByRole("status", { name: "Codex Status" }),
-    ).toContainText("Codex bereit");
+      page.getByLabel("Generierungszeit", { exact: true }),
+    ).toContainText("Fehlgeschlagen in");
+    await expect(generate).toBeEnabled();
+    await fs.writeFile(path.join(root, "scenario"), "hang");
     await expect(generate).toBeEnabled();
     await generate.click();
     await expect(
       page.getByRole("button", { name: "Generierung abbrechen", exact: true }),
     ).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const cancel = page.getByRole("button", {
+      name: "Generierung abbrechen",
+      exact: true,
+    });
+    await expect(cancel).toBeInViewport();
+    await expect(cancel).toBeEnabled();
+    await expect(generate).toBeDisabled();
     const locked = await page.evaluate(() =>
       window.laceframe.command({
         type: "addCharacter",
@@ -167,7 +324,25 @@ const path = require("node:path");
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("abgebrochen", { timeout: 15000 });
     expect((await manifest()).assets).toHaveLength(1);
+    expect((await manifest()).attempts[2].execution.status).toBe("cancelled");
+    await expect(
+      page.getByLabel("Generierungszeit", { exact: true }),
+    ).toContainText("Abgebrochen in");
+    await expect(generate).toBeEnabled();
+    await fs.writeFile(path.join(root, "scenario"), "success");
+    await generate.click();
+    await expect(
+      page.getByRole("status", { name: "Codex Status" }),
+    ).toContainText("Generierung abgeschlossen");
+    await expect(generate).toBeEnabled();
+    expect((await manifest()).assets).toHaveLength(2);
+    expect((await manifest()).attempts[3].execution.status).toBe("completed");
     await fs.writeFile(path.join(root, "scenario"), "no-auth");
+    await page
+      .getByText("Inspector · Stimmaktion, Intensität und Herkunft", {
+        exact: true,
+      })
+      .click();
     await page
       .getByRole("button", { name: "Codex-Verfügbarkeit prüfen", exact: true })
       .click();
@@ -182,7 +357,7 @@ const path = require("node:path");
     });
     expect(errors).toEqual([]);
     console.log(
-      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel, project lock, provenance, approval, auth gating. No live AI calls.",
+      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel/regeneration, monotonic timer metadata, real slider keyboard/mouse/touch, shared zoom/pan/overlay, 960px layout, project lock, provenance, approval, auth gating. No live AI calls.",
     );
   } catch (error) {
     if (app) {

@@ -14,7 +14,12 @@ import {
   type StagedImage,
 } from "../shared/domain";
 import { manualImportProvider } from "./services/providers/manualImport";
-import { type GenerationAttempt, draftFromAttempt } from "../shared/generation";
+import {
+  type GenerationAttempt,
+  type GenerationExecution,
+  generationExecutionSchema,
+  draftFromAttempt,
+} from "../shared/generation";
 import { createPresets } from "../shared/presets";
 
 export const hashBytes = (bytes: Uint8Array) =>
@@ -440,6 +445,7 @@ export class ProjectService {
   async importGeneratedResult(
     attemptId: string,
     bytes: Uint8Array,
+    complete?: () => GenerationExecution,
   ): Promise<Snapshot> {
     const p = this.snapshot().project,
       attempt = p.attempts.find(
@@ -449,12 +455,31 @@ export class ProjectService {
     const staged = await this.stage(bytes, "codex-result");
     try {
       await this.attachResult(p, attempt, staged.token);
+      if (complete)
+        attempt.execution = generationExecutionSchema.parse(complete());
       p.updatedAt = new Date().toISOString();
       await this.save(p);
       return this.snapshot();
     } finally {
       this.discard(staged.token);
     }
+  }
+  /** Main-only metadata update; prompt/reference records and binary inputs stay immutable. */
+  async recordGeneration(
+    attemptId: string,
+    execution: GenerationExecution,
+  ): Promise<void> {
+    const p = this.snapshot().project,
+      attempt = p.attempts.find(
+        (a) => a.id === attemptId && a.providerId === "codex-native",
+      );
+    if (!attempt || attempt.execution?.endedAt)
+      throw new Error(
+        "Generierungsmetadaten fehlen oder sind bereits abgeschlossen.",
+      );
+    attempt.execution = generationExecutionSchema.parse(execution);
+    p.updatedAt = new Date().toISOString();
+    await this.save(p);
   }
   async masterFile(id: string): Promise<string> {
     const master = this.snapshot().project.masters.find((m) => m.id === id);

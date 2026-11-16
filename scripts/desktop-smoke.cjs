@@ -305,6 +305,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByLabel("Create Variante", { exact: true })
       .selectOption({ label: "half-smile / half-smile" });
+    await page.getByText("Prompteditor", { exact: true }).click();
     await page
       .getByLabel("Ergänzende Anweisung", { exact: true })
       .fill("Keep the original framing.");
@@ -340,6 +341,11 @@ const { createHash } = require("node:crypto");
     );
     expect(blocked.ok).toBe(false);
     expect(await app.evaluate(() => globalThis.__opened)).toHaveLength(1);
+    await page
+      .getByText("Inspector · Stimmaktion, Intensität und Herkunft", {
+        exact: true,
+      })
+      .click();
     await page
       .getByRole("button", { name: "Referenz im Ordner zeigen", exact: true })
       .click();

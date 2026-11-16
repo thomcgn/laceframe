@@ -479,7 +479,10 @@ export function App() {
           </small>
         </div>
       </aside>
-      <main inert={importing}>
+      <main
+        inert={importing}
+        className={view === "Create" ? "create-main" : undefined}
+      >
         <header>
           <div>
             <p className="eyebrow">
@@ -503,71 +506,65 @@ export function App() {
             {error}
           </div>
         )}
-        {generationRunning && (
-          <div className="prompt-conflict" role="status">
-            Generierung läuft · Projekt ist bis zum Abschluss gesperrt.{" "}
-            <button
-              onClick={() =>
-                void run(
-                  () => window.laceframe.cancelGeneration(),
-                  () => {},
-                  "Abbruch angefordert.",
-                )
-              }
-            >
-              Generierung abbrechen
-            </button>
-          </div>
-        )}
+        <div
+          id="create-action-slot"
+          hidden={view !== "Create" && !generationRunning}
+        />
         <fieldset
           disabled={busy || Boolean(staged) || generationRunning}
           className="workspace"
         >
-          <section className="project-bar" aria-label="Projektverwaltung">
-            <form
-              className="inline-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (
-                  createDirty &&
-                  !window.confirm(
-                    "Ungespeicherten Create-Entwurf verwerfen und Projekt wechseln?",
+          <details className="project-management" open={view !== "Create"}>
+            <summary>
+              Projektverwaltung · {p?.name ?? "Projekt auswählen"}
+            </summary>
+            <section className="project-bar" aria-label="Projektverwaltung">
+              <form
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (
+                    createDirty &&
+                    !window.confirm(
+                      "Ungespeicherten Create-Entwurf verwerfen und Projekt wechseln?",
+                    )
                   )
-                )
-                  return;
-                void run(
-                  () => window.laceframe.createProject(projectName),
-                  changedProject,
-                );
-              }}
-            >
-              <label>
-                Projektname
-                <input
-                  required
-                  maxLength={120}
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                />
-              </label>
-              <button type="submit">Projekt erstellen …</button>
-            </form>
-            <button
-              onClick={() =>
-                (!createDirty ||
-                  window.confirm(
-                    "Ungespeicherten Create-Entwurf verwerfen und Projekt wechseln?",
-                  )) &&
-                void run(() => window.laceframe.openProject(), changedProject)
-              }
-            >
-              Projekt öffnen …
-            </button>
-          </section>
+                    return;
+                  void run(
+                    () => window.laceframe.createProject(projectName),
+                    changedProject,
+                  );
+                }}
+              >
+                <label>
+                  Projektname
+                  <input
+                    required
+                    maxLength={120}
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                  />
+                </label>
+                <button type="submit">Projekt erstellen …</button>
+              </form>
+              <button
+                onClick={() =>
+                  (!createDirty ||
+                    window.confirm(
+                      "Ungespeicherten Create-Entwurf verwerfen und Projekt wechseln?",
+                    )) &&
+                  void run(() => window.laceframe.openProject(), changedProject)
+                }
+              >
+                Projekt öffnen …
+              </button>
+            </section>
+          </details>
           {p && (
             <div hidden={view !== "Create"}>
               <CreateView
                 key={`${p.id}:${p.selectedCharacterId ?? ""}`}
+                visible={view === "Create"}
                 snapshot={snapshot!}
                 busy={busy}
                 perform={run}

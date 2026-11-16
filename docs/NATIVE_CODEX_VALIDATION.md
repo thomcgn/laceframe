@@ -30,7 +30,9 @@ The existing isolated probe was adapted once to add the official `localImage` in
 
 The production provider's real `check()` was also executed with the installed CLI after implementation (using a temporary pinned TS runner); it returned **ready** with the existing ChatGPT login and ImageGen active. It made no image request. No second live reference edit or paid API call was made.
 
-## Automated validation
+## Original integration validation
+
+The subsequent UX/timing pass and current test totals are documented in [UX quality validation](UX_QUALITY_VALIDATION.md).
 
 - `npm run typecheck` — passed.
 - `npm run lint` — passed.
@@ -49,7 +51,7 @@ Unit coverage includes missing executable, unauthenticated/API-key account rejec
 - Tested on Linux with this installed Alpha CLI. Other CLI versions/accounts may lack the feature or compatible protocol; runtime checks fail closed. Windows/macOS execution and packaging remain unvalidated. The CLI must be on the app's PATH; installation/sign-in remain in the official Codex CLI (`codex login`). Laceframe does not install or log in automatically.
 - Native image usage consumes Codex allowance; the app does not promise unlimited/free usage or inspect billing. No separately billed API-key provider is implemented.
 - Laceframe sends one image turn and requests one image operation, with no application retry loop; it stops on reported retry/error events. Internal transport behavior of the installed official CLI is outside Laceframe's implementation.
-- Current job progress/failure status is in memory. Saved attempts, immutable prompts and imported/reviewed candidates persist; a failed or cancelled attempt has no fabricated result. No pending job resumes or retries on restart.
+- Live protocol phase remains in memory. The subsequent quality pass persists start/end/duration/outcome metadata with each attempt, including failed/cancelled outcomes; interrupted running records remain explicitly incomplete. No pending job resumes or retries on restart.
 - No masks/compositing or pixel-lock guarantee. Mismatched result dimensions are warned about, preserved and left for manual review.
 - The native Codex login route differs from the separate Sign-in-with-ChatGPT/Responses plan route. Local integration success does not authorize a commercial/hosted relay; follow the official App Server usage limits.
 

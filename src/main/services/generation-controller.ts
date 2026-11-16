@@ -1,11 +1,24 @@
 import {
   generationDraftSchema,
   type CodexStatus,
+  type GenerationPhase,
+  type GenerationExecution,
 } from "../../shared/generation";
 import { ProjectService } from "../project-service";
 import { CodexImageGenerationProvider } from "./providers/codexImageGeneration";
-
-/** One job owns the project until result ingestion or failure; every start is explicit IPC. */
+import { GenerationClock } from "./generation-clock";
+const phases: Record<GenerationPhase, string> = {
+  preparing: "Versuch und Masterreferenz werden vorbereitet.",
+  "checking-account": "Codex prüft die bestehende ChatGPT-Anmeldung.",
+  "checking-capability": "Codex prüft die verfügbare Bildfunktion.",
+  "starting-model": "Codex-Modell und Thread werden gestartet.",
+  processing: "Codex bearbeitet den Auftrag.",
+  "generating-image": "Das Codex-Bildwerkzeug arbeitet.",
+  "validating-image": "Codex-Ergebnis wird sicher geprüft.",
+  importing: "Bild wird als Kandidat im Projekt gespeichert.",
+  stopping: "Abbruch angefordert · Codex wird beendet.",
+};
+/** A single job owns the project until result/terminal metadata are durably stored. */
 export class GenerationController {
   private state: CodexStatus = {
     state: "unavailable",
@@ -14,19 +27,33 @@ export class GenerationController {
   private cancelled = false;
   private importing = false;
   private task?: Promise<void>;
+  private clock?: GenerationClock;
   constructor(
     private service: ProjectService,
     readonly provider: CodexImageGenerationProvider,
-  ) {}
+    private createClock: () => GenerationClock = () => new GenerationClock(),
+  ) {
+    provider.onProgress = (phase) => {
+      if (this.running && !this.cancelled) this.phase(phase);
+    };
+  }
   get running() {
     return this.state.state === "running";
   }
-  status() {
-    return { ...this.state };
+  status(): CodexStatus {
+    return {
+      ...this.state,
+      available: this.provider.getCapabilities().canGenerate,
+      execution: this.clock?.snapshot(),
+    };
+  }
+  private phase(phase: GenerationPhase) {
+    this.state = { ...this.state, phase, message: phases[phase] };
   }
   async check() {
     if (this.running) return this.status();
-    this.state = await this.provider.check();
+    const previous = this.state.attemptId;
+    this.state = { ...(await this.provider.check()), attemptId: previous };
     return this.status();
   }
   async start(input: unknown) {
@@ -36,10 +63,11 @@ export class GenerationController {
       throw new Error("Codex-Anbieter auswählen.");
     this.cancelled = false;
     this.importing = false;
+    this.clock = this.createClock();
     this.state = {
       state: "running",
-      message:
-        "Generierung läuft · Anmeldung wird vor der Bildanfrage geprüft.",
+      phase: "preparing",
+      message: phases.preparing,
     };
     try {
       const saved = await this.service.command({
@@ -47,47 +75,72 @@ export class GenerationController {
         draft,
       });
       const attempt = saved.project.attempts.at(-1)!;
+      this.state.attemptId = attempt.id;
+      await this.service.recordGeneration(attempt.id, this.clock.snapshot());
       const request = this.provider.prepare(saved.project, draft);
       request.referenceAssetPath = await this.service.masterFile(
         draft.masterId,
       );
-      this.state.attemptId = attempt.id;
       this.task = (async () => {
         try {
           const result = await this.provider.editImage(request);
-          if (this.cancelled) return;
+          if (this.cancelled) throw new Error("Cancelled");
           const bytes = await this.provider.resultBytes(result);
-          if (this.cancelled) return;
+          if (this.cancelled) throw new Error("Cancelled");
           this.importing = true;
-          await this.service.importGeneratedResult(attempt.id, bytes);
+          this.phase("importing");
+          let completion: GenerationExecution | undefined;
+          await this.service.importGeneratedResult(
+            attempt.id,
+            bytes,
+            () => (completion = this.clock!.stamp("completed")),
+          );
+          this.clock!.seal(completion!);
           this.state = {
             state: "completed",
             message:
-              "Generierung abgeschlossen · Kandidat importiert. Master und Ergebnis vor der Freigabe vergleichen.",
+              "Generierung abgeschlossen · Kandidat importiert. Identität vor der Freigabe prüfen.",
             attemptId: attempt.id,
           };
         } catch {
           const status = this.provider.status;
+          const outcome = this.cancelled ? "cancelled" : "failed";
+          const execution = this.clock!.finish(outcome);
+          let message = this.cancelled
+            ? "Generierung abgebrochen. Späte Ergebnisse werden nicht importiert."
+            : status.state === "completed"
+              ? "Generierung fehlgeschlagen: Ergebnis konnte nicht sicher gespeichert werden."
+              : status.state === "running" || status.state === "ready"
+                ? "Generierung fehlgeschlagen. Projekt und Verbindung prüfen."
+                : status.message;
+          try {
+            await this.service.recordGeneration(attempt.id, execution);
+          } catch {
+            message +=
+              " Abschlussmetadaten konnten nicht gespeichert werden; Projekt erneut öffnen.";
+          }
           this.state = {
             state: this.cancelled
               ? "cancelled"
-              : status.state === "not-installed" ||
-                  status.state === "not-authenticated" ||
-                  status.state === "unavailable"
+              : ["not-installed", "not-authenticated", "unavailable"].includes(
+                    status.state,
+                  )
                 ? status.state
                 : "failed",
-            message: this.cancelled
-              ? "Generierung abgebrochen."
-              : status.state === "completed"
-                ? "Generierung fehlgeschlagen: Ergebnis konnte nicht sicher im Projekt gespeichert werden."
-                : status.message,
+            message,
             attemptId: attempt.id,
           };
         }
       })();
       return this.status();
     } catch (error) {
+      const execution = this.clock.finish("failed");
+      if (this.state.attemptId)
+        await this.service
+          .recordGeneration(this.state.attemptId, execution)
+          .catch(() => {});
       this.state = {
+        ...this.state,
         state: "failed",
         message:
           "Generierung konnte nicht gestartet werden. Master und Projektdaten prüfen.",
@@ -102,14 +155,9 @@ export class GenerationController {
       return this.status();
     }
     this.cancelled = true;
-    await this.provider.cancelGeneration("");
+    this.phase("stopping");
+    await this.provider.cancelGeneration(this.state.attemptId ?? "");
     await this.task;
-    this.state = {
-      ...this.state,
-      state: "cancelled",
-      message:
-        "Generierung abgebrochen. Späte Ergebnisse werden nicht importiert.",
-    };
     return this.status();
   }
   async close() {
