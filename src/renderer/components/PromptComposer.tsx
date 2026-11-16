@@ -1,3 +1,4 @@
+import type { PromptMode } from "../../shared/studio";
 import {
   editComposer,
   keepComposer,
@@ -8,18 +9,68 @@ export function PromptComposer({
   state,
   onChange,
   labelPrefix,
+  mode,
+  onModeChange,
+  extraInstructions,
+  onExtraChange,
 }: {
   labelPrefix?: string;
   state: ComposerState;
-  onChange: (state: ComposerState) => void;
+  onChange: (s: ComposerState) => void;
+  mode: PromptMode;
+  onModeChange: (mode: PromptMode) => void;
+  extraInstructions: string;
+  onExtraChange: (text: string) => void;
 }) {
   return (
-    <div className="prompt-composer">
+    <div
+      className="prompt-composer"
+      data-focus-target={
+        labelPrefix ? "creator-prompt-builder" : "prompt-builder"
+      }
+    >
+      <label>
+        Promptmodus
+        <select
+          aria-label={
+            labelPrefix ? `${labelPrefix} Promptmodus` : "Promptmodus"
+          }
+          value={mode}
+          onChange={(e) => onModeChange(e.target.value as PromptMode)}
+        >
+          <option value="automatic">Automatisch</option>
+          <option value="supplement">Ergänzen</option>
+          <option value="expert">Expert Override</option>
+        </select>
+      </label>
+      <p className="muted">
+        {mode === "expert"
+          ? "Manueller Override. Änderungen an Figur, Stil oder Referenzen müssen bei Konflikten bestätigt werden. Verbindliche Providerregeln bleiben erhalten."
+          : mode === "supplement"
+            ? "Kreative Ergänzungen werden zur aktuellen strukturierten Vorlage hinzugefügt. Identity Lock, Stil und Transparenz bleiben erhalten."
+            : "Aktuelle Einstellungen erzeugen den Prompt automatisch. Keine zusätzliche Promptbestätigung nötig."}
+      </p>
+      {mode === "supplement" && (
+        <label>
+          Zusätzliche kreative Anweisungen
+          <textarea
+            aria-label={
+              labelPrefix
+                ? `${labelPrefix} Ergänzende Anweisung`
+                : "Ergänzende Anweisung"
+            }
+            rows={3}
+            maxLength={labelPrefix ? 4000 : 8000}
+            value={extraInstructions}
+            onChange={(e) => onExtraChange(e.target.value)}
+          />
+        </label>
+      )}
       <div className="section-head">
-        <h2>Character-Lock-Prompt</h2>
+        <h3>Prompt Builder</h3>
         <span className="badge">
-          {state.edited
-            ? "Eigene Bearbeitung"
+          {mode === "expert"
+            ? "Expert Override · manuell"
             : state.saved
               ? "Gespeicherte Revision"
               : "Automatische Vorlage"}
@@ -29,9 +80,9 @@ export function PromptComposer({
         <div className="prompt-conflict" role="alert">
           <strong>Auswahl oder Vorlage geändert.</strong>
           <p>
-            Dein bearbeiteter Text bleibt erhalten. Übernimm die neue Vorlage
-            oder behalte deinen Text ausdrücklich für die neue Auswahl. Prüfe
-            dabei Master, Emotion und Stimmaktion.
+            Dein Expert Override bleibt erhalten. Übernimm die neue Vorlage oder
+            bestätige den eigenen Text für die neue Auswahl. Master,
+            Stilrevision, Emotion und Stimmaktion prüfen.
           </p>
           <div className="button-row">
             <button onClick={() => onChange(resetComposer(state))}>
@@ -43,21 +94,30 @@ export function PromptComposer({
           </div>
         </div>
       )}
-      <label>
-        Arbeits-Prompt
-        <textarea
-          aria-label={
-            labelPrefix ? `${labelPrefix} Arbeits-Prompt` : "Arbeits-Prompt"
-          }
-          rows={12}
-          maxLength={24000}
-          value={state.text}
-          onChange={(e) => onChange(editComposer(state, e.target.value))}
-        />
-      </label>
-      <button onClick={() => onChange(resetComposer(state))}>
-        Auf Vorlage zurücksetzen
-      </button>
+      <details className="full-prompt" open={mode === "expert"}>
+        <summary>
+          Vollständigen Prompt ansehen
+          {mode === "expert" ? " und bearbeiten" : ""}
+        </summary>
+        <label>
+          Arbeits-Prompt
+          <textarea
+            aria-label={
+              labelPrefix ? `${labelPrefix} Arbeits-Prompt` : "Arbeits-Prompt"
+            }
+            readOnly={mode !== "expert"}
+            rows={8}
+            maxLength={labelPrefix ? 30000 : 24000}
+            value={state.text}
+            onChange={(e) => onChange(editComposer(state, e.target.value))}
+          />
+        </label>
+      </details>
+      {mode === "expert" && (
+        <button onClick={() => onChange(resetComposer(state))}>
+          Auf Vorlage zurücksetzen
+        </button>
+      )}
       <details>
         <summary>Automatische Basis ansehen</summary>
         <pre className="prompt-base">{state.pendingBase ?? state.base}</pre>

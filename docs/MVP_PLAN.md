@@ -18,7 +18,11 @@
 - Human review required before an asset is considered approved.
 - Never put original unreleased Ada Voss portraits into public git; user imports them locally.
 
-## Initial app navigation
+## Current navigation (UX-01)
+
+**Characters → Art Direction → Studio → Library → Motion**. Studio preserves the existing, separate master/expression operations. Library integrates comparison, review, cutout and exports for actual asset IDs. Prompt Builder defaults to structured automatic inputs and keeps history separate from the working draft. No project-format or image-processing migration is introduced. Motion follows Style Intelligence; neither is simulated in this change. See `docs/UX_01_NAVIGATION.md` and `docs/UX_01_VALIDATION.md` for evidence and limits.
+
+## Original planning navigation (historical)
 
 **Create** — import/generation provider; prompt, reference, image preview.
 **Characters** — character library, master versions/lock.

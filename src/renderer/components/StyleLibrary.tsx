@@ -19,7 +19,13 @@ export function StyleLibrary({
   busy,
   perform,
   onSnapshot,
+  selectedId,
+  requestSerial,
+  onDirtyChange,
 }: {
+  selectedId?: string;
+  requestSerial?: number;
+  onDirtyChange: (dirty: boolean) => void;
   snapshot: Snapshot;
   busy: boolean;
   perform: Perform;
@@ -32,12 +38,22 @@ export function StyleLibrary({
   );
   const [creating, setCreating] = useState(false),
     [revision, setRevision] = useState<number | undefined>();
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  function canDiscard() {
+    if (dirty && !window.confirm("Ungespeicherte Stilregeln verwerfen?"))
+      return false;
+    setDirty(false);
+    return true;
+  }
   useEffect(() => {
-    if (effective) {
-      setSelected(effective.id);
-      setRevision(undefined);
+    if (selectedId && selectedId !== selected) {
+      if (canDiscard()) {
+        setSelected(selectedId);
+        setRevision(undefined);
+      }
     }
-  }, [effective?.id]);
+  }, [selectedId, requestSerial]);
   const profile = p.artDirections.find((a) => a.id === selected) ?? effective;
   const historical =
     profile && revision !== undefined && revision !== profile.revision;
@@ -49,10 +65,11 @@ export function StyleLibrary({
   const ids = shown?.styleReferenceIds ?? [];
   function acceptSnapshot(saved: Snapshot) {
     onSnapshot(saved);
+    setDirty(false);
     setRevision(undefined);
   }
   function updateReferences(next: string[]) {
-    if (profile)
+    if (profile && canDiscard())
       void perform(
         () =>
           window.laceframe.command({
@@ -65,7 +82,7 @@ export function StyleLibrary({
       );
   }
   function importReference(file?: File) {
-    if (busy || !profile || historical || creating) return;
+    if (busy || !profile || historical || creating || !canDiscard()) return;
     void perform(
       async () => {
         if (file && file.size > MAX_STYLE_BYTES)
@@ -94,8 +111,8 @@ export function StyleLibrary({
     );
   }
   return (
-    <details className="panel style-library">
-      <summary>Art Direction · gemeinsamer Spielstil</summary>
+    <section className="panel style-library" aria-label="Stilbibliothek">
+      <h2>Art Direction · gemeinsamer Spielstil</h2>
       <p className="muted">
         Stilbilder bestimmen Rendering, Licht und Farbbehandlung. Gesicht,
         Haare, Kleidung und Persönlichkeit stammen ausschließlich vom
@@ -111,6 +128,7 @@ export function StyleLibrary({
               aria-label="Stilbibliothek Profil"
               value={profile?.id ?? ""}
               onChange={(e) => {
+                if (!canDiscard()) return;
                 setSelected(e.target.value);
                 setRevision(undefined);
                 setCreating(false);
@@ -128,7 +146,9 @@ export function StyleLibrary({
             <select
               aria-label="Stilrevision ansehen"
               value={revision ?? profile?.revision ?? ""}
-              onChange={(e) => setRevision(Number(e.target.value))}
+              onChange={(e) => {
+                if (canDiscard()) setRevision(Number(e.target.value));
+              }}
             >
               {p.artDirectionRevisions
                 .filter((r) => r.profileId === profile?.id)
@@ -152,6 +172,7 @@ export function StyleLibrary({
         </p>
       )}
       <form
+        onChange={() => setDirty(true)}
         key={creating ? "new" : `${profile?.id}/${shown?.revision}`}
         onSubmit={(e) => {
           e.preventDefault();
@@ -221,8 +242,8 @@ export function StyleLibrary({
               defaultValue={creating ? "" : (shown?.renderRules ?? "")}
             />
           </label>
-          <details>
-            <summary>Weitere Stilregeln</summary>
+          <div className="style-rules-grid">
+            <h3>Lighting · Color · Framing</h3>
             {(
               [
                 ["description", "Beschreibung"],
@@ -242,7 +263,7 @@ export function StyleLibrary({
                 />
               </label>
             ))}
-          </details>
+          </div>
           <button type="submit">
             {profile && !creating
               ? "Stilrevision speichern"
@@ -254,6 +275,7 @@ export function StyleLibrary({
         <div className="button-row">
           <button
             onClick={() => {
+              if (!canDiscard()) return;
               setCreating((v) => !v);
               setRevision(undefined);
             }}
@@ -376,6 +398,60 @@ export function StyleLibrary({
           )}
         </section>
       )}
-    </details>
+      <section className="style-assignments">
+        <h3>Charakterzuordnung & Projektstandard</h3>
+        <p>
+          Projektstandard:{" "}
+          {p.artDirections.find((s) => s.id === p.defaultArtDirectionId)
+            ?.name ?? "Keiner"}
+          . Entwürfe im Studio verwenden die aktuelle Revision; gespeicherte
+          Versuche behalten ihre Referenzen.
+        </p>
+        {p.characters.map((c) => (
+          <label key={c.id}>
+            {c.name}
+            <select
+              aria-label={`Stilzuordnung ${c.name}`}
+              value={
+                c.styleSelection?.mode === "master"
+                  ? "master"
+                  : c.styleSelection?.mode === "profile"
+                    ? `profile:${c.styleSelection.profileId}`
+                    : "project"
+              }
+              disabled={busy}
+              onChange={(e) =>
+                void perform(
+                  () =>
+                    window.laceframe.command({
+                      type: "setCharacterStyle",
+                      characterId: c.id,
+                      selection:
+                        e.target.value === "project"
+                          ? { mode: "project" }
+                          : e.target.value === "master"
+                            ? { mode: "master" }
+                            : {
+                                mode: "profile",
+                                profileId: e.target.value.slice(8),
+                              },
+                    }),
+                  onSnapshot,
+                  "Charakterstil gespeichert.",
+                )
+              }
+            >
+              <option value="project">Projektstandard</option>
+              <option value="master">Eigener Masterstil</option>
+              {p.artDirections.map((s) => (
+                <option key={s.id} value={`profile:${s.id}`}>
+                  {s.name} · R{s.revision}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </section>
+    </section>
   );
 }
