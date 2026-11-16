@@ -66,6 +66,7 @@ const { createHash } = require("node:crypto");
       pixels.data[i * 4 + 2] = 10;
       pixels.data[i * 4 + 3] = 255;
     }
+    pixels.data.set([190, 70, 30, 255], (16 * 32 + 12) * 4);
     const bytes = PNG.sync.write(pixels),
       originalHash = createHash("sha256").update(bytes).digest("hex");
     await page.evaluate(
@@ -115,6 +116,27 @@ const { createHash } = require("node:crypto");
         exact: true,
       }),
     ).toBeEnabled();
+    // A colored source must be visible immediately; a flat mask canvas cannot pass this regression.
+    const previewPixel = async (x, y) =>
+      editor
+        .locator("canvas")
+        .evaluate(
+          (c, { x, y }) => [
+            ...c.getContext("2d").getImageData(x, y, 1, 1).data,
+          ],
+          { x, y },
+        );
+    await expect(
+      editor.getByLabel("Maskenüberlagerung", { exact: true }),
+    ).not.toBeChecked();
+    expect(await previewPixel(12, 16)).toEqual([190, 70, 30, 255]);
+    await editor.getByLabel("Maskenüberlagerung", { exact: true }).check();
+    const tinted = await previewPixel(12, 16);
+    expect(tinted[3]).toBe(255);
+    expect(tinted[0]).toBeGreaterThan(tinted[1]);
+    expect(tinted).not.toEqual(await previewPixel(16, 16));
+    await editor.getByLabel("Maskenüberlagerung", { exact: true }).uncheck();
+    expect(await previewPixel(12, 16)).toEqual([190, 70, 30, 255]);
     await editor
       .getByLabel("Maskenname", { exact: true })
       .fill("Retained silhouette");
@@ -166,6 +188,9 @@ const { createHash } = require("node:crypto");
     );
     expect(cut.data[3]).toBe(0);
     expect([
+      ...cut.data.slice((16 * 32 + 12) * 4, (16 * 32 + 12) * 4 + 4),
+    ]).toEqual([190, 70, 30, 255]);
+    expect([
       ...cut.data.slice((16 * 32 + 16) * 4, (16 * 32 + 16) * 4 + 4),
     ]).toEqual([10, 10, 10, 255]);
     // Reload saved retention mask from the original, correct a soft edge, then save a new candidate.
@@ -188,6 +213,7 @@ const { createHash } = require("node:crypto");
     await editor
       .getByLabel("Maskenwerkzeug", { exact: true })
       .selectOption("paint");
+    await editor.getByLabel("Pinselgröße", { exact: true }).fill("3");
     await editor.getByLabel("Maskenwert", { exact: true }).fill("128");
     box = await editor.locator("canvas").boundingBox();
     await trace(0.15, 0.15, 0.2, 0.15);
@@ -234,6 +260,11 @@ const { createHash } = require("node:crypto");
     const exported = await fs.readFile(
       path.join(exports, "Black_Coat_Master_V2_32x32.png"),
     );
+    const exportedPixels = PNG.sync.read(exported);
+    expect([
+      ...exportedPixels.data.slice((16 * 32 + 12) * 4, (16 * 32 + 12) * 4 + 4),
+    ]).toEqual([190, 70, 30, 255]);
+    expect(exportedPixels.data[3]).toBe(0);
     expect(exported).toEqual(
       await fs.readFile(path.join(project, p.masters[1].file)),
     );
