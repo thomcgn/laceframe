@@ -19,3 +19,7 @@ artifacts/
 **/assets/identities/
 **/assets/master-candidates/
 **/laceframe.v2.pre-character-creation.backup.json
+
+**/assets/quality/
+**/assets/cutout-masks/
+**/laceframe.v2.pre-asset-quality.backup.json

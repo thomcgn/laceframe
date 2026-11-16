@@ -129,6 +129,7 @@ describe("deterministic RGBA8 compositing", () => {
         m,
         r,
         decodePixels(encodeMask(1, 1, new Uint8Array([128]))),
+        1,
       ).data,
     ]).toEqual([60, 70, 80, 128]);
     expect([...m.data]).toEqual([10, 20, 30, 0]);

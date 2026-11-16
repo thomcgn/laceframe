@@ -1,3 +1,4 @@
+import { AssetQuality } from "../components/AssetQuality";
 import { MaskEditor } from "../components/MaskEditor";
 import { MAX_MASK_PIXELS } from "../../shared/masking";
 import { createPortal } from "react-dom";
@@ -968,6 +969,15 @@ export function CreateView({
           candidate={asset}
           mask={maskOverlay ? activeMask : undefined}
         />
+        {asset && (
+          <AssetQuality
+            key={asset.id}
+            source={asset}
+            project={p}
+            onSnapshot={onSnapshot}
+            disabled={busy || running}
+          />
+        )}
         {!master && (
           <button onClick={onCharacters}>
             Freigegebenen Master importieren

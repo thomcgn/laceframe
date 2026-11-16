@@ -4,6 +4,8 @@
 
 **02E follow-up:** Character Creator / Photo-to-Master adds draft identities, explicit native master generation and manual Master V1 approval, preserving expressions/styles/masks. See `docs/CODEX_02E_VALIDATION.md` for actual current checks and limitations; the phase list below retains the original plan.
 
+**Asset quality follow-up:** decoded alpha evidence, manual immutable cutout, reviewed Master V2, alpha-aware Pixel Lock V2, separate resolution derivatives and actual PNG exports are documented in `docs/ASSET_QUALITY_VALIDATION.md`. No separate 02F implementation was available at the checked baseline.
+
 ## Product decisions
 
 - Standalone cross-platform app, not embedded in Ada Voss game.

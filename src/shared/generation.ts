@@ -1,3 +1,7 @@
+import {
+  TRANSPARENT_CHARACTER_INSTRUCTION,
+  VISUAL_STYLE_INSTRUCTION,
+} from "./asset-quality";
 import { z } from "zod";
 import { maskSelectionSchema } from "./masking";
 import { styleReferenceSchema } from "./style";
@@ -176,8 +180,8 @@ export function composePrompt(input: {
     `Attach the actual approved master image as the reference. A filename, ID or hash alone is NOT an image reference. Use the PROVIDED IMAGE of ${input.characterName}; do not invent or redesign the character.`,
     `Master V${master.version} | ID: ${master.id} | SHA-256: ${master.sha256}`,
     input.artDirection
-      ? `Preserve the original ${master.width} × ${master.height} pixel canvas, framing, camera, background and transparency. Apply the selected STYLE LOCK to rendering, lighting and color treatment only. Preserve the identity, hair, clothing and accessories of the identity master. Do not resample, crop, quantize or convert to a 64×64 sprite.`
-      : `Preserve the original ${master.width} × ${master.height} pixel canvas, framing, camera, art style, palette, background and transparency. Do not resample, crop, quantize or convert to a 64×64 sprite.`,
+      ? `Preserve the original ${master.width} × ${master.height} pixel canvas, framing, camera and existing transparent silhouette. Apply the selected STYLE LOCK to rendering, lighting and color treatment only. Preserve the identity, hair, clothing and accessories of the identity master. Do not resample, crop, quantize or convert to a 64×64 sprite.`
+      : `Preserve the original ${master.width} × ${master.height} pixel canvas, framing, camera, art style, palette and existing transparent silhouette. Do not resample, crop, quantize or convert to a 64×64 sprite.`,
     "Keep facial identity, hair, freckles/skin details, clothes and accessories unchanged. Change only the facial features needed for the requested expression. If an edit mask is provided, edit only inside it; no mask is supplied automatically. These instructions do not guarantee pixel or identity preservation: manual review is required.",
     `EMOTION: ${input.familyLabel} / ${variant.label} (${variant.slug}).`,
     input.expressionPerformance?.trim()
@@ -188,6 +192,8 @@ export function composePrompt(input: {
     input.intensity === undefined
       ? "INTENSITY: unspecified; do not assume a calibrated visual continuum."
       : `INTENSITY: ${input.intensity} (organizational guidance, not a calibrated visual continuum).`,
+    TRANSPARENT_CHARACTER_INSTRUCTION,
+    VISUAL_STYLE_INSTRUCTION,
     `VOCAL ACTION (independent of emotion): ${input.action}. ${input.action === "silent" ? "No speech or shouting; keep the mouth pose consistent with a silent expression." : input.action === "speaking" ? "Use a speaking mouth pose, without implying a different emotion or synthesizing animation." : "Use an open shouting mouth and tense jaw while preserving the selected emotion and character identity."}`,
     input.supplementaryInstructions.trim()
       ? `ADDITIONAL USER INSTRUCTIONS:\n${input.supplementaryInstructions.trim()}`

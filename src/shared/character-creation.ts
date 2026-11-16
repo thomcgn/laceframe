@@ -1,3 +1,8 @@
+import {
+  TRANSPARENT_CHARACTER_INSTRUCTION,
+  VISUAL_STYLE_INSTRUCTION,
+  resolutionProfileSchema,
+} from "./asset-quality";
 import { z } from "zod";
 import { styleReferenceSchema } from "./style";
 import { generationExecutionSchema } from "./generation";
@@ -10,13 +15,22 @@ export const compositionSchema = z
     profile: z.string().trim().min(1).max(120),
     targetWidth: z.number().int().min(64).max(4096),
     targetHeight: z.number().int().min(64).max(4096),
+    targetResolution: resolutionProfileSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (c) =>
+      !c.targetResolution ||
+      (c.targetResolution.width === c.targetWidth &&
+        c.targetResolution.height === c.targetHeight),
+    "Resolution profile and target dimensions differ",
+  );
+export type Composition = z.infer<typeof compositionSchema>;
 export const DEFAULT_COMPOSITION = {
   pose: "Neutral calm expression, closed relaxed mouth, look at camera, stable head, no speech, shouting or dynamic gestures.",
   framing:
     "Head and upper body, both shoulders completely inside frame, stable centered dialogue portrait.",
-  background: "Plain unobtrusive background",
+  background: "Genuinely transparent canvas with alpha; no scenery or backdrop",
   profile: "portrait-artistic",
   targetWidth: 1024,
   targetHeight: 1024,
@@ -113,7 +127,10 @@ export function composeCharacterPrompt(
       ? `STYLE REFERENCE — ${style.name} / R${style.revision}. Rendering: ${style.renderRules}. Light: ${style.lightingRules ?? "restrained"}. Color: ${style.colorRules ?? "follow rendering style"}. Framing: ${style.framingRules ?? "follow composition"}. ${d.styleReferences.length ? `Images ${d.identityReferences.length + 1}–${d.identityReferences.length + d.styleReferences.length} are STYLE ONLY: ${d.styleReferences.map((r) => `${r.id} SHA-256 ${r.sha256}`).join("; ")}.` : "Text style only; no style image is supplied."} Borrow contours, pixel/paint clusters, detail, shading and color dramaturgy ONLY. NEVER transfer faces, hair, clothing, accessories, body identity or personality from the style references.`
       : "STYLE: Follow the identity illustration's rendering, or a restrained illustrated treatment for photos; no other character is a reference.",
     `OUTFIT DESCRIPTION — ${d.outfit}. Use this outfit independently of clothes in identity photos or style references. Do not copy another character's wardrobe.`,
-    `MASTER COMPOSITION — Pose: ${d.composition.pose}\nFraming: ${d.composition.framing}\nBackground: ${d.composition.background}\nAsset profile: ${d.composition.profile}\nRequested canvas: ${d.composition.targetWidth} × ${d.composition.targetHeight} pixels. This is a target, not a guaranteed output size. Do not force a 64×64 portrait conversion.`,
+    `MASTER COMPOSITION — Pose: ${d.composition.pose}\nFraming: ${d.composition.framing}\nBackground: ${d.composition.background}\nAsset profile: ${d.composition.profile}\nResolution profile: ${d.composition.targetResolution?.name ?? "custom native target"}\nRequested canvas: ${d.composition.targetWidth} × ${d.composition.targetHeight} pixels. This is a target, not a guaranteed output size. Do not force a 64×64 portrait conversion.`,
+    TRANSPARENT_CHARACTER_INSTRUCTION,
+    VISUAL_STYLE_INSTRUCTION,
+    resolutionProfileSchema,
     "Create exactly ONE new portrait. Neutral expression, no speaking/shouting mouth or dynamic gestures. Preserve reference files unchanged. Identity fidelity and neutrality require manual human review; do not claim identity approval or pixel-perfect preservation.",
   ].join("\n\n");
 }
