@@ -70,3 +70,13 @@ Initial checks found one historical unit assertion expecting V1 blending as the 
 - Resolution presets are local and editable per derivative, with immutable snapshots, not a separately implemented 02F reusable project-profile manager. No implicit 64×64 conversion, color quantizer, pixel-art synthesizer or automatic registration.
 - Local bounded PNG work is synchronous and can occupy main for a large image. It is not a cancellable AI job; no automatic retries or background processing are started.
 - Linux x64 tested. Windows/macOS packaging/signing and other Codex versions/accounts remain unvalidated. No motion/rigging/lip-sync, semantic style extraction or paid provider was added.
+
+## Follow-up: cutout source image visibility
+
+2026-11-16, `fix/cutout-image-preview`, based on merged PR #12 (`04ce37f`). A user reported seeing only the mask and being unable to proceed to an image export. The source preview was actually loaded/decoded, but cutout mode hid the source `<img>` and defaulted to a canvas containing only the Sage mask. The old flat-black fixture and explicit overlay-off step did not detect this usability failure.
+
+Cutout mode now opens with the actual image and its current alpha weights visible. Switching the optional mask overlay on tints the retained source pixels instead of replacing them with a mask-only canvas; image details and actual alpha remain visible in both modes. Ordinary expression-mask behavior is retained. No import, export, project schema or immutable source bytes were changed.
+
+The packaged quality smoke now includes a distinct colored source pixel. It asserts the original RGBA immediately on opening, confirms the tinted view still contains image detail, toggles back to exact source color, erases/corrects the mask, reads the saved candidate PNG and checks the final exported PNG for the same source color and genuine removed-background alpha. The corrective brush is explicitly 3 px so its intentional gray-alpha restoration does not reach the corner checked by the export assertion. Master approval, JSON export and restart are still exercised through actual UI/IPC/storage.
+
+Actually rerun: `npm run typecheck`, `npm run lint`, `npm test` (**185 passed / 9 files**), `npm run build`, `npm run test:desktop` (manual + enhanced quality smoke), `npm run test:desktop:native` (native/mask + Creator smoke), `git diff --check` — all passed. Synthetic assets and the labelled native protocol fixture only; no live image generation. The user's staged `.vscode/settings.json` remains unchanged and excluded.

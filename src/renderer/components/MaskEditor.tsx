@@ -46,7 +46,7 @@ export function MaskEditor({
     [tool, setTool] = useState("paint");
   const [diameter, setDiameter] = useState(24),
     [strength, setStrength] = useState(255),
-    [overlay, setOverlay] = useState(true);
+    [overlay, setOverlay] = useState(!cutout);
   const [zoom, setZoom] = useState(1),
     [pan, setPan] = useState({ x: 0, y: 0 });
   const [size, setSize] = useState({ width: 1, height: 1 });
@@ -68,10 +68,19 @@ export function MaskEditor({
     const ctx = canvas.current?.getContext("2d");
     if (!ctx) return;
     const image = ctx.createImageData(master.width, master.height);
-    if (cutout && !overlay && originalPixels.current) {
+    if (cutout && originalPixels.current) {
       image.data.set(originalPixels.current);
       weights.forEach((w, i) => {
         image.data[i * 4 + 3] = Math.round((image.data[i * 4 + 3] * w) / 255);
+        // Tint the actual retained image; never replace it with a mask-only canvas.
+        if (overlay) {
+          const tint = 0.35;
+          for (let channel = 0; channel < 3; channel++)
+            image.data[i * 4 + channel] = Math.round(
+              image.data[i * 4 + channel] * (1 - tint) +
+                [143, 173, 166][channel] * tint,
+            );
+        }
       });
       ctx.putImageData(image, 0, 0);
       return;
@@ -431,7 +440,7 @@ export function MaskEditor({
             Rad/Trackpad: verschieben · Strg+Rad: Zoom · Alt+Ziehen: Pan ·
             Strg+Z / Strg+Umschalt+Z.{" "}
             {cutout
-              ? "Überlagerung ausschalten für die echte Alpha-Vorschau. Sage zeigt erhaltene Pixel."
+              ? "Das Bild wird mit echter Alpha-Transparenz angezeigt. Die optionale Sage-Tönung markiert erhaltene Pixel."
               : "Sage zeigt die erlaubten Pixel."}
           </small>
         </fieldset>
