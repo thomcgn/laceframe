@@ -11,3 +11,6 @@ artifacts/
 **/laceframe.json
 **/assets/originals/
 **/assets/candidates/
+
+**/assets/styles/
+**/laceframe.*.backup.json

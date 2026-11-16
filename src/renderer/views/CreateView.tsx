@@ -6,6 +6,8 @@ import type {
   StagedImage,
   VocalAction,
 } from "../../shared/domain";
+import { effectiveStyle, referencesForStyle } from "../../shared/domain";
+import { StyleLibrary } from "../components/StyleLibrary";
 import { MAX_IMAGE_BYTES } from "../../shared/domain";
 import type { Result } from "../../shared/bridge";
 import {
@@ -73,13 +75,11 @@ export function CreateView({
     latest?.variantId ?? variants[0]?.id ?? "",
   );
   const variant = variants.find((v) => v.id === variantId) ?? variants[0];
-  const artDirection = p.artDirections.find(
-    (a) => a.id === p.defaultArtDirectionId,
-  );
+  const artDirection = effectiveStyle(p, character?.id);
+  const styleReferences = referencesForStyle(p, artDirection);
   const personalPerformance = p.expressionPerformances.find(
     (e) => e.characterId === character?.id && e.variantId === variant?.id,
   );
-  const [creatingStyle, setCreatingStyle] = useState(false);
   const [action, setAction] = useState<VocalAction>(
     latest?.action ?? variant?.suggestedAction ?? "silent",
   );
@@ -97,6 +97,7 @@ export function CreateView({
           variant,
           familyLabel: family.label,
           artDirection,
+          styleReferences,
           expressionPerformance: personalPerformance?.direction,
           action,
           intensity,
@@ -239,6 +240,7 @@ export function CreateView({
           masterSha256: master.sha256,
           variantId: variant.id,
           artDirectionId: artDirection?.id,
+          styleReferences,
           artDirectionRevision: artDirection?.revision,
           expressionPerformance: personalPerformance?.direction,
           action,
@@ -255,7 +257,10 @@ export function CreateView({
         codex.state !== "running")) &&
       draft &&
       generationDraftSchema.safeParse(draft).success &&
-      composer.pendingBase === undefined,
+      composer.pendingBase === undefined &&
+      (providerId !== "codex-native" ||
+        styleReferences.length === 0 ||
+        codex.multipleReferences === true),
   );
   const matches =
     active && draft ? sameDraft(draftFromAttempt(active), draft) : false;
@@ -620,10 +625,10 @@ export function CreateView({
         </label>
         {p.artDirections.length > 0 && (
           <label>
-            Spielstil
+            Projektstil
             <select
               aria-label="Create Art Direction"
-              value={artDirection?.id ?? ""}
+              value={p.defaultArtDirectionId ?? ""}
               onChange={(e) =>
                 command(
                   { type: "setArtDirection", id: e.target.value },
@@ -631,7 +636,7 @@ export function CreateView({
                 )
               }
             >
-              {!artDirection && (
+              {!p.defaultArtDirectionId && (
                 <option value="" disabled>
                   Spielstil wählen
                 </option>
@@ -658,6 +663,69 @@ export function CreateView({
             <option value="codex-native">Codex · ImageGen</option>
           </select>
         </label>
+      </div>
+      <div className="reference-roles">
+        <span>Aktiver Stil: {artDirection?.name ?? "Eigener Masterstil"}</span>
+        <span>Identität: eigener Master V{master?.version ?? "—"}</span>
+        <span>
+          Stilbilder: {styleReferences.length} · ausschließlich Darstellung
+        </span>
+        <span>
+          Ausdruck:{" "}
+          {personalPerformance ? "persönliches Profil" : "gemeinsame Variante"}
+        </span>
+        {character && (
+          <label>
+            Darstellungsstil dieser Figur
+            <select
+              aria-label="Charakter Stilzuordnung"
+              value={
+                character.styleSelection?.mode === "master"
+                  ? "master"
+                  : character.styleSelection?.mode === "profile"
+                    ? `profile:${character.styleSelection.profileId}`
+                    : "project"
+              }
+              onChange={(e) =>
+                command(
+                  {
+                    type: "setCharacterStyle",
+                    characterId: character.id,
+                    selection:
+                      e.target.value === "project"
+                        ? { mode: "project" }
+                        : e.target.value === "master"
+                          ? { mode: "master" }
+                          : {
+                              mode: "profile",
+                              profileId: e.target.value.slice(8),
+                            },
+                  },
+                  "Stilzuordnung gespeichert.",
+                )
+              }
+            >
+              <option value="project">Projektstandard</option>
+              <option value="master">
+                Eigener Masterstil · keine Stilreferenzen
+              </option>
+              {p.artDirections.map((a) => (
+                <option key={a.id} value={`profile:${a.id}`}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {providerId === "codex-native" && (
+          <small>
+            {styleReferences.length
+              ? codex.multipleReferences
+                ? "Codex erhält: Bild 1 = Identitäts-Master, danach die Stilbilder der gewählten Revision. Keine Übernahme von Gesicht oder Outfit."
+                : "Mehrfachreferenzen nicht bestätigt. Auftrag blockiert; Textprofil ohne Stilbilder oder eigenen Masterstil wählen."
+              : "Codex erhält nur den Identitäts-Master."}
+          </small>
+        )}
       </div>
       <section
         className={`create-result ${dragging ? "drag-active" : ""}`}
@@ -761,95 +829,12 @@ export function CreateView({
         )}
       </section>
       <div className="create-drawers">
-        <details className="panel">
-          <summary>Art Direction · gemeinsamer Spielstil</summary>
-          <p className="muted">
-            Stilregeln gelten für die Darstellung, nicht für Gesicht, Kleidung
-            oder Persönlichkeit. Der Codex-Provider erhält diese Regeln als
-            Text; zusätzliche Stilbilder werden noch nicht übertragen.
-          </p>
-          <form
-            key={
-              creatingStyle
-                ? "new-style"
-                : `${artDirection?.id ?? "new-style"}/${artDirection?.revision ?? 0}`
-            }
-            onSubmit={(event) => {
-              event.preventDefault();
-              const data = new FormData(event.currentTarget);
-              const name = String(data.get("name") ?? "").trim();
-              const renderRules = String(data.get("renderRules") ?? "").trim();
-              if (artDirection && !creatingStyle) {
-                command(
-                  {
-                    type: "updateArtDirection",
-                    id: artDirection.id,
-                    name,
-                    renderRules,
-                  },
-                  "Art Direction aktualisiert.",
-                );
-              } else {
-                void perform(
-                  async () => {
-                    const saved = await unwrap(
-                      window.laceframe.command({
-                        type: "addArtDirection",
-                        name,
-                        renderRules,
-                      }),
-                    );
-                    onSnapshot(saved);
-                    setCreatingStyle(false);
-                    return window.laceframe.command({
-                      type: "setArtDirection",
-                      id: saved.project.artDirections.at(-1)!.id,
-                    });
-                  },
-                  onSnapshot,
-                  "Art Direction angelegt und ausgewählt.",
-                );
-              }
-            }}
-          >
-            <label>
-              Stilname
-              <input
-                name="name"
-                required
-                maxLength={120}
-                defaultValue={creatingStyle ? "" : (artDirection?.name ?? "")}
-                placeholder="Ada Voss · Illustrated Noir"
-              />
-            </label>
-            <label>
-              Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)
-              <textarea
-                name="renderRules"
-                aria-label="Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)"
-                required
-                maxLength={8000}
-                rows={3}
-                defaultValue={
-                  creatingStyle ? "" : (artDirection?.renderRules ?? "")
-                }
-                placeholder="Illustrative Pixelcluster, markante Konturen, gestufte Schattierung …"
-              />
-            </label>
-            <button type="submit">
-              {artDirection && !creatingStyle
-                ? "Stilrevision speichern"
-                : "Stil anlegen und auswählen"}
-            </button>
-          </form>
-          {artDirection && (
-            <button onClick={() => setCreatingStyle((value) => !value)}>
-              {creatingStyle
-                ? "Profilanlage abbrechen"
-                : "Weiteren Stil anlegen"}
-            </button>
-          )}
-        </details>
+        <StyleLibrary
+          snapshot={snapshot}
+          busy={busy || running}
+          perform={perform}
+          onSnapshot={onSnapshot}
+        />
         {character && variant && (
           <details className="panel">
             <summary>

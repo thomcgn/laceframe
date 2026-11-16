@@ -11,11 +11,10 @@ import {
 } from "electron";
 import type { IpcMainInvokeEvent } from "electron";
 import path from "node:path";
-import { readFile, stat } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { commandSchema, idSchema, MAX_IMAGE_BYTES } from "../shared/domain";
-import { ProjectService } from "./project-service";
+import { ProjectService, readLimited } from "./project-service";
 import { validateExternalURL } from "../shared/generation";
 import { chatgptPlanProvider } from "./services/providers/chatgptPlan";
 import { manualImportProvider } from "./services/providers/manualImport";
@@ -165,10 +164,10 @@ function registerIPC() {
     });
     if (selected.canceled) return null;
     const file = selected.filePaths[0];
-    const info = await stat(file);
-    if (!info.isFile() || info.size > MAX_IMAGE_BYTES)
-      throw new Error("Nur Bilder bis 32 MiB sind erlaubt.");
-    return service.stage(await readFile(file), path.basename(file));
+    return service.stage(
+      await readLimited(file, MAX_IMAGE_BYTES),
+      path.basename(file),
+    );
   });
   handle("image:stage", (input) => {
     const data = z

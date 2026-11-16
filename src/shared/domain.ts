@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  styleRules,
+  revisionSchema,
+  styleSelectionSchema,
+  MAX_STYLE_PIXELS,
+} from "./style";
 import { attemptSchema, generationDraftSchema } from "./generation";
 
 export const idSchema = z.uuid();
@@ -63,9 +69,7 @@ export const artDirectionSchema = z
     name: label,
     revision: z.number().int().positive(),
     renderRules: z.string().trim().min(1).max(8000),
-    lightingRules: z.string().max(4000).optional(),
-    colorRules: z.string().max(4000).optional(),
-    framingRules: z.string().max(4000).optional(),
+    ...styleRules,
   })
   .strict();
 export const expressionPerformanceSchema = z
@@ -92,6 +96,7 @@ const projectObject = z
             // Open profile identifier; this slice creates Portrait Artistic by default.
             profile: label,
             masterId: idSchema.optional(),
+            styleSelection: styleSelectionSchema.optional(),
           })
           .strict(),
       )
@@ -103,6 +108,33 @@ const projectObject = z
     attempts: z.array(attemptSchema).max(10000),
     artDirections: z.array(artDirectionSchema).max(100).default([]),
     defaultArtDirectionId: idSchema.optional(),
+    visualStyleVersion: z.literal(1).optional(),
+    styleAssets: z
+      .array(
+        z
+          .object({ ...imageFields, name: label, createdAt: z.iso.datetime() })
+          .strict()
+          .refine(
+            (a) => a.width * a.height <= MAX_STYLE_PIXELS,
+            "Style image exceeds 16 megapixels",
+          ),
+      )
+      .max(128)
+      .default([]),
+    artDirectionRevisions: z.array(revisionSchema).max(10000).default([]),
+    outfits: z
+      .array(
+        z
+          .object({
+            id: idSchema,
+            characterId: idSchema,
+            name: label,
+            notes: z.string().max(8000),
+          })
+          .strict(),
+      )
+      .max(1000)
+      .default([]),
     expressionPerformances: z
       .array(expressionPerformanceSchema)
       .max(10000)
@@ -122,6 +154,8 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       ...p.attempts,
       ...p.attempts.map((a) => a.promptRevision),
       ...p.artDirections,
+      ...p.styleAssets,
+      ...p.outfits,
     ].map((x) => x.id),
   ];
   if (new Set(allIds).size !== allIds.length) fail("Duplicate IDs");
@@ -166,6 +200,52 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       !p.variants.some((v) => v.id === e.variantId)
     )
       fail("Unknown character expression performance reference");
+
+  for (const c of p.characters)
+    if (
+      c.styleSelection?.mode === "profile" &&
+      !p.artDirections.some(
+        (a) => a.id === (c.styleSelection as { profileId: string }).profileId,
+      )
+    )
+      fail("Unknown character style");
+  for (const o of p.outfits)
+    if (!p.characters.some((c) => c.id === o.characterId))
+      fail("Unknown outfit character");
+  for (const a of p.styleAssets)
+    if (a.file !== assetFile("styles", a.sha256, a.format))
+      fail("Unsafe style path");
+  const validateStyleRefs = (ids: string[] = []) => {
+    if (
+      new Set(ids).size !== ids.length ||
+      ids.some((id) => !p.styleAssets.some((a) => a.id === id))
+    )
+      fail("Invalid style references");
+  };
+  for (const a of p.artDirections) validateStyleRefs(a.styleReferenceIds);
+  const keys = p.artDirectionRevisions.map(
+    (r) => `${r.profileId}/${r.revision}`,
+  );
+  if (new Set(keys).size !== keys.length) fail("Duplicate style revision");
+  for (const r of p.artDirectionRevisions) {
+    const current = p.artDirections.find((a) => a.id === r.profileId);
+    if (!current || r.revision > current.revision)
+      fail("Unknown style revision");
+    validateStyleRefs(r.styleReferenceIds);
+  }
+  if (p.visualStyleVersion)
+    for (const a of p.artDirections) {
+      const { id, ...fields } = a;
+      const current = p.artDirectionRevisions.find(
+        (r) => r.profileId === id && r.revision === a.revision,
+      );
+      if (
+        !current ||
+        JSON.stringify(revisionSchema.parse({ ...fields, profileId: id })) !==
+          JSON.stringify(revisionSchema.parse(current))
+      )
+        fail("Current style revision mismatch");
+    }
   for (const v of p.variants)
     if (!p.families.some((f) => f.id === v.familyId))
       fail("Unknown variant family");
@@ -193,6 +273,32 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
         (!style || attempt.artDirectionRevision! > style.revision))
     )
       fail("Invalid attempt art direction reference");
+
+    if (attempt.styleReferences !== undefined) {
+      const refs = attempt.styleReferences;
+      if (
+        new Set(refs.map((r) => r.id)).size !== refs.length ||
+        refs.some(
+          (r) =>
+            !p.styleAssets.some((a) => a.id === r.id && a.sha256 === r.sha256),
+        )
+      )
+        fail("Invalid attempt style provenance");
+      const revision = p.artDirectionRevisions.find(
+        (r) =>
+          r.profileId === attempt.artDirectionId &&
+          r.revision === attempt.artDirectionRevision,
+      );
+      if (
+        attempt.artDirectionId &&
+        (!revision ||
+          JSON.stringify(revision.styleReferenceIds ?? []) !==
+            JSON.stringify(refs.map((r) => r.id)))
+      )
+        fail("Invalid attempt style revision");
+      if (!attempt.artDirectionId && refs.length)
+        fail("Unlinked style references");
+    }
     if (
       attempt.execution?.status === "completed" &&
       !p.assets.some((a) => a.attemptId === attempt.id)
@@ -240,13 +346,25 @@ export function parseProject(input: unknown) {
     "schemaVersion" in input &&
     input.schemaVersion === 1
   ) {
-    return projectSchema.parse({
-      ...legacyProjectSchema.parse(input),
-      schemaVersion: 2,
-      attempts: [],
-    });
+    return migrateVisualStyle(
+      projectSchema.parse({
+        ...legacyProjectSchema.parse(input),
+        schemaVersion: 2,
+        attempts: [],
+      }),
+    );
   }
-  return projectSchema.parse(input);
+  return migrateVisualStyle(projectSchema.parse(input));
+}
+function migrateVisualStyle(p: z.infer<typeof projectSchema>) {
+  if (!p.visualStyleVersion) {
+    p.visualStyleVersion = 1;
+    for (const profile of p.artDirections) {
+      const { id, ...fields } = profile;
+      p.artDirectionRevisions.push({ profileId: id, ...fields });
+    }
+  }
+  return projectSchema.parse(p);
 }
 export type Project = z.infer<typeof projectSchema>;
 export type ArtDirection = z.infer<typeof artDirectionSchema>;
@@ -268,7 +386,7 @@ export type StagedImage = {
 };
 export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 export const assetFile = (
-  kind: "originals" | "candidates",
+  kind: "originals" | "candidates" | "styles",
   hash: string,
   format: "png" | "webp",
 ) => `assets/${kind}/${hash}.${format}`;
@@ -289,6 +407,7 @@ export const commandSchema = z.discriminatedUnion("type", [
       type: z.literal("addArtDirection"),
       name: label,
       renderRules: z.string().trim().min(1).max(8000),
+      ...styleRules,
     })
     .strict(),
   z
@@ -297,6 +416,28 @@ export const commandSchema = z.discriminatedUnion("type", [
       id: idSchema,
       name: label,
       renderRules: z.string().trim().min(1).max(8000),
+      ...styleRules,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("importStyleReference"),
+      profileId: idSchema,
+      token: idSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("setStyleReferences"),
+      profileId: idSchema,
+      ids: z.array(idSchema).max(6),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("setCharacterStyle"),
+      characterId: idSchema,
+      selection: styleSelectionSchema,
     })
     .strict(),
   z.object({ type: z.literal("setArtDirection"), id: idSchema }).strict(),
@@ -360,4 +501,21 @@ export function review(
       "Bereits geprüft. Für eine neue Prüfung das Bild erneut importieren.",
     );
   return { ...asset, status, reviewedAt: new Date().toISOString() };
+}
+
+export function effectiveStyle(p: Project, characterId?: string) {
+  const choice = p.characters.find((c) => c.id === characterId)?.styleSelection;
+  const id =
+    choice?.mode === "master"
+      ? undefined
+      : choice?.mode === "profile"
+        ? choice.profileId
+        : p.defaultArtDirectionId;
+  return p.artDirections.find((a) => a.id === id);
+}
+export function referencesForStyle(p: Project, style?: ArtDirection) {
+  return (style?.styleReferenceIds ?? []).map((id) => {
+    const a = p.styleAssets.find((a) => a.id === id)!;
+    return { id: a.id, sha256: a.sha256 };
+  });
 }

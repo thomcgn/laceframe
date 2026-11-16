@@ -880,3 +880,47 @@ footer span {
     flex-wrap: wrap;
   }
 }
+
+.reference-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  font-size: 11px;
+  color: var(--sage);
+  margin: 6px 0;
+}
+.reference-roles label {
+  margin: 0;
+  max-width: 280px;
+}
+.reference-roles small {
+  width: 100%;
+}
+.style-reference-drop {
+  border: 1px dashed #526273;
+  border-radius: 7px;
+  padding: 8px;
+  margin-top: 8px;
+}
+.style-thumbnails {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+.style-thumb {
+  min-width: 0;
+}
+.style-thumb .preview {
+  height: 100px;
+  min-height: 0;
+}
+.style-thumb figure {
+  margin: 0;
+}
+.style-thumb small {
+  overflow-wrap: anywhere;
+}
+.style-library .button-row {
+  margin: 6px 0;
+}
