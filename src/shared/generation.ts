@@ -141,7 +141,13 @@ export function composePrompt(input: {
   master: Master;
   familyLabel: string;
   variant: Variant;
-  artDirection?: { name: string; renderRules: string; lightingRules?: string; colorRules?: string; framingRules?: string };
+  artDirection?: {
+    name: string;
+    renderRules: string;
+    lightingRules?: string;
+    colorRules?: string;
+    framingRules?: string;
+  };
   expressionPerformance?: string;
   action: VocalAction;
   intensity?: number;
@@ -178,6 +184,7 @@ export type ComposerState = {
   base: string;
   text: string;
   edited: boolean;
+  saved?: boolean;
   pendingBase?: string;
 };
 export const newComposer = (base: string): ComposerState => ({
@@ -190,7 +197,9 @@ export function updateComposer(
   base: string,
 ): ComposerState {
   if (base === state.base) return { ...state, pendingBase: undefined };
-  return state.edited ? { ...state, pendingBase: base } : newComposer(base);
+  return state.edited || state.saved
+    ? { ...state, pendingBase: base }
+    : newComposer(base);
 }
 export const editComposer = (
   state: ComposerState,

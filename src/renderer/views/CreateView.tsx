@@ -79,6 +79,7 @@ export function CreateView({
   const personalPerformance = p.expressionPerformances.find(
     (e) => e.characterId === character?.id && e.variantId === variant?.id,
   );
+  const [creatingStyle, setCreatingStyle] = useState(false);
   const [action, setAction] = useState<VocalAction>(
     latest?.action ?? variant?.suggestedAction ?? "silent",
   );
@@ -109,10 +110,14 @@ export function CreateView({
           text: latest.promptRevision.prompt,
           edited:
             latest.promptRevision.prompt !== latest.promptRevision.basePrompt,
+          saved: true,
         }
       : newComposer(base),
   );
-  useEffect(() => setComposer((old) => updateComposer(old, base)), [base]);
+  useEffect(
+    () => setComposer((old) => updateComposer(old, base)),
+    [base, composer.base],
+  );
   const [activeId, setActiveId] = useState(latest?.id ?? "");
   const active = attempts.find((a) => a.id === activeId);
   const asset = active
@@ -221,6 +226,7 @@ export function CreateView({
       (value) => {
         setCodex(value);
         setActiveId(value.attemptId ?? "");
+        setComposer((old) => ({ ...old, saved: true }));
         onRunningChange(value.state === "running");
       },
     );
@@ -288,6 +294,7 @@ export function CreateView({
       window.laceframe.command({ type: "prepareAttempt", draft }),
     );
     onSnapshot(saved);
+    setComposer((old) => ({ ...old, saved: true }));
     const attempt = saved.project.attempts.at(-1)!;
     setActiveId(attempt.id);
     return attempt;
@@ -389,7 +396,9 @@ export function CreateView({
     setComposer({
       base: attempt.promptRevision.basePrompt,
       text: attempt.promptRevision.prompt,
-      edited: true,
+      edited:
+        attempt.promptRevision.prompt !== attempt.promptRevision.basePrompt,
+      saved: true,
     });
     setReplace(null);
   }
@@ -511,7 +520,9 @@ export function CreateView({
           <button onClick={onCharacters}>Zu Characters</button>
         </div>
       )}
-      <div className="create-header">
+      <div
+        className={`create-header${p.artDirections.length ? " has-style" : ""}`}
+      >
         <label>
           Figur
           <select
@@ -620,6 +631,11 @@ export function CreateView({
                 )
               }
             >
+              {!artDirection && (
+                <option value="" disabled>
+                  Spielstil wählen
+                </option>
+              )}
               {p.artDirections.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name} · V{a.revision}
@@ -753,64 +769,122 @@ export function CreateView({
             Text; zusätzliche Stilbilder werden noch nicht übertragen.
           </p>
           <form
-            key={artDirection?.id ?? "new-style"}
+            key={
+              creatingStyle
+                ? "new-style"
+                : `${artDirection?.id ?? "new-style"}/${artDirection?.revision ?? 0}`
+            }
             onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
               const name = String(data.get("name") ?? "").trim();
               const renderRules = String(data.get("renderRules") ?? "").trim();
-              if (artDirection) {
+              if (artDirection && !creatingStyle) {
                 command(
-                  { type: "updateArtDirection", id: artDirection.id, name, renderRules },
+                  {
+                    type: "updateArtDirection",
+                    id: artDirection.id,
+                    name,
+                    renderRules,
+                  },
                   "Art Direction aktualisiert.",
                 );
               } else {
-                command(
-                  { type: "addArtDirection", name, renderRules },
-                  "Art Direction angelegt.",
+                void perform(
+                  async () => {
+                    const saved = await unwrap(
+                      window.laceframe.command({
+                        type: "addArtDirection",
+                        name,
+                        renderRules,
+                      }),
+                    );
+                    onSnapshot(saved);
+                    setCreatingStyle(false);
+                    return window.laceframe.command({
+                      type: "setArtDirection",
+                      id: saved.project.artDirections.at(-1)!.id,
+                    });
+                  },
+                  onSnapshot,
+                  "Art Direction angelegt und ausgewählt.",
                 );
               }
             }}
           >
             <label>
               Stilname
-              <input name="name" required maxLength={120}
-                defaultValue={artDirection?.name ?? ""} placeholder="Ada Voss · Illustrated Noir" />
+              <input
+                name="name"
+                required
+                maxLength={120}
+                defaultValue={creatingStyle ? "" : (artDirection?.name ?? "")}
+                placeholder="Ada Voss · Illustrated Noir"
+              />
             </label>
             <label>
               Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)
-              <textarea name="renderRules" required maxLength={8000} rows={3}
-                defaultValue={artDirection?.renderRules ?? ""}
-                placeholder="Illustrative Pixelcluster, markante Konturen, gestufte Schattierung …" />
+              <textarea
+                name="renderRules"
+                aria-label="Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)"
+                required
+                maxLength={8000}
+                rows={3}
+                defaultValue={
+                  creatingStyle ? "" : (artDirection?.renderRules ?? "")
+                }
+                placeholder="Illustrative Pixelcluster, markante Konturen, gestufte Schattierung …"
+              />
             </label>
-            <button type="submit">{artDirection ? "Stilrevision speichern" : "Stil anlegen"}</button>
+            <button type="submit">
+              {artDirection && !creatingStyle
+                ? "Stilrevision speichern"
+                : "Stil anlegen und auswählen"}
+            </button>
           </form>
+          {artDirection && (
+            <button onClick={() => setCreatingStyle((value) => !value)}>
+              {creatingStyle
+                ? "Profilanlage abbrechen"
+                : "Weiteren Stil anlegen"}
+            </button>
+          )}
         </details>
         {character && variant && (
           <details className="panel">
-            <summary>Expression Identity · {character.name} / {variant.label}</summary>
+            <summary>
+              Expression Identity · {character.name} / {variant.label}
+            </summary>
             <p className="muted">
-              Nur für diese Figur und diese Emotionsvariante. Leer lassen,
-              um die globale Variante zu verwenden.
+              Nur für diese Figur und diese Emotionsvariante. Leer lassen, um
+              die globale Variante zu verwenden.
             </p>
             <form
               key={`${character.id}/${variant.id}/${personalPerformance?.direction ?? ""}`}
               onSubmit={(event) => {
                 event.preventDefault();
                 const data = new FormData(event.currentTarget);
-                command({
-                  type: "setExpressionPerformance",
-                  characterId: character.id,
-                  variantId: variant.id,
-                  direction: String(data.get("direction") ?? ""),
-                }, "Persönlicher Emotionsausdruck gespeichert.");
+                command(
+                  {
+                    type: "setExpressionPerformance",
+                    characterId: character.id,
+                    variantId: variant.id,
+                    direction: String(data.get("direction") ?? ""),
+                  },
+                  "Persönlicher Emotionsausdruck gespeichert.",
+                );
               }}
             >
               <label>
                 Persönlicher Ausdruck
-                <textarea name="direction" rows={3} maxLength={8000}
+                <textarea
+                  name="direction"
+                  aria-label="Persönlicher Ausdruck"
+                  rows={3}
+                  maxLength={8000}
                   defaultValue={personalPerformance?.direction ?? ""}
-                  placeholder="Wie zeigt diese Figur Wut, Verzweiflung oder Freude?" />
+                  placeholder="Wie zeigt diese Figur Wut, Verzweiflung oder Freude?"
+                />
               </label>
               <button type="submit">Persönlichen Ausdruck speichern</button>
             </form>

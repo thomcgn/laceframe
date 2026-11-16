@@ -109,6 +109,53 @@ const path = require("node:path");
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Codex bereit");
+    // Exercise actual style/profile UI before the explicit fixture generation.
+    await page
+      .getByText("Art Direction · gemeinsamer Spielstil", { exact: true })
+      .click();
+    await page.getByLabel("Stilname", { exact: true }).fill("Shared Noir");
+    await page
+      .getByLabel("Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)", {
+        exact: true,
+      })
+      .fill("Shared crisp contours only.");
+    await page
+      .getByRole("button", { name: "Stil anlegen und auswählen", exact: true })
+      .click();
+    await expect(
+      page.getByLabel("Create Art Direction", { exact: true }),
+    ).toContainText("Shared Noir");
+    await page
+      .getByRole("button", { name: "Weiteren Stil anlegen", exact: true })
+      .click();
+    await page.getByLabel("Stilname", { exact: true }).fill("Alternate Ink");
+    await page
+      .getByLabel("Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)", {
+        exact: true,
+      })
+      .fill("Alternate fine ink contours.");
+    await page
+      .getByRole("button", { name: "Stil anlegen und auswählen", exact: true })
+      .click();
+    await expect(
+      page.getByLabel("Create Art Direction", { exact: true }),
+    ).toContainText("Alternate Ink");
+    await page
+      .getByLabel("Create Art Direction", { exact: true })
+      .selectOption({ label: "Shared Noir · V1" });
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Expression Identity/ })
+      .click();
+    await page
+      .getByLabel("Persönlicher Ausdruck", { exact: true })
+      .fill("Direct unwavering gaze for first character.");
+    await page
+      .getByRole("button", {
+        name: "Persönlichen Ausdruck speichern",
+        exact: true,
+      })
+      .click();
     await page.getByText("Prompteditor", { exact: true }).click();
     await page
       .getByLabel("Ergänzende Anweisung", { exact: true })
@@ -277,6 +324,27 @@ const path = require("node:path");
     expect(p.attempts[0].promptRevision.prompt).toContain(
       "Native pipeline assertion.",
     );
+    expect(p.attempts[0]).toMatchObject({
+      artDirectionId: p.defaultArtDirectionId,
+      artDirectionRevision: 1,
+      expressionPerformance: "Direct unwavering gaze for first character.",
+    });
+    expect(p.attempts[0].promptRevision.prompt).toContain(
+      "Shared crisp contours only.",
+    );
+    expect(p.attempts[0].promptRevision.prompt).toContain(
+      "Direct unwavering gaze for first character.",
+    );
+    const rpc = (await fs.readFile(path.join(root, "trace.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map(JSON.parse);
+    expect(
+      rpc.find((m) => m.method === "turn/start").params.input[0].text,
+    ).toContain("Shared crisp contours only.");
+    expect(
+      rpc.find((m) => m.method === "turn/start").params.input[1].type,
+    ).toBe("localImage");
     await fs.writeFile(path.join(root, "scenario"), "image-failed");
     await generate.click();
     await expect(
@@ -337,6 +405,112 @@ const path = require("node:path");
     await expect(generate).toBeEnabled();
     expect((await manifest()).assets).toHaveLength(2);
     expect((await manifest()).attempts[3].execution.status).toBe("completed");
+    // Editing style creates a new revision without rewriting saved attempts.
+    const historical = (await manifest()).attempts;
+    await page
+      .getByLabel("Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)", {
+        exact: true,
+      })
+      .fill("Revised crisp contours only.");
+    await page
+      .getByRole("button", { name: "Stilrevision speichern", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", {
+        name: "Neue Vorlage übernehmen",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(generate).toBeDisabled();
+    await page
+      .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
+      .click();
+    await expect(generate).toBeEnabled();
+    expect((await manifest()).attempts).toEqual(historical);
+    // A second identity uses its own immutable master and personal direction.
+    await page.getByRole("button", { name: /Characters$/ }).click();
+    await page
+      .getByLabel("Neue Figur", { exact: true })
+      .fill("Synthetic Other");
+    page.once("dialog", (dialog) => dialog.accept());
+    await page
+      .getByRole("button", { name: "Figur erstellen", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Synthetic Other", exact: true }),
+    ).toBeVisible();
+    await page.evaluate((bytes) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(
+        new File([new Uint8Array(bytes)], "other.png", { type: "image/png" }),
+      );
+      document
+        .querySelector(".app")
+        .dispatchEvent(
+          new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
+        );
+    }, resultBytes);
+    await page
+      .getByRole("button", {
+        name: "Freigegebenen Master sperren",
+        exact: true,
+      })
+      .click();
+    await page.getByRole("button", { name: /Create$/ }).click();
+    await page
+      .getByLabel("Create Anbieter", { exact: true })
+      .selectOption("codex-native");
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Expression Identity/ })
+      .click();
+    await expect(
+      page.getByLabel("Persönlicher Ausdruck", { exact: true }),
+    ).toHaveValue("");
+    await page
+      .getByLabel("Persönlicher Ausdruck", { exact: true })
+      .fill("Lowered gaze for second character.");
+    await page
+      .getByRole("button", {
+        name: "Persönlichen Ausdruck speichern",
+        exact: true,
+      })
+      .click();
+    await expect(generate).toBeEnabled();
+    await generate.click();
+    await expect(
+      page.getByRole("status", { name: "Codex Status" }),
+    ).toContainText("Generierung abgeschlossen");
+    const two = await manifest(),
+      second = two.attempts.at(-1);
+    expect(two.attempts.slice(0, 4)).toEqual(historical);
+    expect(second.artDirectionId).toBe(two.defaultArtDirectionId);
+    expect(second.artDirectionRevision).toBe(2);
+    expect(second.promptRevision.prompt).toContain(
+      "Lowered gaze for second character.",
+    );
+    expect(second.promptRevision.prompt).not.toContain(
+      "Direct unwavering gaze for first character.",
+    );
+    expect(second.masterId).toBe(two.masters[1].id);
+    expect(two.assets.at(-1).masterId).toBe(two.masters[1].id);
+    await page
+      .getByLabel("Create Figur", { exact: true })
+      .selectOption({ label: "Synthetic Native" });
+    await page
+      .locator("summary")
+      .filter({ hasText: /^Expression Identity/ })
+      .click();
+    await expect(
+      page.getByLabel("Persönlicher Ausdruck", { exact: true }),
+    ).toHaveValue("Direct unwavering gaze for first character.");
+    // Latest historical prompt still needs explicit adoption after style revision.
+    const adopt = page.getByRole("button", {
+      name: "Neue Vorlage übernehmen",
+      exact: true,
+    });
+    await expect(adopt).toBeVisible();
+    await adopt.click();
     await fs.writeFile(path.join(root, "scenario"), "no-auth");
     await page
       .getByText("Inspector · Stimmaktion, Intensität und Herkunft", {
@@ -357,7 +531,7 @@ const path = require("node:path");
     });
     expect(errors).toEqual([]);
     console.log(
-      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel/regeneration, monotonic timer metadata, real slider keyboard/mouse/touch, shared zoom/pan/overlay, 960px layout, project lock, provenance, approval, auth gating. No live AI calls.",
+      "PASS packaged native-provider UI: actual IPC/process lifecycle, fixture success/failure/cancel/regeneration, monotonic timer metadata, real slider keyboard/mouse/touch, shared zoom/pan/overlay, two style profiles and isolated character expression prompts/master references, 960px layout, project lock, provenance, approval, auth gating. No live AI calls.",
     );
   } catch (error) {
     if (app) {
