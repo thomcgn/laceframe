@@ -1,3 +1,4 @@
+import { smartCutoutRecordSchema } from "./smart-cutout";
 import { relightRecordSchema } from "./relighting";
 import { z } from "zod";
 export const TRANSPARENT_CHARACTER_INSTRUCTION =
@@ -73,6 +74,7 @@ export const qualityDerivativeSchema = z
       .optional(),
     profile: resolutionProfileSchema.optional(),
     relighting: relightRecordSchema.optional(),
+    smartCutout: smartCutoutRecordSchema.optional(),
     status: z.enum(["candidate", "approved", "rejected"]),
     reviewedAt: z.iso.datetime().optional(),
     notes: z.string().max(8000).optional(),

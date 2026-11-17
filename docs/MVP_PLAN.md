@@ -91,3 +91,7 @@ After merged PR #12 and UX-01 (#14), bounded non-destructive 2D relighting adds 
 ## Style Intelligence follow-up (Codex 02I)
 
 After merged relighting PR #15, Art Direction includes bounded deterministic offline reference analysis, per-type/ROI metrics, editable rule/palette proposals, explicit immutable profile adoption and pairwise numeric style review. The existing StyleLibrary, provider, prompt snapshots and human asset approval remain authoritative. No model, automatic identity/style score or live generation is introduced. See `docs/CODEX_02I_VALIDATION.md` for actual methods, tests, performance and limitations; Motion remains a separate next milestone.
+
+## Smart background removal follow-up
+
+The existing cutout dialog adds offline original-pixel Lab color seeds, connected/global selection, separate protected/forced masks, bounded worker previews, edge refinement and immutable correction recipes. Existing manual cutouts, human quality/Master V2 approval and exact PNG exports remain supported. See `docs/SMART_BACKGROUND_VALIDATION.md` for actual tests, screenshots and limitations; no semantic segmentation or generative model is introduced.

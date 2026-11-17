@@ -1138,3 +1138,31 @@ button.text-link { border:0; background:transparent; padding:2px 0; color:var(--
 @media(max-width:1000px){.analysis-reference {grid-template-columns:100px minmax(0,1fr);} .analysis-reference .inspector-options {grid-template-columns:repeat(2,minmax(0,1fr));} }
 .analysis-steps {display:flex; flex-wrap:wrap; gap:6px; position:sticky; top:0; z-index:2; background:var(--slate); padding:6px 0;}
 .analysis-steps [aria-pressed=true] {border-color:var(--sage);background:#344947;}
+.smart-cutout-controls {display:flex; flex-wrap:wrap; gap:8px 14px; padding:8px; background:var(--slate); border:1px solid #8fada644;}
+.smart-cutout-controls > label {flex:1 1 160px; min-width:0;}
+.smart-cutout-controls input[type=checkbox] {width:auto;}
+.smart-cutout-controls details, .smart-cutout-controls p, .smart-cutout-controls .cutout-seed {flex-basis:100%;}
+.cutout-seed {display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; margin:4px 0;}
+.cutout-seed i {width:28px; height:22px; border:1px solid var(--ivory); display:inline-block;}
+.cutout-light {background:#f0e5d3;}
+.cutout-dark {background:#141820;}
+.smart-cutout-controls summary {cursor:pointer;}
+/* One native-coordinate editor, compact controls next to the actual portrait. */
+.smart-mask-editor {scroll-padding-bottom:110px;}
+.smart-mask-editor fieldset {display:grid; grid-template-columns:250px minmax(0,1fr); gap:10px 16px; align-items:start;}
+.smart-mask-editor .smart-cutout-controls {grid-column:1;grid-row:1; display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px;}
+.smart-mask-editor .smart-cutout-controls > label {min-width:0;font-size:11px;margin:0;}
+.smart-mask-editor .smart-cutout-controls > label:first-child,
+.smart-mask-editor .smart-cutout-controls > label:nth-child(3),
+.smart-mask-editor .smart-cutout-controls > p,
+.smart-mask-editor .smart-cutout-controls > details,
+.smart-mask-editor .smart-cutout-controls > .cutout-seed {grid-column:1/-1;}
+.smart-mask-editor .smart-cutout-controls select {font-size:11px;padding:5px;}
+.smart-mask-editor .mask-toolbar {grid-column:1;grid-row:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0;}
+.smart-mask-editor .mask-toolbar label {min-width:0; font-size:11px;margin:0;}
+.smart-mask-editor .mask-toolbar button {font-size:11px;padding:6px;}
+.smart-mask-editor .mask-viewport {grid-column:2;grid-row:1/span 2;height:min(60vh,650px);position:sticky;top:10px;scroll-margin-block:30px 110px;min-width:0;}
+.smart-mask-editor fieldset > small {grid-column:1/-1;}
+.smart-mask-editor .button-row {display:flex;flex-wrap:wrap;gap:6px;z-index:3;}
+@media(max-width:1000px){.smart-mask-editor fieldset {grid-template-columns:220px minmax(0,1fr);gap:8px;}.smart-mask-editor {padding:12px;}.smart-mask-editor .mask-viewport {height:52vh;}}
+@media(max-width:700px){.smart-mask-editor fieldset {grid-template-columns:1fr;}.smart-mask-editor .mask-viewport {grid-column:1;grid-row:1;position:relative;top:0;}.smart-mask-editor .smart-cutout-controls {grid-row:2;}.smart-mask-editor .mask-toolbar {grid-row:3;}}

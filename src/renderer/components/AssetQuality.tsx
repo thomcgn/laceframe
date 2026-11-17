@@ -106,6 +106,7 @@ export function AssetQuality({
   const [editor, setEditor] = useState<{
     source: Asset;
     weights?: Uint8Array;
+    recipeId?: string;
     name?: string;
   }>();
   const derivatives = project.qualityAssets.filter((q) => {
@@ -209,6 +210,7 @@ export function AssetQuality({
           source: original,
           weights: r.value,
           name: derivative.mask.name,
+          ...(derivative.smartCutout ? { recipeId: derivative.id } : {}),
         });
       } else setEditor({ source: active });
     } catch (e) {
@@ -588,13 +590,15 @@ export function AssetQuality({
                 cutout
                 initialWeights={editor.weights}
                 initialName={editor.name}
+                recipeId={editor.recipeId}
                 onClose={() => setEditor(undefined)}
-                onSave={async (weights, name) => {
+                onSave={async (weights, name, smart) => {
                   const s = await command({
                     type: "createCutout",
                     name,
                     sourceId: editor.source.id,
                     weights: new Uint8Array(weights),
+                    ...(smart ? { smart } : {}),
                   });
                   setSelected(s.project.qualityAssets.at(-1)!.id);
                 }}
