@@ -1,3 +1,8 @@
+import {
+  rasterizePolygon,
+  POLYGON_VERSION,
+  type PolygonOperation,
+} from "../src/shared/cutout-polygon";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
 import os from "node:os";
@@ -397,5 +402,228 @@ describe("immutable cutout provenance, persistence and human review", () => {
     await expect(
       service.smartCutoutRecipe(raw.qualityAssets[0].id),
     ).rejects.toThrow(/Keine/);
+  });
+});
+
+const polygon = (
+  points: number[][],
+  operation: PolygonOperation["operation"] = "limit",
+): PolygonOperation => ({
+  algorithm: POLYGON_VERSION,
+  operation,
+  points: points.map(([x, y]) => ({ x, y })),
+});
+const rectangle = (
+  x = 5,
+  y = 3,
+  w = 14,
+  h = 21,
+  op: PolygonOperation["operation"] = "limit",
+) =>
+  polygon(
+    [
+      [x, y],
+      [x + w, y],
+      [x + w, y + h],
+      [x, y + h],
+    ],
+    op,
+  );
+describe("native polygon selection", () => {
+  it("rasterizes full image borders and half-open rectangle by pixel centers with no AA", () => {
+    expect([...rasterizePolygon(rectangle(0, 0, 4, 3), 4, 3)]).toEqual(
+      new Array(12).fill(255),
+    );
+    expect([...rasterizePolygon(rectangle(1, 1, 2, 1), 4, 3)]).toEqual([
+      0, 0, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0,
+    ]);
+    const triangle = polygon([
+      [0, 0],
+      [3, 0],
+      [0, 3],
+    ]);
+    expect([...rasterizePolygon(triangle, 3, 3)]).toEqual([
+      255, 255, 0, 255, 0, 0, 0, 0, 0,
+    ]);
+    expect(
+      rasterizePolygon(
+        { ...triangle, points: [...triangle.points].reverse() },
+        3,
+        3,
+      ),
+    ).toEqual(rasterizePolygon(triangle, 3, 3));
+  });
+  it("handles concave silhouettes deterministically", () => {
+    const op = polygon([
+      [0, 0],
+      [4, 0],
+      [4, 1],
+      [1, 1],
+      [1, 4],
+      [0, 4],
+    ]);
+    expect([...rasterizePolygon(op, 4, 4)]).toEqual([
+      255, 255, 255, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0,
+    ]);
+  });
+  it("rejects crossing, touching, duplicate, flat, out of bounds and unbounded inputs", () => {
+    for (const points of [
+      [
+        [0, 0],
+        [4, 4],
+        [0, 4],
+        [4, 0],
+      ],
+      [
+        [0, 0],
+        [4, 0],
+        [2, 2],
+        [4, 4],
+        [0, 4],
+        [2, 2],
+      ],
+      [
+        [0, 0],
+        [0, 0],
+        [4, 4],
+      ],
+      [
+        [0, 0],
+        [2, 0],
+        [4, 0],
+        [4, 4],
+        [0, 4],
+      ],
+      [
+        [0, 0],
+        [4, 0],
+      ],
+      [
+        [-1, 0],
+        [4, 0],
+        [4, 4],
+      ],
+      [
+        [0.5, 0],
+        [4, 0],
+        [4, 4],
+      ],
+    ])
+      expect(() => rasterizePolygon(polygon(points), 4, 4)).toThrow();
+    expect(() => rasterizePolygon(rectangle(0, 0, 5, 4), 4, 4)).toThrow(
+      /außerhalb/,
+    );
+    expect(() =>
+      rasterizePolygon(
+        { ...rectangle(), points: new Array(129).fill({ x: 0, y: 0 }) },
+        24,
+        24,
+      ),
+    ).toThrow();
+    expect(() =>
+      rasterizePolygon(rectangle(), MAX_SMART_PIXELS + 1, 1),
+    ).toThrow(/Megapixel/);
+  });
+  it("limits connected and global automatic fill without leaking softness into a black jacket", () => {
+    const p = portrait(),
+      d = draft(p);
+    d.settings.seeds = [seed(p)];
+    d.settings.polygons = [rectangle()];
+    for (const connected of [true, false]) {
+      d.settings.connected = connected;
+      d.settings.softness = 4;
+      d.settings.expand = 3;
+      const r = selectBackground(p, d);
+      expect(r.weights[23 * 24 + 12]).toBe(255);
+      expect(r.weights[0]).toBeLessThan(255);
+      expect(r.selection[23 * 24 + 12]).toBe(0);
+    }
+  });
+  it("treats the silhouette as a flood barrier and respects manual and forced edits inside limits", () => {
+    const p = image(9, 5),
+      d = draft(p);
+    d.settings.seeds = [seed(p)];
+    d.settings.polygons = [rectangle(4, 0, 1, 5)];
+    const r = selectBackground(p, d);
+    expect(r.weights[8]).toBe(255);
+    expect(r.weights[0]).toBe(0);
+    d.forced[4] = 255;
+    d.manual[9 + 4] = 64;
+    const a = selectBackground(p, d);
+    expect(a.weights[4]).toBe(0);
+    expect(a.weights[13]).toBe(64);
+    d.settings.seeds = [seed(p, 4, 0)];
+    expect(selectBackground(p, d).selection.every((v) => v === 0)).toBe(true);
+  });
+  it("preserves protected > forced > automatic independent of polygon order", () => {
+    const p = portrait(),
+      d = draft(p);
+    d.settings.seeds = [seed(p)];
+    d.settings.polygons = [
+      rectangle(7, 14, 10, 10, "protect"),
+      rectangle(0, 0, 24, 24, "force"),
+    ];
+    const before = p.data.slice(),
+      result = selectBackground(p, d);
+    expect(result.weights[23 * 24 + 12]).toBe(255);
+    expect(result.weights[0]).toBe(0);
+    expect(result.conflicts).toBe(100);
+    d.settings.polygons.reverse();
+    expect(selectBackground(p, d)).toEqual(result);
+    expect(p.data).toEqual(before);
+  });
+  it("keeps polygon operations and brush masks undoable together", () => {
+    const p = portrait(),
+      d = draft(p);
+    const next = { ...d, settings: { ...d.settings, polygons: [rectangle()] } };
+    const h = commitCutout({ past: [], present: d, future: [] }, next);
+    expect(undoCutout(h).present).toEqual(d);
+    expect(redoCutout(undoCutout(h)).present).toEqual(next);
+    next.settings.polygons = new Array(33).fill(rectangle());
+    expect(() => selectBackground(p, next)).toThrow();
+  });
+  it("persists native coordinates, restores recipes and verifies exact worker/main output without master writes", async () => {
+    const original = service.snapshot().project.masters[0],
+      bytes = await fs.readFile(path.join(root, original.file)),
+      p = await service.cutoutSource(masterId),
+      d = draft(p);
+    d.settings.seeds = [seed(p)];
+    d.settings.polygons = [
+      rectangle(),
+      rectangle(8, 15, 2, 2, "protect"),
+      rectangle(0, 0, 2, 2, "force"),
+    ];
+    const preview = selectBackground(p, d, prepareCutout(p));
+    const q = (await save(d)).project.qualityAssets[0];
+    const output = decodePixels(await fs.readFile(path.join(root, q.file)));
+    expect([...output.data]).toEqual([
+      ...cutoutPixels(p, preview.weights).data,
+    ]);
+    const reopened = new ProjectService();
+    await reopened.open(root);
+    const loaded = await reopened.smartCutoutRecipe(q.id);
+    expect(loaded.settings.polygons).toEqual(d.settings.polygons);
+    expect(selectBackground(p, loaded).weights).toEqual(preview.weights);
+    expect(await fs.readFile(path.join(root, original.file))).toEqual(bytes);
+    const invalid = structuredClone(reopened.snapshot().project);
+    invalid.qualityAssets[0].smartCutout!.settings.polygons![0].points[0].x = 999;
+    expect(projectSchema.safeParse(invalid).success).toBe(false);
+  });
+  it("retains pre-polygon smart recipes byte-for-byte when opening and saving a new revision", async () => {
+    const p = await service.cutoutSource(masterId),
+      d = draft(p);
+    d.settings.seeds = [seed(p)];
+    const q = (await save(d)).project.qualityAssets[0];
+    expect(q.smartCutout!.settings.polygons).toBeUndefined();
+    const before = await fs.readFile(path.join(root, "laceframe.json"));
+    service = new ProjectService();
+    await service.open(root);
+    expect(await fs.readFile(path.join(root, "laceframe.json"))).toEqual(
+      before,
+    );
+    const next = await service.smartCutoutRecipe(q.id);
+    next.settings.polygons = [rectangle()];
+    await save(next);
+    expect(service.snapshot().project.qualityAssets[0]).toEqual(q);
   });
 });

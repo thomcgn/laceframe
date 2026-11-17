@@ -328,6 +328,12 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
           fail("Invalid smart mask revision");
       }
       if (
+        q.smartCutout.settings.polygons?.some((op) =>
+          op.points.some((point) => point.x > q.width || point.y > q.height),
+        )
+      )
+        fail("Invalid smart cutout polygon bounds");
+      if (
         q.smartCutout.settings.seeds.some(
           (seed) => seed.x >= q.width || seed.y >= q.height,
         )

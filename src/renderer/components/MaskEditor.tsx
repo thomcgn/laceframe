@@ -1,3 +1,9 @@
+import {
+  POLYGON_VERSION,
+  polygonOperationSchema,
+  MAX_POLYGON_POINTS,
+  type PolygonOperation,
+} from "../../shared/cutout-polygon";
 import { useSmartCutout } from "./useSmartCutout";
 import {
   MAX_SMART_PIXELS,
@@ -59,6 +65,56 @@ export function MaskEditor({
     [showSelection, setShowSelection] = useState(false),
     [view, setView] = useState("result"),
     [backdrop, setBackdrop] = useState("checker");
+  const [polygon, setPolygon] = useState<{ points: Point[]; closed: boolean }>({
+    points: [],
+    closed: false,
+  });
+  const [polygonPast, setPolygonPast] = useState<(typeof polygon)[]>([]),
+    [polygonFuture, setPolygonFuture] = useState<(typeof polygon)[]>([]);
+  const [polygonOperation, setPolygonOperation] =
+    useState<PolygonOperation["operation"]>("limit");
+  const editPolygon = (next: typeof polygon) => {
+    setPolygonPast((p) => [...p, polygon].slice(-128));
+    setPolygon(next);
+    setPolygonFuture([]);
+    setError("");
+  };
+  const discardPolygon = () => {
+    setPolygon({ points: [], closed: false });
+    setPolygonPast([]);
+    setPolygonFuture([]);
+    setError("");
+  };
+  const closePolygon = () => {
+    const parsed = polygonOperationSchema.safeParse({
+      algorithm: POLYGON_VERSION,
+      operation: polygonOperation,
+      points: polygon.points,
+    });
+    if (!parsed.success) {
+      setError(
+        "Polygon benötigt 3–128 eindeutige Ecken ohne flache Ecken oder Selbstüberschneidung.",
+      );
+      return;
+    }
+    editPolygon({ ...polygon, closed: true });
+  };
+  const undo = () => {
+    if (tool === "polygon" && polygonPast.length) {
+      setPolygonFuture((f) => [polygon, ...f]);
+      setPolygon(polygonPast.at(-1)!);
+      setPolygonPast((p) => p.slice(0, -1));
+    } else if (automatic) smart.undo();
+    else apply(undoMask(history));
+  };
+  const redo = () => {
+    if (tool === "polygon" && polygonFuture.length) {
+      setPolygonPast((p) => [...p, polygon]);
+      setPolygon(polygonFuture[0]);
+      setPolygonFuture((f) => f.slice(1));
+    } else if (automatic) smart.redo();
+    else apply(redoMask(history));
+  };
   const pixels = useRef(history.present);
   const [src, setSrc] = useState(""),
     [error, setError] = useState("");
@@ -97,6 +153,8 @@ export function MaskEditor({
     if (cutout && originalPixels.current) {
       image.data.set(originalPixels.current);
       const draft = smart.current.current.present;
+      const protectedMask = smart.result?.protectedMask ?? draft.protected;
+      const forcedMask = smart.result?.forcedMask ?? draft.forced;
       if (automatic && smart.image) image.data.set(smart.image.data);
       weights.forEach((w, i) => {
         if (view !== "original")
@@ -110,15 +168,18 @@ export function MaskEditor({
         }
         if (
           automatic &&
-          ((showProtected && draft.protected[i]) ||
-            (showSelection && smart.result?.selection[i]) ||
-            (showProtected && draft.forced[i]))
+          ((showProtected && protectedMask[i]) ||
+            (showSelection &&
+              (smart.result?.selection[i] || smart.result?.limited[i])) ||
+            (showProtected && forcedMask[i]))
         ) {
-          const color = draft.protected[i]
-            ? draft.forced[i]
+          const color = protectedMask[i]
+            ? forcedMask[i]
               ? [220, 70, 210]
               : [80, 200, 140]
-            : [230, 130, 80];
+            : smart.result?.limited[i]
+              ? [100, 155, 220]
+              : [230, 130, 80];
           for (let c = 0; c < 3; c++)
             image.data[i * 4 + c] = Math.round(
               image.data[i * 4 + c] * 0.5 + color[c] * 0.5,
@@ -335,6 +396,120 @@ export function MaskEditor({
         <fieldset disabled={!ready || saving || (automatic && !smart.image)}>
           {automatic && (
             <div className="smart-cutout-controls">
+              {tool === "polygon" && (
+                <div className="polygon-controls">
+                  <p>
+                    Linksklick: Ecke · Enter/Doppelklick: schließen · Backspace:
+                    letzte Ecke · Escape: verwerfen. Alt+Ziehen verschiebt.
+                  </p>
+                  <p role="status" aria-label="Polygonstatus">
+                    {polygon.points.length} / 128 Ecken ·{" "}
+                    {polygon.closed ? "geschlossen" : "offen"}
+                  </p>
+                  <label>
+                    Polygonoperation
+                    <select
+                      aria-label="Polygonoperation"
+                      value={polygonOperation}
+                      onChange={(e) =>
+                        setPolygonOperation(
+                          e.target.value as PolygonOperation["operation"],
+                        )
+                      }
+                    >
+                      <option value="limit">
+                        Auswahl begrenzen – Automatik nur außerhalb
+                      </option>
+                      <option value="protect">
+                        Figur schützen – innen erhalten
+                      </option>
+                      <option value="force">
+                        Hintergrund entfernen – innen erzwingen
+                      </option>
+                    </select>
+                  </label>
+                  <button
+                    disabled={polygon.closed || polygon.points.length < 3}
+                    onClick={closePolygon}
+                  >
+                    Polygon schließen
+                  </button>
+                  <button
+                    disabled={
+                      !polygon.closed ||
+                      (smart.history.present.settings.polygons?.length ?? 0) >=
+                        32
+                    }
+                    onClick={() => {
+                      const op = polygonOperationSchema.parse({
+                        algorithm: POLYGON_VERSION,
+                        operation: polygonOperation,
+                        points: polygon.points,
+                      });
+                      smart.update({
+                        ...smart.history.present,
+                        settings: {
+                          ...smart.history.present.settings,
+                          polygons: [
+                            ...(smart.history.present.settings.polygons ?? []),
+                            op,
+                          ],
+                        },
+                      });
+                      discardPolygon();
+                      setShowProtected(true);
+                    }}
+                  >
+                    Polygon anwenden
+                  </button>
+                  <button
+                    disabled={!polygon.points.length}
+                    onClick={discardPolygon}
+                  >
+                    Auswahl verwerfen
+                  </button>
+                </div>
+              )}
+              {!!smart.history.present.settings.polygons?.length && (
+                <details>
+                  <summary>
+                    Angewendete Polygone (
+                    {smart.history.present.settings.polygons.length}/32)
+                  </summary>
+                  <p>
+                    Polygonmasken ergänzen Pinselmasken. Schutz gewinnt. Zum
+                    Korrigieren Polygon entfernen oder rückgängig machen.
+                  </p>
+                  {smart.history.present.settings.polygons.map((op, i) => (
+                    <div key={i}>
+                      {i + 1}:{" "}
+                      {op.operation === "limit"
+                        ? "Automatik nur außerhalb"
+                        : op.operation === "protect"
+                          ? "Figur schützen"
+                          : "Hintergrund entfernen"}{" "}
+                      · {op.points.length} Ecken
+                      <button
+                        onClick={() =>
+                          smart.update({
+                            ...smart.history.present,
+                            settings: {
+                              ...smart.history.present.settings,
+                              polygons:
+                                smart.history.present.settings.polygons!.filter(
+                                  (_, j) => j !== i,
+                                ),
+                            },
+                          })
+                        }
+                      >
+                        Polygon {i + 1} entfernen
+                      </button>
+                    </div>
+                  ))}
+                </details>
+              )}
+
               <label>
                 Farbtoleranz · ΔE76 {smart.history.present.settings.tolerance}
                 <input
@@ -504,6 +679,12 @@ export function MaskEditor({
               </details>
             </div>
           )}
+          {automatic && polygon.points.length > 0 && (
+            <p role="status">
+              Ungespeichertes Polygon: zum Anwenden oder Verwerfen Polygon/Lasso
+              wählen. Speichern erst danach möglich.
+            </p>
+          )}
           {cutout && !automatic && (
             <p className="warning">
               Über 4 MP: vorhandene manuelle Freistellung bleibt verfügbar;
@@ -540,6 +721,7 @@ export function MaskEditor({
               >
                 {automatic && (
                   <>
+                    <option value="polygon">Polygon/Lasso</option>
                     <option value="pick">Pipette</option>
                     <option value="auto">Automatischer Hintergrund</option>
                     <option value="protect">Schützen</option>
@@ -611,29 +793,28 @@ export function MaskEditor({
             </label>
             <button
               disabled={
-                automatic ? !smart.history.past.length : !history.past.length
+                automatic
+                  ? !smart.history.past.length && !polygonPast.length
+                  : !history.past.length
               }
-              onClick={() =>
-                automatic ? smart.undo() : apply(undoMask(history))
-              }
+              onClick={undo}
             >
               Rückgängig
             </button>
             <button
               disabled={
                 automatic
-                  ? !smart.history.future.length
+                  ? !smart.history.future.length && !polygonFuture.length
                   : !history.future.length
               }
-              onClick={() =>
-                automatic ? smart.redo() : apply(redoMask(history))
-              }
+              onClick={redo}
             >
               Wiederholen
             </button>
             <button
-              onClick={() =>
-                automatic
+              onClick={() => {
+                discardPolygon();
+                return automatic
                   ? smart.update({
                       ...smart.history.present,
                       manual: new Uint8Array(master.width * master.height).fill(
@@ -656,8 +837,8 @@ export function MaskEditor({
                           cutout ? 255 : 0,
                         ),
                       ),
-                    )
-              }
+                    );
+              }}
             >
               Maske zurücksetzen
             </button>
@@ -683,18 +864,67 @@ export function MaskEditor({
               else setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
             }}
             onKeyDown={(e) => {
+              if (automatic && tool === "polygon") {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  discardPolygon();
+                  return;
+                }
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (!polygon.closed) closePolygon();
+                  return;
+                }
+                if (e.key === "Backspace") {
+                  e.preventDefault();
+                  editPolygon({
+                    points: polygon.points.slice(0, -1),
+                    closed: false,
+                  });
+                  return;
+                }
+              }
               if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
                 e.preventDefault();
-                if (automatic) {
-                  if (e.shiftKey) smart.redo();
-                  else smart.undo();
-                } else
-                  apply(e.shiftKey ? redoMask(history) : undoMask(history));
+                if (e.shiftKey) redo();
+                else undo();
               }
+            }}
+            onDoubleClick={(e) => {
+              if (
+                automatic &&
+                tool === "polygon" &&
+                !e.altKey &&
+                !polygon.closed
+              )
+                closePolygon();
             }}
             onPointerDown={(e) => {
               if (!ready || saving || gesture.current || e.button !== 0) return;
               e.preventDefault();
+              e.currentTarget.focus();
+              if (automatic && tool === "polygon" && !e.altKey) {
+                const p = point(e);
+                if (
+                  polygon.closed ||
+                  p.x < 0 ||
+                  p.y < 0 ||
+                  p.x >= master.width ||
+                  p.y >= master.height
+                )
+                  return;
+                if (polygon.points.length >= MAX_POLYGON_POINTS) {
+                  setError("Maximal 128 Polygonecken.");
+                  return;
+                }
+                const last = polygon.points.at(-1);
+                if (!last || last.x !== p.x || last.y !== p.y)
+                  editPolygon({
+                    points: [...polygon.points, p],
+                    closed: false,
+                  });
+                return;
+              }
               if (
                 automatic &&
                 (tool === "pick" || tool === "auto") &&
@@ -813,6 +1043,61 @@ export function MaskEditor({
                   height={master.height}
                 />
               )}
+              {automatic && (
+                <svg
+                  className="cutout-polygons"
+                  width={master.width}
+                  height={master.height}
+                  viewBox={`0 0 ${master.width} ${master.height}`}
+                  aria-label="Polygonvorschau"
+                >
+                  {(smart.history.present.settings.polygons ?? []).map(
+                    (op, i) => (
+                      <polygon
+                        key={i}
+                        points={op.points.map((p) => `${p.x},${p.y}`).join(" ")}
+                        fill="none"
+                        stroke={
+                          op.operation === "force" ? "#D9A77E" : "#8FADA6"
+                        }
+                        strokeWidth={1.5 / scale}
+                      />
+                    ),
+                  )}
+                  {polygon.points.length > 0 && (
+                    <>
+                      {polygon.closed ? (
+                        <polygon
+                          points={polygon.points
+                            .map((p) => `${p.x},${p.y}`)
+                            .join(" ")}
+                          fill="#8FADA640"
+                          stroke="#F0E5D3"
+                          strokeWidth={2 / scale}
+                        />
+                      ) : (
+                        <polyline
+                          points={polygon.points
+                            .map((p) => `${p.x},${p.y}`)
+                            .join(" ")}
+                          fill="none"
+                          stroke="#F0E5D3"
+                          strokeWidth={2 / scale}
+                        />
+                      )}
+                      {polygon.points.map((p, i) => (
+                        <circle
+                          key={i}
+                          cx={p.x}
+                          cy={p.y}
+                          r={3 / scale}
+                          fill="#D9A77E"
+                        />
+                      ))}
+                    </>
+                  )}
+                </svg>
+              )}
               <canvas
                 ref={canvas}
                 width={master.width}
@@ -858,7 +1143,7 @@ export function MaskEditor({
             disabled={saving}
             onClick={() => {
               if (
-                (!dirty && !smart.dirty) ||
+                (!dirty && !smart.dirty && !polygon.points.length) ||
                 window.confirm("Ungespeicherte Maskenänderungen verwerfen?")
               )
                 onClose();
@@ -870,7 +1155,7 @@ export function MaskEditor({
             className="primary"
             disabled={
               !ready ||
-              (automatic && !smart.ready) ||
+              (automatic && (!smart.ready || polygon.points.length > 0)) ||
               saving ||
               !name.trim() ||
               master.width * master.height > MAX_MASK_PIXELS ||

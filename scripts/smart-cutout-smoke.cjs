@@ -160,6 +160,183 @@ const fs = require("node:fs/promises"),
     await ready();
     expect(await rgba(625, 950)).toEqual([0, 0, 0, 255]);
     const before = await fs.readFile(path.join(project, "laceframe.json"));
+    // Polygon input uses the real transformed canvas and exact original pixels.
+    const toolSelect = () =>
+      dialog().getByLabel("Maskenwerkzeug", { exact: true });
+    const area = () =>
+      dialog().getByLabel("Maskenzeichenfläche", { exact: true });
+    const polygonStatus = () =>
+      dialog().getByRole("status", { name: "Polygonstatus", exact: true });
+    const applyPolygon = () =>
+      dialog().getByRole("button", { name: "Polygon anwenden", exact: true });
+    const discardPolygon = () =>
+      dialog().getByRole("button", { name: "Auswahl verwerfen", exact: true });
+    await toolSelect().selectOption("polygon");
+    await clickPixel(550, 550);
+    await clickPixel(700, 550);
+    await clickPixel(700, 700);
+    await area().press("Backspace");
+    await expect(polygonStatus()).toContainText("2 / 128");
+    await area().press("Control+z");
+    await expect(polygonStatus()).toContainText("3 / 128");
+    await area().press("Control+Shift+z");
+    await expect(polygonStatus()).toContainText("2 / 128");
+    await area().press("Escape");
+    await expect(polygonStatus()).toContainText("0 / 128");
+    // Zoom + pan: vertices remain in source coordinates, never CSS coordinates.
+    await dialog().getByLabel("Maskenzoom", { exact: true }).selectOption("2");
+    await area().scrollIntoViewIfNeeded();
+    const polygonBox = await area().boundingBox();
+    await page.keyboard.down("Alt");
+    await page.mouse.move(polygonBox.x + polygonBox.width / 2, polygonBox.y + polygonBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      polygonBox.x + polygonBox.width / 2 + 15,
+      polygonBox.y + polygonBox.height / 2 + 10,
+    );
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    for (const [x, y] of [
+      [550, 550],
+      [700, 550],
+      [700, 700],
+    ])
+      await clickPixel(x, y);
+    const nativePoints = await dialog()
+      .locator("svg circle")
+      .evaluateAll((nodes) =>
+        nodes.map((n) => [+n.getAttribute("cx"), +n.getAttribute("cy")]),
+      );
+    expect(nativePoints).toHaveLength(3);
+    for (let i = 0; i < 3; i++)
+      for (let c = 0; c < 2; c++)
+        expect(
+          Math.abs(
+            nativePoints[i][c] -
+              [
+                [550, 550],
+                [700, 550],
+                [700, 700],
+              ][i][c],
+          ),
+        ).toBeLessThan(3);
+    await area().press("Enter");
+    await expect(polygonStatus()).toContainText("geschlossen");
+    await discardPolygon().click();
+    await dialog()
+      .getByRole("button", { name: "Maskenansicht zurücksetzen", exact: true })
+      .click();
+    // Browser double-click sends duplicate pointerdown: only one corner is kept.
+    await clickPixel(550, 550);
+    await clickPixel(700, 550);
+    await area().scrollIntoViewIfNeeded();
+    const cr = await dialog().locator("canvas").boundingBox();
+    await page.mouse.dblclick(
+      cr.x + (700.5 / 1254) * cr.width,
+      cr.y + (700.5 / 1254) * cr.height,
+    );
+    await expect(polygonStatus()).toContainText("3 / 128 Ecken · geschlossen");
+    await discardPolygon().click();
+    for (const [x, y] of [
+      [500, 500],
+      [750, 750],
+      [500, 750],
+      [750, 500],
+    ])
+      await clickPixel(x, y);
+    await area().press("Enter");
+    await expect(dialog().getByRole("alert")).toContainText(
+      "Selbstüberschneidung",
+    );
+    await expect(applyPolygon()).toBeDisabled();
+    await discardPolygon().click();
+    await toolSelect().selectOption("pick");
+    await clickPixel(100, 100);
+    await ready();
+    expect((await rgba(625, 960))[3]).toBe(0); // Jacket touches same-color background.
+    await toolSelect().selectOption("polygon");
+    for (const [x, y] of [
+      [410, 170],
+      [840, 170],
+      [840, 1210],
+      [410, 1210],
+    ])
+      await clickPixel(x, y);
+    await area().press("Enter");
+    await expect(polygonStatus()).toContainText("geschlossen");
+    await expect(
+      dialog().getByRole("button", {
+        name: "Freigestellten Kandidaten speichern",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    for (const width of [960, 1440]) {
+      await page.setViewportSize({ width, height: width === 960 ? 720 : 900 });
+      await area().scrollIntoViewIfNeeded();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+      await fs.mkdir("artifacts", { recursive: true });
+      await page.screenshot({ path: `artifacts/cutout-polygon-${width}.png` });
+    }
+    await applyPolygon().click();
+    await ready();
+    await dialog()
+      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .uncheck();
+    expect((await rgba(625, 960))[3]).toBe(255);
+    expect((await rgba(100, 100))[3]).toBe(0);
+    await dialog()
+      .getByRole("button", { name: "Rückgängig", exact: true })
+      .click();
+    await ready();
+    expect((await rgba(625, 960))[3]).toBe(0);
+    await dialog()
+      .getByRole("button", { name: "Wiederholen", exact: true })
+      .click();
+    await ready();
+    expect((await rgba(625, 960))[3]).toBe(255);
+    // Force then protect the same region; human operation, not semantic detection.
+    for (const operation of ["force", "protect"]) {
+      await dialog()
+        .getByLabel("Polygonoperation", { exact: true })
+        .selectOption(operation);
+      for (const [x, y] of [
+        [580, 580],
+        [620, 580],
+        [620, 620],
+        [580, 620],
+      ])
+        await clickPixel(x, y);
+      await area().press("Enter");
+      await applyPolygon().click();
+      await ready();
+      await dialog()
+        .getByLabel("Schutzmaske anzeigen", { exact: true })
+        .uncheck();
+      expect((await rgba(600, 600))[3]).toBe(operation === "force" ? 0 : 128);
+    }
+    await dialog()
+      .getByRole("button", { name: "Rückgängig", exact: true })
+      .click();
+    await ready();
+    await dialog()
+      .getByRole("button", { name: "Rückgängig", exact: true })
+      .click();
+    await ready();
+    // Remove the extra seed, retaining just the limit polygon for existing checks.
+    await dialog()
+      .getByText("Seeds und erweiterte Auswahl", { exact: true })
+      .click();
+    await dialog()
+      .getByRole("button", { name: "Seed 1 entfernen", exact: true })
+      .click();
+    await ready();
+    await dialog()
+      .getByText("Seeds und erweiterte Auswahl", { exact: true })
+      .click();
     // Protected coat and hair are explicitly painted; no semantic inference.
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("200");
     await brush("protect", 625, 960);
@@ -284,6 +461,11 @@ const fs = require("node:fs/promises"),
       .click();
     await expect(dialog()).toHaveCount(0);
     const first = (await manifest()).qualityAssets[0];
+    expect(first.smartCutout.settings.polygons).toHaveLength(1);
+    expect(first.smartCutout.settings.polygons[0].operation).toBe("limit");
+    expect(first.smartCutout.settings.polygons[0].algorithm).toBe(
+      "pixel-center-even-odd-v1",
+    );
     expect(first.smartCutout.settings.seeds).toHaveLength(2);
     for (const s of first.smartCutout.settings.seeds)
       expect(s.rgba).toEqual([
@@ -324,6 +506,9 @@ const fs = require("node:fs/promises"),
     await expect(
       dialog().getByLabel("Kantenweichheit", { exact: true }),
     ).toHaveValue("2");
+    await expect(
+      dialog().getByText("Angewendete Polygone (1/32)", { exact: true }),
+    ).toBeVisible();
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("20");
     await brush("protect", 600, 650);
     await dialog()

@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  polygonOperationSchema,
+  rasterizePolygon,
+  validatePolygonBounds,
+} from "./cutout-polygon";
 export const MAX_SMART_PIXELS = 4_194_304;
 export const SMART_CUTOUT_VERSION = "lab76-seeded-rgba8-v1" as const;
 const byte = z.number().int().min(0).max(255);
@@ -19,6 +24,7 @@ export const cutoutSettingsSchema = z
     connected: z.boolean(),
     softness: z.number().int().min(0).max(8),
     expand: z.number().int().min(-3).max(3),
+    polygons: z.array(polygonOperationSchema).max(32).optional(),
   })
   .strict();
 export type CutoutSettings = z.infer<typeof cutoutSettingsSchema>;
@@ -122,6 +128,8 @@ export function validateCutoutDraft(p: CutoutImage, input: CutoutDraft) {
     throw new Error(
       "Ungültige Schutz-/Hintergrundmaske; binäre native Masken erforderlich.",
     );
+  for (const op of d.settings.polygons ?? [])
+    validatePolygonBounds(op.points, p.width, p.height);
   for (const s of d.settings.seeds) {
     if (
       s.x >= p.width ||
@@ -191,13 +199,26 @@ export function selectBackground(
     n = p.width * p.height,
     lab = prepared ?? prepareCutout(p);
   if (lab.length !== n * 3) throw new Error("Ungültiger Lab-Puffer");
+  const protectedMask = d.protected.slice(),
+    forcedMask = d.forced.slice(),
+    limited = new Uint8Array(n);
+  for (const op of d.settings.polygons ?? []) {
+    const region = rasterizePolygon(op, p.width, p.height);
+    const target =
+      op.operation === "protect"
+        ? protectedMask
+        : op.operation === "force"
+          ? forcedMask
+          : limited;
+    for (let i = 0; i < n; i++) if (region[i]) target[i] = 255;
+  }
   const selected = new Uint8Array(n),
     eligible = new Uint8Array(n),
     seedLabs = d.settings.seeds.map((s) => (s.y * p.width + s.x) * 3),
     threshold = d.settings.tolerance ** 2;
   if (seedLabs.length) {
     for (let i = 0; i < n; i++) {
-      if (d.protected[i]) continue;
+      if (protectedMask[i] || limited[i]) continue;
       if (!p.data[i * 4 + 3]) {
         eligible[i] = 255;
         continue;
@@ -247,18 +268,29 @@ export function selectBackground(
     );
   if (d.settings.softness)
     automatic = soften(automatic, p.width, p.height, d.settings.softness);
+  // Refinement must never leak the automatic selection back into a silhouette.
+  for (let i = 0; i < n; i++)
+    if (limited[i] || protectedMask[i]) automatic[i] = 0;
   const weights = new Uint8Array(n);
   let conflicts = 0,
     removed = 0;
   for (let i = 0; i < n; i++) {
-    if (d.protected[i]) {
+    if (protectedMask[i]) {
       weights[i] = 255;
-      conflicts += Number(!!d.forced[i]);
-    } else if (d.forced[i]) weights[i] = 0;
+      conflicts += Number(!!forcedMask[i]);
+    } else if (forcedMask[i]) weights[i] = 0;
     else weights[i] = Math.round((d.manual[i] * (255 - automatic[i])) / 255);
     removed += Number(weights[i] < 255);
   }
-  return { weights, selection: automatic, conflicts, removed };
+  return {
+    weights,
+    selection: automatic,
+    protectedMask,
+    forcedMask,
+    limited,
+    conflicts,
+    removed,
+  };
 }
 export type CutoutHistory = {
   past: CutoutDraft[];

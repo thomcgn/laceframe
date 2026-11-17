@@ -1166,3 +1166,8 @@ button.text-link { border:0; background:transparent; padding:2px 0; color:var(--
 .smart-mask-editor .button-row {display:flex;flex-wrap:wrap;gap:6px;z-index:3;}
 @media(max-width:1000px){.smart-mask-editor fieldset {grid-template-columns:220px minmax(0,1fr);gap:8px;}.smart-mask-editor {padding:12px;}.smart-mask-editor .mask-viewport {height:52vh;}}
 @media(max-width:700px){.smart-mask-editor fieldset {grid-template-columns:1fr;}.smart-mask-editor .mask-viewport {grid-column:1;grid-row:1;position:relative;top:0;}.smart-mask-editor .smart-cutout-controls {grid-row:2;}.smart-mask-editor .mask-toolbar {grid-row:3;}}
+
+.cutout-polygons {position:absolute;inset:0;z-index:1;pointer-events:none;overflow:visible;}
+.polygon-controls {grid-column:1/-1;border:1px solid var(--sage);padding:8px;display:grid;gap:6px;}
+
+.smart-mask-editor fieldset > p {grid-column:1/-1;}
