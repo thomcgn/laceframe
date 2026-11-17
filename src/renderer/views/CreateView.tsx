@@ -54,8 +54,10 @@ export function CreateView({
   visible,
   intent,
   onArtDirection,
+  onEditExpression,
   contextControlled = false,
 }: {
+  onEditExpression: (intent: Omit<StudioIntent, "serial">) => void;
   intent?: StudioIntent;
   onArtDirection: (id?: string) => void;
   contextControlled?: boolean;
@@ -168,6 +170,15 @@ export function CreateView({
     )
       return;
     if (intent.masterId) setMasterId(intent.masterId);
+    if (intent.familyId) setFamilyId(intent.familyId);
+    if (intent.variantId) {
+      setVariantId(intent.variantId);
+      const selected = p.variants.find((v) => v.id === intent.variantId);
+      if (selected) {
+        setAction(selected.suggestedAction);
+        setIntensity(selected.intensity);
+      }
+    }
     if (intent.candidateId) {
       const image = p.assets.find(
         (a) => a.id === intent.candidateId && a.characterId === character.id,
@@ -761,6 +772,11 @@ export function CreateView({
               onChange={(e) =>
                 editOptions(() => {
                   setFamilyId(e.target.value);
+                  const selected = p.variants.find(
+                    (v) => v.familyId === e.target.value,
+                  );
+                  setAction(selected?.suggestedAction ?? "silent");
+                  setIntensity(selected?.intensity);
                   setVariantId(
                     p.variants.find((v) => v.familyId === e.target.value)?.id ??
                       "",
@@ -818,6 +834,93 @@ export function CreateView({
             </select>
           </label>
         </div>
+        <section
+          className="studio-expression-summary"
+          aria-label="Expression Zusammenfassung"
+        >
+          <p>
+            <strong>{character?.name ?? "Figur wählen"}</strong> · Master V
+            {master?.version ?? "—"} ·{" "}
+            {artDirection?.name ?? "Eigener Masterstil"} ·{" "}
+            {family?.label ?? "Emotion wählen"} /{" "}
+            {variant?.label ?? "Variante wählen"}
+          </p>
+          <div className="inspector-options">
+            <label>
+              Stimmaktion
+              <select
+                aria-label="Create Stimmaktion"
+                value={action}
+                onChange={(e) =>
+                  editOptions(() => setAction(e.target.value as VocalAction))
+                }
+              >
+                <option value="silent">Still</option>
+                <option value="speaking">Sprechend</option>
+                <option value="shouting">Rufend</option>
+              </select>
+            </label>
+            <label>
+              Intensität · optional
+              <input
+                aria-label="Create Intensität"
+                type="number"
+                min="0"
+                max="1"
+                step=".05"
+                value={intensity ?? ""}
+                onChange={(e) =>
+                  editOptions(() =>
+                    setIntensity(
+                      e.target.value === ""
+                        ? undefined
+                        : Number(e.target.value),
+                    ),
+                  )
+                }
+              />
+            </label>
+          </div>
+          <p className="summary-direction">
+            <strong>
+              {personalPerformance
+                ? "Persönliche Performance"
+                : "Globale Ausdrucksanweisung"}
+              :
+            </strong>{" "}
+            {personalPerformance?.direction ||
+              variant?.prompt ||
+              "Familienname und Variante"}
+          </p>
+          <p className="muted summary-direction">
+            Zusätzliche kreative Anweisung:{" "}
+            {promptMode === "automatic"
+              ? "keine (Automatisch)"
+              : instructions || "keine"}
+          </p>
+          {promptMode === "expert" && (
+            <p className="muted">
+              Expert Override aktiv: Der manuelle Prompt kann von dieser
+              strukturierten Zusammenfassung abweichen. Im Prompt Builder
+              prüfen.
+            </p>
+          )}
+          <button
+            disabled={!character || !variant}
+            onClick={() => {
+              if (character && variant)
+                onEditExpression({
+                  characterId: character.id,
+                  mode: "expression",
+                  masterId: master?.id,
+                  familyId: family?.id,
+                  variantId: variant.id,
+                });
+            }}
+          >
+            Expression bearbeiten
+          </button>
+        </section>
         <details className="studio-lock-summary">
           <summary>Identity Lock · Outfit & Composition</summary>
           <h3>Identity Lock</h3>
@@ -1217,46 +1320,6 @@ export function CreateView({
         )}
       </section>
       <div className="create-drawers">
-        {character && variant && (
-          <details className="panel">
-            <summary>
-              Expression Performance · {character.name} / {variant.label}
-            </summary>
-            <p className="muted">
-              Nur für diese Figur und diese Emotionsvariante. Leer lassen, um
-              die globale Variante zu verwenden.
-            </p>
-            <form
-              key={`${character.id}/${variant.id}/${personalPerformance?.direction ?? ""}`}
-              onSubmit={(event) => {
-                event.preventDefault();
-                const data = new FormData(event.currentTarget);
-                command(
-                  {
-                    type: "setExpressionPerformance",
-                    characterId: character.id,
-                    variantId: variant.id,
-                    direction: String(data.get("direction") ?? ""),
-                  },
-                  "Persönlicher Emotionsausdruck gespeichert.",
-                );
-              }}
-            >
-              <label>
-                Persönlicher Ausdruck
-                <textarea
-                  name="direction"
-                  aria-label="Persönlicher Ausdruck"
-                  rows={3}
-                  maxLength={8000}
-                  defaultValue={personalPerformance?.direction ?? ""}
-                  placeholder="Wie zeigt diese Figur Wut, Verzweiflung oder Freude?"
-                />
-              </label>
-              <button type="submit">Persönlichen Ausdruck speichern</button>
-            </form>
-          </details>
-        )}
         <details
           className="panel prompt-drawer"
           open={promptOpen}
@@ -1297,7 +1360,7 @@ export function CreateView({
           </p>
         </details>
         <details className="panel create-inspector">
-          <summary>Inspector · Stimmaktion, Intensität und Herkunft</summary>
+          <summary>Inspector · technische Herkunft</summary>
           {active?.mask && (
             <p className="mono">
               Maske {active.mask.id} · Revision {active.mask.revision} · SHA-256{" "}
@@ -1311,42 +1374,6 @@ export function CreateView({
               Registrierung manuell bestätigt
             </p>
           )}
-          <div className="inspector-options">
-            <label>
-              Stimmaktion
-              <select
-                aria-label="Create Stimmaktion"
-                value={action}
-                onChange={(e) =>
-                  editOptions(() => setAction(e.target.value as VocalAction))
-                }
-              >
-                <option value="silent">Still</option>
-                <option value="speaking">Sprechend</option>
-                <option value="shouting">Rufend</option>
-              </select>
-            </label>
-            <label>
-              Intensität · optional
-              <input
-                aria-label="Create Intensität"
-                type="number"
-                min="0"
-                max="1"
-                step=".05"
-                value={intensity ?? ""}
-                onChange={(e) =>
-                  editOptions(() =>
-                    setIntensity(
-                      e.target.value === ""
-                        ? undefined
-                        : Number(e.target.value),
-                    ),
-                  )
-                }
-              />
-            </label>
-          </div>
           <p className="mono">
             Master-ID: {master?.id ?? "—"}
             <br />
@@ -1370,50 +1397,6 @@ export function CreateView({
               </button>
             )}
           </div>
-          {variant && (
-            <details>
-              <summary>Erweitert · Herkunft und Varianten-Vorlage</summary>
-              <form
-                key={variant.id + variant.prompt + variant.label}
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const fields = new FormData(e.currentTarget);
-                  command(
-                    {
-                      type: "editVariant",
-                      variant: {
-                        ...variant,
-                        label: String(fields.get("label")),
-                        prompt: String(fields.get("prompt")),
-                      },
-                    },
-                    "Varianten-Vorlage gespeichert.",
-                  );
-                }}
-              >
-                <label>
-                  Vorlagenname
-                  <input
-                    name="label"
-                    maxLength={120}
-                    required
-                    defaultValue={variant.label}
-                  />
-                </label>
-                <label>
-                  Vorlagenanweisung
-                  <textarea
-                    name="prompt"
-                    aria-label="Create Vorlagenanweisung"
-                    maxLength={8000}
-                    rows={3}
-                    defaultValue={variant.prompt}
-                  />
-                </label>
-                <button type="submit">Varianten-Vorlage speichern</button>
-              </form>
-            </details>
-          )}
           {timing && (
             <p className="mono">
               Start: {timing.startedAt}

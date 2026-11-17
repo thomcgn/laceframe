@@ -173,44 +173,61 @@ const { createHash } = require("node:crypto");
       text(page, "Master V1 · gesperrt", { exact: true }),
     ).toBeVisible();
     await expect(image(page, "Freigegebener Master V1")).toBeVisible();
-    await nav(page, "Library", true);
+    await nav(page, "Expressions");
     await field(page, "Emotionsfamilie", { exact: true }).selectOption({
       label: "Wütend",
     });
     await field(page, "Variante", { exact: true }).selectOption({
       label: "Anbrüllen / shouting",
     });
-    await field(page, "Bildanweisung · nur lokale Notiz", { exact: true }).fill(
+    await field(page, "Globale Generierungsanweisung", { exact: true }).fill(
       "Manuell geprüfte kontrollierte Wut.",
     );
     await page
       .getByRole("button", { name: "Variante speichern", exact: true })
       .click();
     await expect(page.locator(".notice")).toHaveText("Gespeichert.");
+    // Compatibility fixture: existing projects may contain imports predating Create attempts.
+    // Exercise the real legacy IPC command; all new user imports below use Studio.
+    const legacy = JSON.parse(
+      await fs.readFile(path.join(project, "laceframe.json"), "utf8"),
+    );
+    const legacyVariant = legacy.variants.find((v) => v.slug === "shouting");
     await setDialog(source);
+    for (const status of ["approved", "rejected"]) {
+      const result = await page.evaluate(
+        async ({ characterId, variantId, status }) => {
+          const staged = await window.laceframe.chooseImage();
+          if (!staged.ok || !staged.value)
+            throw new Error("Fixture import failed");
+          const imported = await window.laceframe.command({
+            type: "importCandidate",
+            characterId,
+            variantId,
+            action: "shouting",
+            token: staged.value.token,
+          });
+          if (!imported.ok) throw new Error(imported.error);
+          return window.laceframe.command({
+            type: "review",
+            id: imported.value.project.assets.at(-1).id,
+            status,
+          });
+        },
+        {
+          characterId: legacy.selectedCharacterId,
+          variantId: legacyVariant.id,
+          status,
+        },
+      );
+      expect(result.ok).toBe(true);
+    }
+    await setDialog(project);
+    await page.locator(".project-management summary").click();
     await page
-      .getByRole("button", { name: "Kandidaten-PNG auswählen …", exact: true })
+      .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();
-    await page
-      .getByRole("button", { name: "Kandidat importieren", exact: true })
-      .click();
-    await expect(
-      page.getByRole("button", { name: "Asset freigeben", exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Asset freigeben", exact: true })
-      .click();
-    await expect(page.locator(".notice")).toHaveText("Expression freigegeben.");
-    await page
-      .getByRole("button", { name: "Kandidaten-PNG auswählen …", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Kandidat importieren", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Asset ablehnen", exact: true })
-      .click();
-    await expect(page.locator(".notice")).toHaveText("Kandidat abgelehnt.");
+    await nav(page, "Expressions");
     await text(page, "Eigene Familie hinzufügen", { exact: true }).click();
     await field(page, "Neue Familie", { exact: true }).fill("Erleichtert");
     await page
@@ -225,7 +242,14 @@ const { createHash } = require("node:crypto");
     await field(page, "Emotionsfamilie", { exact: true }).selectOption({
       label: "Erleichtert",
     });
+    await page
+      .locator(".designer-navigation summary")
+      .filter({ hasText: "Variante hinzufügen" })
+      .click();
     await field(page, "Neue Variante", { exact: true }).fill("Aufatmen");
+    await field(page, "Neue Variantenkennung", { exact: true }).fill(
+      "aufatmen",
+    );
     await page
       .getByRole("button", { name: "Variante hinzufügen", exact: true })
       .click();
@@ -358,7 +382,7 @@ const { createHash } = require("node:crypto");
     );
     expect(blocked.ok).toBe(false);
     expect(await app.evaluate(() => globalThis.__opened)).toHaveLength(1);
-    await text(page, "Inspector · Stimmaktion, Intensität und Herkunft", {
+    await text(page, "Inspector · technische Herkunft", {
       exact: true,
     }).click();
     await page
@@ -405,10 +429,10 @@ const { createHash } = require("node:crypto");
     await expect(page.locator(".notice")).toHaveText(
       "Als Expression freigegeben.",
     );
-    await nav(page, "Library", true);
+    await nav(page, "Library");
     await expect(
-      text(page, "Importierte Ausdrücke (3)", { exact: true }),
-    ).toBeVisible();
+      field(page, "Library Asset", { exact: true }).locator("option"),
+    ).toHaveCount(4);
     await nav(page, "Studio");
     await field(page, "Create Familie", { exact: true }).selectOption({
       label: "Wütend",
@@ -513,10 +537,11 @@ const { createHash } = require("node:crypto");
       page.getByRole("heading", { name: "Ada Voss", exact: true }),
     ).toBeVisible();
     await expect(image(page, "Freigegebener Master V1")).toBeVisible();
-    await nav(page, "Library", true);
+    await nav(page, "Library");
     await expect(
-      text(page, "Importierte Ausdrücke (5)", { exact: true }),
-    ).toBeVisible();
+      field(page, "Library Asset", { exact: true }).locator("option"),
+    ).toHaveCount(6);
+    await nav(page, "Expressions");
     await field(page, "Emotionsfamilie", { exact: true }).selectOption({
       label: "Erleichtert",
     });
