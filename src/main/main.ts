@@ -1,3 +1,5 @@
+import { identityImportSchema } from "../shared/identity-import";
+import { ImageDialogService } from "./image-dialog";
 import { MAX_PACK_BYTES, packSelectionSchema } from "../shared/packs";
 import { exportAssetSchema } from "../shared/asset-quality";
 import { writeExport } from "./asset-export";
@@ -99,6 +101,49 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC() {
+  const imageDialogs = new ImageDialogService(
+    app.getPath("userData"),
+    (options) => dialog.showOpenDialog(window, options),
+  );
+  handle("identity:import", async (input) => {
+    const request = identityImportSchema.parse(input);
+    const slots = service.identitySlots(request.characterId, request.replaceId);
+    if (!slots) throw new Error("Maximal drei aktive Identitätsreferenzen.");
+    if (!request.files) {
+      const files = await imageDialogs.choose({
+        title: "Identitätsbilder hinzufügen",
+        properties: ["openFile", "multiSelections"],
+        filters: [
+          {
+            name: "Identitätsbilder",
+            extensions: ["png", "jpg", "jpeg", "webp"],
+          },
+        ],
+      });
+      if (!files) return null;
+      if (files.length > slots)
+        throw new Error(
+          `Noch ${slots} von 3 Plätzen verfügbar. Die gesamte Auswahl wurde abgelehnt.`,
+        );
+      const inputs = [],
+        errors = [];
+      for (const file of files) {
+        try {
+          inputs.push({
+            name: path.basename(file),
+            bytes: new Uint8Array(await readLimited(file, 16 * 1024 * 1024)),
+          });
+        } catch {
+          errors.push(
+            `${path.basename(file)}: Datei fehlt, ist unsicher oder größer als 16 MiB.`,
+          );
+        }
+      }
+      if (errors.length) throw new Error(errors.join("\n"));
+      request.files = inputs;
+    }
+    return service.importIdentityImages(request);
+  });
   handle("pack:choose", async (input) => {
     const kind = z.enum(["style", "expressions"]).parse(input);
     service.snapshot();
@@ -231,7 +276,7 @@ function registerIPC() {
     const identity =
       z.literal("identity").optional().parse(input) === "identity";
     service.snapshot();
-    const selected = await dialog.showOpenDialog(window, {
+    const selected = await imageDialogs.choose({
       title: identity
         ? "Private Identitätsreferenz importieren"
         : "PNG/WebP importieren",
@@ -245,8 +290,8 @@ function registerIPC() {
         },
       ],
     });
-    if (selected.canceled) return null;
-    const file = selected.filePaths[0];
+    if (!selected) return null;
+    const file = selected[0];
     return (
       identity
         ? service.stageIdentity.bind(service)
