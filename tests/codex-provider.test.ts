@@ -13,6 +13,7 @@ import { GenerationClock } from "../src/main/services/generation-clock";
 import { GenerationController } from "../src/main/services/generation-controller";
 import {
   draftFromAttempt,
+  protectExpressionPrompt,
   type GenerationDraft,
 } from "../src/shared/generation";
 import { effectiveStyle, referencesForStyle } from "../src/shared/domain";
@@ -177,6 +178,7 @@ describe("native project ingestion", () => {
     const calls = await trace(),
       turn = calls.find((m) => m.method === "turn/start");
     expect(turn.params.input[0].text).toContain(draft.prompt);
+    expect(turn.params.input[0].text).toContain(attempt.promptRevision.prompt);
     expect(turn.params.input[1].type).toBe("localImage");
     expect(turn.params.input[1].path).not.toBe(
       await service.masterFile(draft.masterId),
@@ -194,7 +196,10 @@ describe("native project ingestion", () => {
       durationMs: expect.any(Number),
     });
     expect(controller.status().available).toBe(true);
-    expect(draftFromAttempt(reopened.attempts[0])).toEqual(draft);
+    expect(draftFromAttempt(reopened.attempts[0])).toEqual({
+      ...draft,
+      prompt: protectExpressionPrompt(draft.prompt),
+    });
     expect(await fs.readFile(path.join(root, "exits"), "utf8")).toContain(
       "closed",
     );

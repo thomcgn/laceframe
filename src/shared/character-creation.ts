@@ -1,3 +1,4 @@
+import { structuredStyleText } from "./packs";
 import {
   TRANSPARENT_CHARACTER_INSTRUCTION,
   VISUAL_STYLE_INSTRUCTION,
@@ -180,6 +181,7 @@ export function composeCharacterPrompt(
       style
         ? `STYLE REFERENCE — ${style.name} / R${style.revision}. Rendering: ${style.renderRules}. Light: ${style.lightingRules ?? "restrained"}. Color: ${style.colorRules ?? "follow rendering style"}. Framing: ${style.framingRules ?? "follow composition"}. ${d.styleReferences.length ? `Images ${d.identityReferences.length + 1}–${d.identityReferences.length + d.styleReferences.length} are STYLE ONLY: ${d.styleReferences.map((r) => `${r.id} SHA-256 ${r.sha256}`).join("; ")}.` : "Text style only; no style image is supplied."} Borrow contours, pixel/paint clusters, detail, shading and color dramaturgy ONLY. NEVER transfer faces, hair, clothing, accessories, body identity or personality from the style references.`
         : "STYLE: Follow the identity illustration's rendering, or a restrained illustrated treatment for photos; no other character is a reference.",
+      structuredStyleText(style?.portableStyle),
       `OUTFIT DESCRIPTION — ${d.outfit}. Use this outfit independently of clothes in identity photos or style references. Do not copy another character's wardrobe.`,
       `MASTER COMPOSITION — Pose: ${d.composition.pose}\nFraming: ${d.composition.framing}\nBackground: ${d.composition.background}\nAsset profile: ${d.composition.profile}\nResolution profile: ${d.composition.targetResolution?.name ?? "custom native target"}\nRequested canvas: ${d.composition.targetWidth} × ${d.composition.targetHeight} pixels. This is a target, not a guaranteed output size. Do not force a 64×64 portrait conversion.`,
       TRANSPARENT_CHARACTER_INSTRUCTION,

@@ -1,3 +1,11 @@
+import {
+  packSchema,
+  importChoicesSchema,
+  migrationRecordSchema,
+  migrationChoiceSchema,
+  styleContentSchema,
+  portableOriginSchema,
+} from "./packs";
 import { cutoutDraftSchema, MAX_SMART_PIXELS } from "./smart-cutout";
 import {
   analysisRecordSchema,
@@ -107,6 +115,9 @@ export const assetSchema = z
   .strict();
 export const familySchema = z
   .object({
+    portableOrigin: portableOriginSchema.optional(),
+    portableSlug: z.string().min(1).max(120).optional(),
+    portableId: z.uuid().optional(),
     id: idSchema,
     label,
     slug: label,
@@ -115,6 +126,7 @@ export const familySchema = z
   .strict();
 export const variantSchema = z
   .object({
+    portableId: z.uuid().optional(),
     id: idSchema,
     familyId: idSchema,
     label,
@@ -129,7 +141,14 @@ export const artDirectionSchema = z
     id: idSchema,
     name: label,
     revision: z.number().int().positive(),
-    renderRules: z.string().trim().min(1).max(8000),
+    renderRules: z
+      .string()
+      .min(1)
+      .max(8000)
+      .refine(
+        (t) => t.trim().length > 0,
+        "Rendering-Regeln dürfen nicht leer sein.",
+      ),
     ...styleRules,
   })
   .strict();
@@ -143,6 +162,8 @@ export const expressionPerformanceSchema = z
 const projectObject = z
   .object({
     schemaVersion: z.literal(2),
+    portablePacksVersion: z.literal(1).optional(),
+    styleMigrations: z.array(migrationRecordSchema).max(100).default([]),
     smartCutoutVersion: z.literal(1).optional(),
     styleAnalyses: z.array(analysisRecordSchema).max(100).default([]),
     assetQualityVersion: z.literal(1).optional(),
@@ -214,10 +235,34 @@ const projectObject = z
   .strict();
 export const projectSchema = projectObject.superRefine((p, ctx) => {
   const fail = (message: string) => ctx.addIssue({ code: "custom", message });
+  for (const migration of p.styleMigrations) {
+    const source = p.artDirectionRevisions.find(
+      (r) =>
+        r.profileId === migration.profileId &&
+        r.revision === migration.sourceRevision,
+    );
+    const fields = [
+      "renderRules",
+      "description",
+      "lightingRules",
+      "colorRules",
+      "framingRules",
+    ] as const;
+    if (
+      !source ||
+      migration.sources.length !==
+        fields.filter((f) => source[f] !== undefined).length ||
+      new Set(migration.sources.map((s) => s.field)).size !==
+        migration.sources.length ||
+      migration.sources.some((s) => source[s.field] !== s.text)
+    )
+      fail("Invalid style migration original");
+  }
   const allIds = [
     p.id,
     ...[
       ...p.styleAnalyses,
+      ...p.styleMigrations,
       ...p.characters,
       ...p.masters,
       ...p.qualityAssets,
@@ -897,6 +942,30 @@ export const assetFile = (
   format: "png" | "webp",
 ) => `assets/${kind}/${hash}.${format}`;
 export const commandSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("importPack"),
+      pack: packSchema,
+      projectHash: sha,
+      choices: importChoicesSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("migrateStyleRules"),
+      profileId: idSchema,
+      sourceRevision: z.number().int().positive(),
+      choices: migrationChoiceSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("updateStructuredStyle"),
+      profileId: idSchema,
+      sourceRevision: z.number().int().positive(),
+      style: styleContentSchema,
+    })
+    .strict(),
   relightInputSchema.extend({ type: z.literal("createRelighting") }),
   z
     .object({

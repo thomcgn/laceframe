@@ -1,3 +1,4 @@
+import { PackTools } from "../components/PackTools";
 import { useEffect, useState } from "react";
 import type {
   Command,
@@ -124,6 +125,14 @@ export function ExpressionDesigner({
           ? "Ungespeicherte Entwürfe bleiben beim Navigieren in diesem Projekt erhalten."
           : "Gespeicherte Regeln werden im Studio verwendet. Historische Prompts bleiben unverändert."}
       </p>
+      <PackTools
+        snapshot={snapshot}
+        kind="expressions"
+        familyId={family?.id}
+        disabled={busy || dirty}
+        perform={perform}
+        onSnapshot={onSnapshot}
+      />
       <fieldset disabled={busy} className="designer-layout">
         <aside className="panel designer-navigation">
           <label>

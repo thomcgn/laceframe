@@ -1,3 +1,4 @@
+import { MAX_PACK_BYTES, packSelectionSchema } from "../shared/packs";
 import { exportAssetSchema } from "../shared/asset-quality";
 import { writeExport } from "./asset-export";
 import {
@@ -98,6 +99,37 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC() {
+  handle("pack:choose", async (input) => {
+    const kind = z.enum(["style", "expressions"]).parse(input);
+    service.snapshot();
+    const selected = await dialog.showOpenDialog(window, {
+      title: "JSON-Pack prüfen",
+      properties: ["openFile"],
+      filters: [{ name: "Laceframe JSON", extensions: ["json"] }],
+    });
+    if (selected.canceled) return null;
+    const bytes = await readLimited(selected.filePaths[0], MAX_PACK_BYTES);
+    const preview = service.previewPack(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    );
+    if (preview.pack.format !== `laceframe.${kind}`)
+      throw new Error("Falscher Pack-Typ für diesen Workspace.");
+    return preview;
+  });
+  handle("pack:export", async (input) => {
+    const payload = service.exportPack(packSelectionSchema.parse(input));
+    const selected = await dialog.showOpenDialog(window, {
+      title: "JSON-Exportordner (außerhalb des Projekts)",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (selected.canceled) return null;
+    await writeExport(
+      selected.filePaths[0],
+      service.snapshot().directory,
+      payload,
+    );
+    return { name: payload.name };
+  });
   handle("image:cutout-source", (input) =>
     service.cutoutSource(idSchema.parse(input)),
   );

@@ -26,6 +26,7 @@ import {
   executionLabel,
   sameDraft,
   composePrompt,
+  protectExpressionPrompt,
   draftFromAttempt,
   generationDraftSchema,
   newComposer,
@@ -332,7 +333,7 @@ export function CreateView({
           supplementaryInstructions:
             promptMode === "automatic" ? "" : instructions,
           basePrompt: composer.base,
-          prompt: composer.text,
+          prompt: protectExpressionPrompt(composer.text),
           providerId,
         }
       : undefined;
@@ -1335,6 +1336,48 @@ export function CreateView({
               : ""}
           </summary>
           <PromptComposer
+            sources={[
+              {
+                layer: "System",
+                source:
+                  "Canvas, Alpha, unveränderlicher Master, sichere Herkunft und manuelle Freigabe (Main/Provider).",
+              },
+              {
+                layer: "Style",
+                source: artDirection
+                  ? `${artDirection.name} · R${artDirection.revision}`
+                  : "Eigener Masterstil",
+              },
+              {
+                layer: "Character Identity",
+                source: master
+                  ? `${character?.name} · Master V${master.version} · ${master.id}`
+                  : "Kein Master",
+              },
+              {
+                layer: "Outfit",
+                source:
+                  "Unverändert aus dem ausgewählten Identity-Master; kein Outfittransfer aus Style Packs.",
+              },
+              {
+                layer: "Expression Performance",
+                source: personalPerformance
+                  ? "Persönliche Performance dieser Figur"
+                  : `Globale Vorlage: ${family?.label} / ${variant?.label}`,
+              },
+              {
+                layer: "Composition",
+                source:
+                  "Registrierter Master-Canvas und gespeicherte Stil-/Kompositionsregeln; kein automatischer Zuschnitt.",
+              },
+              {
+                layer: "Creative Supplements",
+                source:
+                  promptMode === "expert"
+                    ? "Expliziter Expert Override; technische Regeln bleiben erhalten."
+                    : instructions || "Keine Ergänzung",
+              },
+            ]}
             state={composer}
             onChange={setComposer}
             mode={promptMode}

@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { LaceframeBridge } from "../shared/bridge";
 // Each operation has its own channel. No generic invoke, filesystem or Node API escapes.
 const bridge: LaceframeBridge = {
+  choosePack: (kind) => ipcRenderer.invoke("pack:choose", kind),
+  exportPack: (selection) => ipcRenderer.invoke("pack:export", selection),
   cutoutSource: (id) => ipcRenderer.invoke("image:cutout-source", id),
   smartCutoutRecipe: (id) =>
     ipcRenderer.invoke("image:smart-cutout-recipe", id),
