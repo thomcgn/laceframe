@@ -1221,3 +1221,20 @@ button.text-link { border:0; background:transparent; padding:2px 0; color:var(--
 .pack-tools article, .style-rule-tools article { border-top:1px solid #42505f; padding:8px 0; }
 .pack-tools label:has(input[type=checkbox]), .style-rule-tools label:has(input[type=checkbox]) { display:flex; align-items:center; gap:8px; }
 .pack-tools input[type=checkbox], .style-rule-tools input[type=checkbox] { width:auto; }
+
+/* Identity inspection uses independent native image transforms; pixel comparison stays registered. */
+.identity-panes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.identity-pane { min-width:0; border:1px solid #526273; border-radius:6px; overflow:hidden; }
+.identity-pane header { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; padding:8px; }
+.identity-viewport { position:relative; height:clamp(260px,52vh,680px); overflow:hidden; touch-action:none; outline-offset:-3px; }
+.identity-viewport img { position:absolute; left:0; top:0; max-width:none; max-height:none; transform-origin:0 0; user-select:none; pointer-events:none; }
+.identity-zoom-controls { display:flex; flex-wrap:wrap; align-items:center; gap:5px; padding:6px; }
+.identity-zoom-controls button { padding:4px 7px; font-size:11px; }
+.identity-zoom-controls label { display:flex; flex:1 1 80px; gap:4px; align-items:center; font-size:11px; }
+.identity-zoom-controls input { min-width:35px; width:100%; }
+.identity-zoom-controls output { font-size:11px; font-variant-numeric:tabular-nums; }
+.identity-fit-note { font-size:12px; color:var(--ivory); }
+.identity-comparison-switch { min-width:0; }
+@media(max-width:700px) { .identity-panes {grid-template-columns:1fr;} .identity-viewport {height:40vh;} }
+
+.identity-image-label { position:absolute; top:5px; left:5px; right:5px; z-index:1; pointer-events:none; padding:4px 6px; border-radius:4px; background:#141820df; color:var(--ivory); font-size:11px; }

@@ -896,15 +896,17 @@ export function CharacterCreator({
                   master={activeReference}
                   candidate={candidate}
                   beforeLabel="Identität"
+                  identityComparison
+                  requested={
+                    active
+                      ? {
+                          width: active.composition.targetWidth,
+                          height: active.composition.targetHeight,
+                        }
+                      : undefined
+                  }
                   previewPrefix="Character Creator"
                 />
-                <p>
-                  Identitätsreferenz links / Masterkandidat rechts ·
-                  tatsächliche Ausgabe {candidate.width} × {candidate.height} ·
-                  Ziel {active?.composition.targetWidth} ×{" "}
-                  {active?.composition.targetHeight}. Vergleich ist keine
-                  Identitätsfreigabe.
-                </p>
                 <AssetQuality
                   key={candidate.id}
                   source={candidate}
