@@ -98,6 +98,12 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC() {
+  handle("image:cutout-source", (input) =>
+    service.cutoutSource(idSchema.parse(input)),
+  );
+  handle("image:smart-cutout-recipe", (input) =>
+    service.smartCutoutRecipe(idSchema.parse(input)),
+  );
   handle("image:analysis-source", (input) =>
     service.analysisSource(idSchema.parse(input)),
   );

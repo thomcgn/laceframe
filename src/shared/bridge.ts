@@ -1,3 +1,4 @@
+import type { CutoutDraft, CutoutImage } from "./smart-cutout";
 import type { RelightPixels, RelightRecord } from "./relighting";
 import type { QualityReport, ExportAssetRequest } from "./asset-quality";
 import type { CharacterCreationDraft } from "./character-creation";
@@ -14,6 +15,8 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  cutoutSource(id: string): Promise<Result<CutoutImage>>;
+  smartCutoutRecipe(id: string): Promise<Result<CutoutDraft>>;
   analysisSource(
     id: string,
   ): Promise<Result<RelightPixels & { sha256: string }>>;

@@ -1,4 +1,12 @@
 import {
+  selectBackground,
+  validateCutoutImage,
+  MAX_SMART_PIXELS,
+  SMART_CUTOUT_VERSION,
+  type SmartCutoutRecord,
+  type CutoutDraft,
+} from "../shared/smart-cutout";
+import {
   ANALYSIS_VERSION,
   MAX_ANALYSIS_PIXELS,
   parameters,
@@ -207,6 +215,7 @@ export class ProjectService {
       schemaVersion: 2,
       visualStyleVersion: 1,
       maskingVersion: 1,
+      smartCutoutVersion: 1,
       characterCreationVersion: 1,
       assetQualityVersion: 1,
       identityAssets: [],
@@ -299,6 +308,32 @@ export class ProjectService {
         maskWeights(mask);
       }
     for (const q of project.qualityAssets)
+      if (q.smartCutout) {
+        for (const role of ["manual", "protected", "forced"] as const) {
+          const m = q.smartCutout.masks[role],
+            b = await readLimited(
+              await safePath(root, m.file),
+              MAX_IMAGE_BYTES,
+            );
+          if (hashBytes(b) !== m.sha256)
+            throw new Error("Freistellungs-Schutzmaske verändert.");
+          const pixels = decodePixels(b);
+          if (pixels.width !== q.width || pixels.height !== q.height)
+            throw new Error("Falsche Schutzmaskengröße.");
+          const weights = maskWeights(pixels);
+          if (role !== "manual" && weights.some((v) => v !== 0 && v !== 255))
+            throw new Error("Ungültige binäre Schutzmaske.");
+        }
+        if (
+          hashBytes(
+            decodePixels(
+              await readLimited(await safePath(root, q.file), MAX_IMAGE_BYTES),
+            ).data,
+          ) !== q.smartCutout.pixelSha256
+        )
+          throw new Error("Freistellungs-Pixelprovenienz verändert.");
+      }
+    for (const q of project.qualityAssets)
       if (q.relighting) {
         const image = decodePixels(
           await readLimited(await safePath(root, q.file), MAX_IMAGE_BYTES),
@@ -330,7 +365,8 @@ export class ProjectService {
       source.maskingVersion !== 1 ||
       source.characterCreationVersion !== 1 ||
       source.assetQualityVersion !== 1 ||
-      !Object.hasOwn(source, "styleAnalyses")
+      !Object.hasOwn(source, "styleAnalyses") ||
+      source.smartCutoutVersion !== 1
         ? bytes
         : undefined;
     this.legacyBackupName = versionOne
@@ -345,7 +381,9 @@ export class ProjectService {
               ? "laceframe.v2.pre-character-creation.backup.json"
               : source.assetQualityVersion !== 1
                 ? "laceframe.v2.pre-asset-quality.backup.json"
-                : "laceframe.v2.pre-style-analysis.backup.json";
+                : !Object.hasOwn(source, "styleAnalyses")
+                  ? "laceframe.v2.pre-style-analysis.backup.json"
+                  : "laceframe.v2.pre-smart-cutout.backup.json";
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -435,6 +473,7 @@ export class ProjectService {
     const validated = projectSchema.parse({
       ...project,
       maskingVersion: 1,
+      smartCutoutVersion: 1,
       characterCreationVersion: 1,
       assetQualityVersion: 1,
     });
@@ -602,6 +641,24 @@ export class ProjectService {
         const source = this.qualitySource(cmd.sourceId),
           bytes = await this.verifiedBytes(source.id),
           pixels = await this.pixels(bytes);
+        let smartRecord: SmartCutoutRecord | undefined;
+        if (cmd.type === "createCutout" && cmd.smart) {
+          const result = selectBackground(pixels, cmd.smart);
+          if (!Buffer.from(result.weights).equals(Buffer.from(cmd.weights)))
+            throw new Error(
+              "Freistellungsvorschau veraltet. Berechnung abwarten.",
+            );
+          const previous = cmd.smart.previousId
+            ? p.qualityAssets.find((q) => q.id === cmd.smart!.previousId)
+            : undefined;
+          if (
+            cmd.smart.previousId &&
+            (!previous?.smartCutout ||
+              previous.sourceId !== source.id ||
+              previous.characterId !== source.characterId)
+          )
+            throw new Error("Falsche Freistellungsherkunft.");
+        }
         const output =
           cmd.type === "createCutout"
             ? cutoutPixels(pixels, cmd.weights)
@@ -641,6 +698,48 @@ export class ProjectService {
                 );
           }
         }
+        if (cmd.type === "createCutout" && cmd.smart) {
+          const previous = cmd.smart.previousId
+            ? p.qualityAssets.find((q) => q.id === cmd.smart!.previousId)
+            : undefined;
+          const masks = {} as SmartCutoutRecord["masks"];
+          for (const role of ["manual", "protected", "forced"] as const) {
+            const image = await this.stage(
+              encodeMask(source.width, source.height, cmd.smart[role]),
+              `${role}.png`,
+            );
+            try {
+              const stored = await this.store("cutout-masks", image.token),
+                prior = previous?.smartCutout?.masks[role];
+              masks[role] = {
+                file: stored.file,
+                sha256: stored.sha256,
+                type: (
+                  {
+                    manual: "manual-retention",
+                    protected: "protected-foreground",
+                    forced: "forced-background",
+                  } as const
+                )[role],
+                revision: prior
+                  ? prior.revision + Number(prior.sha256 !== stored.sha256)
+                  : 1,
+              };
+            } finally {
+              this.discard(image.token);
+            }
+          }
+          smartRecord = {
+            algorithm: SMART_CUTOUT_VERSION,
+            revision: previous?.smartCutout
+              ? previous.smartCutout.revision + 1
+              : 1,
+            ...(previous ? { previousId: previous.id } : {}),
+            settings: cmd.smart.settings,
+            masks,
+            pixelSha256: "",
+          };
+        }
         let mask:
           | {
               sha256: string;
@@ -678,6 +777,14 @@ export class ProjectService {
             createdAt: new Date().toISOString(),
             status: "candidate",
             ...(mask ? { mask } : {}),
+            ...(smartRecord
+              ? {
+                  smartCutout: {
+                    ...smartRecord,
+                    pixelSha256: hashBytes(output.data),
+                  },
+                }
+              : {}),
             ...(cmd.type === "deriveResolution"
               ? { profile: cmd.profile }
               : {}),
@@ -1665,6 +1772,41 @@ export class ProjectService {
             throw new Error(
               "Hard Lock schützt diese Pixel. Lichtregion auf erlaubte Pixel begrenzen oder neuen Master verwenden.",
             );
+  }
+  async cutoutSource(id: string) {
+    const source = this.qualitySource(id);
+    if (source.width * source.height > MAX_SMART_PIXELS)
+      throw new Error(
+        "Automatische Freistellung: maximal 4 Megapixel, keine automatische Skalierung.",
+      );
+    const p = await this.pixels(await this.verifiedBytes(id));
+    validateCutoutImage(p);
+    return { width: p.width, height: p.height, data: new Uint8Array(p.data) };
+  }
+  async smartCutoutRecipe(id: string): Promise<CutoutDraft> {
+    const q = this.snapshot().project.qualityAssets.find((a) => a.id === id);
+    if (!q?.smartCutout)
+      throw new Error("Keine automatische Freistellungsrevision.");
+    const result: CutoutDraft = {
+      previousId: q.id,
+      settings: q.smartCutout.settings,
+      manual: new Uint8Array(),
+      protected: new Uint8Array(),
+      forced: new Uint8Array(),
+    };
+    for (const role of ["manual", "protected", "forced"] as const) {
+      const m = q.smartCutout.masks[role],
+        b = await readLimited(
+          await safePath(this.directory, m.file),
+          MAX_IMAGE_BYTES,
+        );
+      if (hashBytes(b) !== m.sha256) throw new Error("Schutzmaske verändert.");
+      const p = decodePixels(b);
+      if (p.width !== q.width || p.height !== q.height)
+        throw new Error("Falsche Schutzmaskengröße.");
+      result[role] = new Uint8Array(maskWeights(p));
+    }
+    return result;
   }
   async cutoutMask(id: string) {
     const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);

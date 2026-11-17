@@ -1,3 +1,4 @@
+import { cutoutDraftSchema, MAX_SMART_PIXELS } from "./smart-cutout";
 import {
   analysisRecordSchema,
   analysisInputsSchema,
@@ -138,6 +139,7 @@ export const expressionPerformanceSchema = z
 const projectObject = z
   .object({
     schemaVersion: z.literal(2),
+    smartCutoutVersion: z.literal(1).optional(),
     styleAnalyses: z.array(analysisRecordSchema).max(100).default([]),
     assetQualityVersion: z.literal(1).optional(),
     qualityAssets: z.array(qualityDerivativeSchema).max(10000).default([]),
@@ -293,6 +295,45 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
               q.profile.height !== q.height)
     )
       fail("Invalid quality operation");
+    if (q.smartCutout) {
+      if (
+        q.operation !== "cutout" ||
+        !p.smartCutoutVersion ||
+        q.width * q.height > MAX_SMART_PIXELS ||
+        Object.values(q.smartCutout.masks).some(
+          (m) => m.file !== assetFile("cutout-masks", m.sha256, "png"),
+        )
+      )
+        fail("Invalid smart cutout");
+      const previous = q.smartCutout.previousId
+        ? p.qualityAssets.find((a) => a.id === q.smartCutout!.previousId)
+        : undefined;
+      if (
+        q.smartCutout.previousId &&
+        (!previous?.smartCutout ||
+          previous.sourceId !== q.sourceId ||
+          previous.characterId !== q.characterId ||
+          q.smartCutout.revision !== previous.smartCutout.revision + 1)
+      )
+        fail("Invalid smart cutout history");
+      if (!q.smartCutout.previousId && q.smartCutout.revision !== 1)
+        fail("Invalid first smart cutout revision");
+      for (const role of ["manual", "protected", "forced"] as const) {
+        const current = q.smartCutout.masks[role],
+          prior = previous?.smartCutout?.masks[role];
+        if (
+          current.revision !==
+          (prior ? prior.revision + Number(prior.sha256 !== current.sha256) : 1)
+        )
+          fail("Invalid smart mask revision");
+      }
+      if (
+        q.smartCutout.settings.seeds.some(
+          (seed) => seed.x >= q.width || seed.y >= q.height,
+        )
+      )
+        fail("Invalid smart cutout seed");
+    }
     const seen = new Set([q.id]);
     let ancestor = source;
     while (ancestor && "sourceId" in ancestor) {
@@ -814,6 +855,7 @@ export const commandSchema = z.discriminatedUnion("type", [
       type: z.literal("createCutout"),
       sourceId: idSchema,
       name: label.default("Freistellung"),
+      smart: cutoutDraftSchema.optional(),
       weights: z
         .instanceof(Uint8Array)
         .refine((v) => v.length <= MAX_MASK_PIXELS),
