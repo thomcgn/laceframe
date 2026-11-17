@@ -94,7 +94,7 @@ The smoke now polls for the **same exact original RGBA** and additionally the **
 
 ## GitHub Actions
 
-`quality.yml` runs on PRs to main, pushes to main, and manual FULL dispatch. It uses Ubuntu 24.04, Node 24, `npm ci`, npm cache, official actions pinned to immutable SHAs, read-only contents permission and concurrency cancellation of superseded runs. Desktop dependencies/Xvfb/Openbox/D-Bus are installed only when required. Desktop suites run sequentially on an isolated virtual display. Ubuntu's runner-only user-namespace setting is adjusted so Chromium's sandbox remains enabled; `--no-sandbox` is not used. No models or live provider credentials are installed. Synthetic diagnostics/profile reports are uploaded for seven days.
+`quality.yml` runs on PRs to main and manual FULL dispatch. There is no `push` trigger: merging a checked PR does not automatically repeat the complete regression on main. LOW/MEDIUM/HIGH routing and the always-running `quality-gate` job remain unchanged. It uses Ubuntu 24.04, Node 24, `npm ci`, npm cache, official actions pinned to immutable SHAs, read-only contents permission and concurrency cancellation of superseded runs. Desktop dependencies/Xvfb/Openbox/D-Bus are installed only when required. Desktop suites run sequentially on an isolated virtual display. Ubuntu's runner-only user-namespace setting is adjusted so Chromium's sandbox remains enabled; `--no-sandbox` is not used. No models or live provider credentials are installed. Synthetic diagnostics/profile reports are uploaded for seven days.
 
 The classifier is extracted from the actual **base commit** into RUNNER_TEMP, so a PR cannot edit its own policy to select LOW. For the first rollout, when the validated base commit has no classifier, or for an initial push, FULL is mandatory. Missing/invalid base commits are errors, not a reduced bootstrap. The current-head runner can elevate the trusted base risk but cannot lower it.
 
@@ -112,7 +112,11 @@ After the first successful workflow appears, configure a main ruleset/branch pro
 2. Require the **`quality-gate`** status check from GitHub Actions, selecting the observed check name.
 3. Require it to succeed before merge (and require an up-to-date branch if desired); prevent bypass/direct pushes as appropriate for the repository.
 
-**No repository rule or branch protection was changed automatically.** Adding the workflow alone does not make its check mandatory. GitHub plan/repository settings may limit available rules. Main pushes still run regression but cannot retroactively block an already accepted push.
+**No repository rule or branch protection was changed automatically.** Adding the workflow alone does not make its check mandatory. GitHub plan/repository settings may limit available rules. The PR-triggered `quality-gate` remains the check to require; removing the main push trigger does not change its name or PR execution.
+
+Without Merge Queue, the final merge commit is **not separately tested** after merge. The PR workflow tests GitHub's PR merge ref at execution time; subsequent base changes can produce a different final merge commit. Requiring branches to be up to date before merging reduces this gap. Merge Queue would require explicit `merge_group` workflow support, which this workflow does not currently provide. Manual `workflow_dispatch` remains available for FULL regression on main when needed; it is not automatic post-merge coverage.
+
+Branch-protection inspection on 2026-11-17: GitHub's main branch response reports `protected: false`, protection disabled and no required status contexts. Repository rulesets and the effective branch-rules API both returned empty lists. Thus `quality-gate` runs for PRs but is **not currently enforced as a merge requirement**. The connector cannot read the administration-only protection endpoint (403); an additional authenticated GitHub CLI read returned `404 Branch not protected`, confirming the branch metadata. The owner still needs to configure the required check above. No protection setting was changed by this patch.
 
 ## Boundaries
 
