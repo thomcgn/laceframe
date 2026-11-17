@@ -47,6 +47,7 @@ export function MasterCandidateCompare({
   mask?: Image;
 }) {
   const maskPreview = usePreview(mask?.id);
+  const [backdrop, setBackdrop] = useState("checker");
   const [normalized, setNormalized] = useState(false);
   const before = usePreview(master?.id),
     after = usePreview(candidate?.id);
@@ -102,6 +103,18 @@ export function MasterCandidateCompare({
           <span>↔</span>
           <b>Kandidat</b>
         </span>
+        <label>
+          Prüfhintergrund
+          <select
+            aria-label="Vergleich Prüfhintergrund"
+            value={backdrop}
+            onChange={(e) => setBackdrop(e.target.value)}
+          >
+            <option value="checker">Schachbrett</option>
+            <option value="light">Hell</option>
+            <option value="dark">Dunkel</option>
+          </select>
+        </label>
         <label>
           Ansicht
           <select
@@ -171,7 +184,7 @@ export function MasterCandidateCompare({
         </button>
       </div>
       <div
-        className="compare-viewport checker"
+        className={`compare-viewport checker compare-backdrop-${backdrop}`}
         ref={viewport}
         tabIndex={0}
         aria-label="Vergleichsfläche · ziehen zum Verschieben, Pfeiltasten zum Schwenken"
@@ -231,7 +244,7 @@ export function MasterCandidateCompare({
             transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
           }}
         >
-          <div className="compare-layer checker">
+          <div className={`compare-layer checker compare-backdrop-${backdrop}`}>
             {before.src && master && (
               <img
                 draggable={false}
@@ -244,7 +257,7 @@ export function MasterCandidateCompare({
           </div>
           {candidate && after.src && (
             <div
-              className={`compare-layer ${mode === "slider" ? "checker" : ""}`}
+              className={`compare-layer compare-backdrop-${backdrop} ${mode === "slider" ? "checker" : ""}`}
               style={{
                 clipPath:
                   mode === "slider" && candidate

@@ -1,3 +1,4 @@
+const { reviewImport } = require("./historical-master-fixture.cjs");
 const { selectMaskTool, zoomMask } = require("./smoke-ui.cjs");
 const { field, image, text, nav } = require("./smoke-ui.cjs");
 // Packaged Electron integration with a protocol fixture. No live AI calls.
@@ -64,10 +65,20 @@ const path = require("node:path");
     ).toBeVisible();
     const bytes = await app.evaluate(({ nativeImage }) => [
       ...nativeImage
-        .createFromBitmap(Buffer.alloc(600 * 400 * 4, 160), {
-          width: 600,
-          height: 400,
-        })
+        .createFromBitmap(
+          (() => {
+            const b = Buffer.alloc(600 * 400 * 4, 160);
+            for (let y = 0; y < 400; y++)
+              for (let x = 0; x < 600; x++)
+                if (!x || !y || x === 599 || y === 399)
+                  b[(y * 600 + x) * 4 + 3] = 0;
+            return b;
+          })(),
+          {
+            width: 600,
+            height: 400,
+          },
+        )
         .toPNG(),
     ]);
     await page.evaluate(async (bytes) => {
@@ -81,6 +92,7 @@ const path = require("node:path");
           new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
         );
     }, bytes);
+    await reviewImport(page);
     await page
       .getByRole("button", {
         name: "Freigegebenen Master sperren",
@@ -92,10 +104,20 @@ const path = require("node:path");
     await fs.mkdir(output, { recursive: true });
     const resultBytes = await app.evaluate(({ nativeImage }) => [
       ...nativeImage
-        .createFromBitmap(Buffer.alloc(400 * 600 * 4, 210), {
-          width: 400,
-          height: 600,
-        })
+        .createFromBitmap(
+          (() => {
+            const b = Buffer.alloc(400 * 600 * 4, 210);
+            for (let y = 0; y < 600; y++)
+              for (let x = 0; x < 400; x++)
+                if (!x || !y || x === 399 || y === 599)
+                  b[(y * 400 + x) * 4 + 3] = 0;
+            return b;
+          })(),
+          {
+            width: 400,
+            height: 600,
+          },
+        )
         .toPNG(),
     ]);
     await fs.writeFile(
@@ -601,6 +623,7 @@ const path = require("node:path");
           new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
         );
     }, resultBytes);
+    await reviewImport(page);
     await page
       .getByRole("button", {
         name: "Freigegebenen Master sperren",

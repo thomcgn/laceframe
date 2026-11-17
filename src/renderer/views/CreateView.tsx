@@ -78,6 +78,9 @@ export function CreateView({
   const [masterId, setMasterId] = useState(
     character?.masterId ?? latest?.masterId ?? "",
   );
+  useEffect(() => {
+    if (character?.masterId) setMasterId(character.masterId);
+  }, [character?.masterId]);
   const masters = p.masters
     .filter((m) => m.characterId === character?.id && m.locked)
     .sort((a, b) => b.version - a.version);

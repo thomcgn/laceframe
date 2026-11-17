@@ -1,3 +1,4 @@
+import { seedHistoricalMaster } from "./historical-master";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs/promises";
 import os from "node:os";
@@ -78,11 +79,7 @@ describe("Expression Designer existing command contract", () => {
     await service.command({ type: "addCharacter", name: "One" });
     const one = service.snapshot().project.selectedCharacterId!;
     const image = await service.stage(png(16, 18), "one.png");
-    await service.command({
-      type: "confirmMaster",
-      characterId: one,
-      token: image.token,
-    });
+    await seedHistoricalMaster(service, image, one);
     await service.command({ type: "addCharacter", name: "Two" });
     const two = service.snapshot().project.selectedCharacterId!;
     const p = service.snapshot().project;

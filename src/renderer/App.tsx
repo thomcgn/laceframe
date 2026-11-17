@@ -14,6 +14,7 @@ import type {
   StagedImage,
   VocalAction,
 } from "../shared/domain";
+import { MasterHistory } from "./components/MasterHistory";
 import { MAX_IMAGE_BYTES } from "../shared/domain";
 import type { Result } from "../shared/bridge";
 
@@ -49,6 +50,12 @@ export function App() {
     variantId?: string;
     action: VocalAction;
   }>();
+  const [importReviewed, setImportReviewed] = useState(false),
+    [importNotes, setImportNotes] = useState("");
+  useEffect(() => {
+    setImportReviewed(false);
+    setImportNotes("");
+  }, [staged?.image.token]);
   const importing = Boolean(staged);
   useEffect(() => {
     if (!importing) return;
@@ -180,6 +187,13 @@ export function App() {
           type: "confirmMaster",
           characterId: staged.characterId,
           token: staged.image.token,
+          review: {
+            sourceSha256: staged.image.sha256,
+            identityConfirmed: true,
+            silhouetteConfirmed: true,
+            activationConfirmed: true,
+            notes: importNotes,
+          },
         };
     void run(
       () => window.laceframe.command(cmd),
@@ -747,6 +761,20 @@ export function App() {
                       </button>
                       {master && (
                         <button
+                          onClick={() =>
+                            enterStudio({
+                              mode: "master",
+                              characterId: character.id,
+                              masterId: master.id,
+                              rebuild: true,
+                            })
+                          }
+                        >
+                          Master neu aufbauen
+                        </button>
+                      )}
+                      {master && (
+                        <button
                           onClick={() => openLibrary(character.id, master.id)}
                         >
                           Master in Library prüfen
@@ -782,6 +810,7 @@ export function App() {
                   )}
                   {master ? (
                     <>
+                      <p>Aktueller Master V{master.version}</p>
                       <label>
                         Zoom
                         <select
@@ -816,38 +845,18 @@ export function App() {
                           disabled={busy || generationRunning}
                         />
                       )}
-                      <details>
-                        <summary>
-                          Masterhistorie · alte Verknüpfungen bleiben erhalten
-                        </summary>
-                        {p?.masters
-                          .filter((m) => m.characterId === character?.id)
-                          .map((m) => (
-                            <div key={m.id}>
-                              <button
-                                onClick={() => openLibrary(m.characterId, m.id)}
-                              >
-                                Master V{m.version} in Library prüfen
-                              </button>
-                              <button
-                                onClick={() =>
-                                  enterStudio({
-                                    mode: "expression",
-                                    characterId: m.characterId,
-                                    masterId: m.id,
-                                  })
-                                }
-                              >
-                                Mit Master V{m.version} Expression erstellen
-                              </button>
-                              <ImagePreview
-                                id={m.id}
-                                caption={`Master V${m.version} · ${m.id}`}
-                                zoom={25}
-                              />
-                            </div>
-                          ))}
-                      </details>
+                      <MasterHistory
+                        project={p!}
+                        characterId={character!.id}
+                        onInspect={(id) => openLibrary(character!.id, id)}
+                        onStudio={(id) =>
+                          enterStudio({
+                            mode: "expression",
+                            characterId: character!.id,
+                            masterId: id,
+                          })
+                        }
+                      />
                       <p className="muted">
                         Die Originaldatei bleibt unverändert. Jede neue
                         Ausdrucksdatei verweist auf diesen Master.
@@ -950,6 +959,34 @@ export function App() {
                 ? "Das Bild wird als ungeprüfter Kandidat mit dem exakten Master verknüpft."
                 : "Bestätige, dass dieses Portrait als Master freigegeben ist. Master V1 bleibt unverändert; Verbesserungen werden als neue Version freigegeben. Die Quelldatei wird unverändert kopiert."}
             </p>
+            {!staged.variantId && (
+              <>
+                <p role="status">
+                  {staged.image.quality?.status === "transparent"
+                    ? "Transparenz vorhanden – manuelle Prüfung erforderlich"
+                    : "Kein geeigneter transparenter Master: Hintergrund freistellen oder im Character Creator neu generieren. Freigabe gesperrt."}
+                </p>
+                <label>
+                  <input
+                    aria-label="Import Master Sichtprüfung"
+                    type="checkbox"
+                    checked={importReviewed}
+                    onChange={(e) => setImportReviewed(e.target.checked)}
+                  />
+                  Identität, Silhouette und Alpha-Kanten geprüft; diesen Master
+                  ausdrücklich aktivieren
+                </label>
+                <label>
+                  Prüfnotiz
+                  <textarea
+                    aria-label="Import Master Prüfnotiz"
+                    value={importNotes}
+                    maxLength={8000}
+                    onChange={(e) => setImportNotes(e.target.value)}
+                  />
+                </label>
+              </>
+            )}
             {staged.variantId && staged.image.format !== "png" && (
               <p className="warning">
                 Für Kandidaten sind ausschließlich PNG-Dateien erlaubt.
@@ -971,7 +1008,11 @@ export function App() {
                 className="primary"
                 disabled={
                   busy ||
-                  Boolean(staged.variantId && staged.image.format !== "png")
+                  Boolean(staged.variantId && staged.image.format !== "png") ||
+                  (!staged.variantId &&
+                    (staged.image.quality?.status !== "transparent" ||
+                      !importReviewed ||
+                      !importNotes.trim()))
                 }
                 onClick={confirmImport}
               >

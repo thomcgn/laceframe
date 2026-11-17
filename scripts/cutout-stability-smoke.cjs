@@ -1,3 +1,4 @@
+const { seedHistoricalMaster } = require("./historical-master-fixture.cjs");
 // Real Electron/IPC/pixels/worker. Optional dev mode exercises React StrictMode's effect replay.
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises"),
@@ -98,10 +99,17 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
       .click();
   };
   const close = async () => {
-    page.once("dialog", (d) => d.accept());
-    await editor()
-      .getByRole("button", { name: "Editor schließen", exact: true })
-      .click();
+    const accept = (d) => d.accept();
+    page.once("dialog", accept);
+    try {
+      await editor()
+        .getByRole("button", { name: "Editor schließen", exact: true })
+        .click();
+    } finally {
+      // A pristine close has no confirmation: never leave its listener armed
+      // for a later, unrelated master-activation dialog.
+      page.off("dialog", accept);
+    }
   };
   try {
     await launch();
@@ -122,28 +130,17 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
     for (let i = 0; i < 1254 * 1254; i++)
       source.data.set([20, 80, 140, 255], i * 4);
     const bytes = PNG.sync.write(source);
-    await page.evaluate(
-      (bytes) => {
-        const dt = new DataTransfer();
-        dt.items.add(
-          new File([new Uint8Array(bytes)], "synthetic.png", {
-            type: "image/png",
-          }),
-        );
-        document
-          .querySelector(".app")
-          .dispatchEvent(
-            new DragEvent("drop", { bubbles: true, dataTransfer: dt }),
-          );
-      },
-      [...bytes],
-    );
+    await app.close();
+    await seedHistoricalMaster(project, bytes);
+    await launch();
+    await chooser(project);
     await page
-      .getByRole("button", {
-        name: "Freigegebenen Master sperren",
-        exact: true,
-      })
+      .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();
+    await expect(
+      page.getByAltText("Freigegebener Master V1", { exact: true }),
+    ).toBeVisible();
+
     const original = (await read()).masters[0],
       originalBytes = await fs.readFile(path.join(project, original.file));
     await expect(
@@ -415,6 +412,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
         { exact: true },
       )
       .check();
+    page.once("dialog", (d) => d.accept());
     await quality
       .getByRole("button", { name: "Qualitätsversion freigeben", exact: true })
       .click();
@@ -586,28 +584,16 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
       partial.data.set([20, 80, 140, 255], i * 4);
     partial.data.set([64, 128, 192, 128], (12 * 32 + 16) * 4);
     partial.data.set([5, 10, 15, 0], 0);
-    await page.evaluate(
-      (bytes) => {
-        const dt = new DataTransfer();
-        dt.items.add(
-          new File([new Uint8Array(bytes)], "partial.png", {
-            type: "image/png",
-          }),
-        );
-        document
-          .querySelector(".app")
-          .dispatchEvent(
-            new DragEvent("drop", { bubbles: true, dataTransfer: dt }),
-          );
-      },
-      [...PNG.sync.write(partial)],
-    );
+    await app.close();
+    await seedHistoricalMaster(project, PNG.sync.write(partial));
+    await launch();
+    await chooser(project);
     await page
-      .getByRole("button", {
-        name: "Freigegebenen Master sperren",
-        exact: true,
-      })
+      .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();
+    await expect(
+      page.getByAltText("Freigegebener Master V1", { exact: true }),
+    ).toBeVisible();
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
       await quality.locator("summary").first().click();

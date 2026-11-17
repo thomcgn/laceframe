@@ -22,6 +22,11 @@ import {
   type RelightRecord,
 } from "../shared/relighting";
 import { analyzePixels, cutoutPixels, resizePixels } from "./asset-quality";
+import {
+  TRANSPARENT_CHARACTER_INSTRUCTION,
+  masterApprovalInputSchema,
+  type MasterApprovalInput,
+} from "../shared/asset-quality";
 import { exportAssetSchema } from "../shared/asset-quality";
 import type { Pixels } from "./mask-composite";
 import {
@@ -33,6 +38,9 @@ import {
 } from "./mask-composite";
 import {
   validateCreatorSelection,
+  validateMasterTarget,
+  protectMasterPrompt,
+  transparencyConflicts,
   type CharacterCreationDraft,
 } from "../shared/character-creation";
 import { constants } from "node:fs";
@@ -401,6 +409,10 @@ export class ProjectService {
       name,
       sha256: hashBytes(owned),
       preview: preview(owned, info.format),
+      quality: await Promise.resolve()
+        .then(() => this.pixels(owned))
+        .then((p) => analyzePixels(p, info.format))
+        .catch(() => undefined),
     };
     this.staged = { image, bytes: owned };
     return image;
@@ -803,6 +815,7 @@ export class ProjectService {
         if (!q || q.status !== "candidate")
           throw new Error("Ungeprüfte Qualitätsversion auswählen.");
         if (cmd.status === "approved") {
+          await this.verifyPendingQuality(q.id);
           const report = await this.qualityReport(q.id);
           if (report.status !== "transparent")
             throw new Error(
@@ -852,11 +865,15 @@ export class ProjectService {
             } else if (!resized) {
               const previous = p.masters.find((m) => m.id === source.id),
                 candidate = p.masterCandidates.find((m) => m.id === source.id);
-              if (
-                previous
-                  ? c.masterId !== previous.id
-                  : !candidate || Boolean(c.masterId)
-              )
+              if (candidate) {
+                if (candidate.status !== "candidate")
+                  throw new Error("Masterkandidat bereits geprüft.");
+                validateMasterTarget(
+                  p,
+                  p.masterAttempts.find((a) => a.id === candidate.attemptId)!,
+                );
+              }
+              if (previous ? c.masterId !== previous.id : !candidate)
                 throw new Error(
                   "Nur den aktuellen Master verbessern; veraltete oder fremde Kandidaten ersetzen keinen gesperrten Master.",
                 );
@@ -865,8 +882,18 @@ export class ProjectService {
                 ...(await this.store("originals", staged.token)),
                 id,
                 characterId: c.id,
-                version: previous ? previous.version + 1 : 1,
-                ...(previous ? { previousMasterId: previous.id } : {}),
+                version:
+                  (p.masters.find((m) => m.id === c.masterId)?.version ?? 0) +
+                  1,
+                ...(c.masterId ? { previousMasterId: c.masterId } : {}),
+                ...(candidate ? { sourceCandidateId: candidate.id } : {}),
+                masterReview: await this.checkMasterApproval(q.id, {
+                  sourceSha256: q.sha256,
+                  identityConfirmed: true,
+                  silhouetteConfirmed: true,
+                  activationConfirmed: true,
+                  notes: cmd.notes,
+                }),
                 qualitySourceId: q.id,
                 locked: true,
                 approvedAt: now,
@@ -884,7 +911,7 @@ export class ProjectService {
                 p.outfits.push({
                   id: randomUUID(),
                   characterId: c.id,
-                  name: "Master V1 outfit",
+                  name: `Master V${p.masters.at(-1)!.version} outfit`,
                   notes: attempt.outfit,
                 });
               }
@@ -900,10 +927,7 @@ export class ProjectService {
       }
       case "importIdentityReference": {
         const c = character(cmd.characterId);
-        if (c.masterId)
-          throw new Error(
-            "Master ist gesperrt. Für eine neue Identität eine neue Entwurfsfigur erstellen.",
-          );
+
         if (
           p.identityAssets.filter((a) => a.characterId === c.id && !a.removedAt)
             .length >= 3
@@ -969,6 +993,15 @@ export class ProjectService {
       }
       case "prepareCharacterMaster": {
         validateCreatorSelection(p, cmd.draft);
+        if (cmd.draft.baseMasterId) await this.preview(cmd.draft.baseMasterId);
+        if (
+          transparencyConflicts(
+            cmd.draft.prompt.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, ""),
+          )
+        )
+          throw new Error(
+            "Prompt widerspricht der verbindlichen Alpha-Transparenz. Hintergrundanweisung korrigieren.",
+          );
         for (const r of [
           ...cmd.draft.identityReferences,
           ...cmd.draft.styleReferences,
@@ -986,7 +1019,7 @@ export class ProjectService {
             id: randomUUID(),
             createdAt: now,
             compositionVersion: 1,
-            prompt,
+            prompt: protectMasterPrompt(prompt),
           },
         });
         break;
@@ -998,10 +1031,15 @@ export class ProjectService {
         const c = character(candidate.characterId);
         await this.preview(candidate.id);
         if (cmd.status === "approved") {
-          if (c.masterId)
-            throw new Error(
-              "Master V1 ist gesperrt und kann nicht ersetzt werden.",
-            );
+          const attempt = p.masterAttempts.find(
+            (a) => a.id === candidate.attemptId,
+          )!;
+          validateMasterTarget(p, attempt);
+          const masterReview = await this.checkMasterApproval(
+            candidate.id,
+            cmd.review,
+          );
+          const previous = p.masters.find((m) => m.id === c.masterId);
           const bytes = await this.verifiedBytes(candidate.id);
           if (this.staged)
             throw new Error("Zuerst den ausstehenden Import abschließen.");
@@ -1012,7 +1050,10 @@ export class ProjectService {
               ...(await this.store("originals", image.token)),
               id,
               characterId: c.id,
-              version: 1,
+              version: (previous?.version ?? 0) + 1,
+              ...(previous ? { previousMasterId: previous.id } : {}),
+              sourceCandidateId: candidate.id,
+              masterReview,
               locked: true,
               approvedAt: new Date().toISOString(),
             });
@@ -1028,7 +1069,7 @@ export class ProjectService {
             p.outfits.push({
               id: randomUUID(),
               characterId: c.id,
-              name: "Master V1 outfit",
+              name: `Master V${p.masters.at(-1)!.version} outfit`,
               notes: attempt.outfit,
             });
           } finally {
@@ -1446,6 +1487,16 @@ export class ProjectService {
           throw new Error(
             "Master V1 ist gesperrt und kann nicht ersetzt werden.",
           );
+        const pending = this.pending(cmd.token);
+        const review = masterApprovalInputSchema.parse(cmd.review);
+        if (review.sourceSha256 !== pending.image.sha256)
+          throw new Error("Master-Quellhash stimmt nicht überein.");
+        const report = analyzePixels(
+          await this.pixels(pending.bytes),
+          pending.image.format,
+        );
+        this.requireMasterTransparency(report);
+        const masterReview = this.masterReviewRecord(review, report);
         const image = await this.store("originals", cmd.token),
           id = randomUUID();
         p.masters.push({
@@ -1453,6 +1504,7 @@ export class ProjectService {
           id,
           characterId: c.id,
           version: 1,
+          masterReview,
           locked: true,
           approvedAt: new Date().toISOString(),
         });
@@ -1624,6 +1676,7 @@ export class ProjectService {
       );
     return {
       ...draft,
+      prompt: protectMasterPrompt(draft.prompt),
       identityFiles: await files(draft.identityReferences),
       styleFiles: await files(draft.styleReferences),
     };
@@ -1775,8 +1828,29 @@ export class ProjectService {
       throw new Error(
         "Live Relighting ist erst nach der Freistellung und Freigabe dieses Portraits möglich.",
       );
+    const pixels = await this.verifyQualityChain(chain.reverse());
+    if (
+      !pixels ||
+      analyzePixels(pixels, source.format).status !== "transparent"
+    )
+      throw new Error(
+        "Live Relighting benötigt echte, nicht leere Alpha-Transparenz. Hintergrund freistellen und freigeben.",
+      );
+    validateRelightSize(pixels);
+    return {
+      width: pixels.width,
+      height: pixels.height,
+      data: new Uint8Array(pixels.data),
+      sha256: source.sha256,
+      cutoutId,
+    };
+  }
+  /** Shared byte/provenance validation for pending quality approval and relighting. */
+  private async verifyQualityChain(
+    chain: ReturnType<ProjectService["qualitySource"]>[],
+  ) {
     let pixels: Pixels | undefined;
-    for (const a of chain.reverse()) {
+    for (const a of chain) {
       const actual = await this.pixels(await this.verifiedBytes(a.id));
       if (actual.width !== a.width || actual.height !== a.height)
         throw new Error("Bildabmessungen der Herkunft stimmen nicht überein.");
@@ -1841,21 +1915,32 @@ export class ProjectService {
       }
       pixels = actual;
     }
-    if (
-      !pixels ||
-      analyzePixels(pixels, source.format).status !== "transparent"
-    )
-      throw new Error(
-        "Live Relighting benötigt echte, nicht leere Alpha-Transparenz. Hintergrund freistellen und freigeben.",
-      );
-    validateRelightSize(pixels);
-    return {
-      width: pixels.width,
-      height: pixels.height,
-      data: new Uint8Array(pixels.data),
-      sha256: source.sha256,
-      cutoutId,
-    };
+    if (!pixels) throw new Error("Bildquelle fehlt.");
+    return pixels;
+  }
+  private async verifyPendingQuality(id: string) {
+    const chain: ReturnType<ProjectService["qualitySource"]>[] = [],
+      seen = new Set<string>();
+    let a = this.qualitySource(id);
+    const characterId = a.characterId;
+    while (true) {
+      if (seen.has(a.id) || chain.length >= 64 || a.characterId !== characterId)
+        throw new Error("Ungültige Qualitäts-Herkunft.");
+      seen.add(a.id);
+      chain.push(a);
+      const parentId =
+        "sourceId" in a
+          ? a.sourceId
+          : "qualitySourceId" in a
+            ? a.qualitySourceId
+            : undefined;
+      if (!parentId) break;
+      const parent = this.qualitySource(parentId);
+      if ("sourceId" in a && a.sourceSha256 !== parent.sha256)
+        throw new Error("Quellhash der Qualitätsversion stimmt nicht überein.");
+      a = parent;
+    }
+    return this.verifyQualityChain(chain.reverse());
   }
   async relightEligibility(id: string) {
     try {
@@ -1981,6 +2066,44 @@ export class ProjectService {
     );
     if (hashBytes(b) !== q.mask.sha256) throw new Error("Maske verändert.");
     return maskWeights(decodePixels(b));
+  }
+  private requireMasterTransparency(
+    report: import("../shared/asset-quality").QualityReport,
+  ) {
+    if (report.status !== "transparent")
+      throw new Error(
+        report.status === "opaque"
+          ? "Dieser Master-Kandidat hat keinen echten transparenten Hintergrund. Hintergrund freistellen oder erneut generieren."
+          : "Transparenz verdächtig oder Bild leer: Korrektur erforderlich. Keine Masterfreigabe.",
+      );
+  }
+  private masterReviewRecord(
+    review: MasterApprovalInput,
+    report: import("../shared/asset-quality").QualityReport,
+  ) {
+    return {
+      ...review,
+      checkedAt: new Date().toISOString(),
+      algorithm: "alpha-review-v1" as const,
+      transparent: report.transparent,
+      partial: report.partial,
+      opaque: report.opaque,
+      edgeTransparent: report.edgeTransparent,
+      exteriorTransparent: report.exteriorTransparent,
+    };
+  }
+  private async checkMasterApproval(id: string, input: unknown) {
+    const source = this.qualitySource(id),
+      review = masterApprovalInputSchema.parse(input);
+    if (source.sha256 !== review.sourceSha256)
+      throw new Error("Master-Kandidat oder Quellhash wurde verändert.");
+    const bytes = await this.verifiedBytes(id),
+      pixels = await this.pixels(bytes);
+    if (pixels.width !== source.width || pixels.height !== source.height)
+      throw new Error("Ungültige Bildabmessungen.");
+    const report = analyzePixels(pixels, source.format);
+    this.requireMasterTransparency(report);
+    return this.masterReviewRecord(review, report);
   }
   async qualityReport(id: string) {
     const source = this.qualitySourceOrStyle(id);

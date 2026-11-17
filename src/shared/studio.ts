@@ -15,6 +15,7 @@ export type StudioIntent = {
   characterId: string;
   mode: StudioMode;
   masterId?: string;
+  rebuild?: boolean;
   styleId?: string;
   candidateId?: string;
   familyId?: string;

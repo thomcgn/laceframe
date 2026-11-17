@@ -1,3 +1,4 @@
+import { seedHistoricalMaster } from "./historical-master";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs/promises";
 import os from "node:os";
@@ -69,11 +70,11 @@ beforeEach(async () => {
   await s.create(dir, "Guard");
   await s.command({ type: "addCharacter", name: "Synthetic" });
   const staged = await s.stage(encodePixels(fixture()), "original.png");
-  await s.command({
-    type: "confirmMaster",
-    characterId: s.snapshot().project.selectedCharacterId,
-    token: staged.token,
-  });
+  await seedHistoricalMaster(
+    s,
+    staged,
+    s.snapshot().project.selectedCharacterId,
+  );
 });
 afterEach(async () => fs.rm(dir, { recursive: true, force: true }));
 const master = () => s.snapshot().project.masters[0];
@@ -134,11 +135,11 @@ describe("trusted cutout-before-relighting guard", () => {
         p.data[3] = 0;
         const st = await s.stage(encodePixels(p), "transparent.png");
         await s.command({ type: "addCharacter", name: "External transparent" });
-        await s.command({
-          type: "confirmMaster",
-          characterId: s.snapshot().project.selectedCharacterId,
-          token: st.token,
-        });
+        await seedHistoricalMaster(
+          s,
+          st,
+          s.snapshot().project.selectedCharacterId,
+        );
       }
       const m = s.snapshot().project.masters.at(-1)!;
       const before = await fs.readFile(path.join(dir, "laceframe.json"));
@@ -268,6 +269,7 @@ describe("trusted cutout-before-relighting guard", () => {
     found.file = file;
     const promoted = p.masters.find((a) => a.id === found.approvedMasterId)!;
     promoted.sha256 = sha;
+    if (promoted.masterReview) promoted.masterReview.sourceSha256 = sha;
     promoted.file = file.replace("quality/", "originals/");
     await fs.writeFile(path.join(dir, promoted.file), bytes);
     await fs.writeFile(
@@ -300,11 +302,11 @@ describe("trusted cutout-before-relighting guard", () => {
         name: "Legacy transparent source",
       });
       const staged = await s.stage(encodePixels(transparent), "legacy.png");
-      await s.command({
-        type: "confirmMaster",
-        characterId: s.snapshot().project.selectedCharacterId,
-        token: staged.token,
-      });
+      await seedHistoricalMaster(
+        s,
+        staged,
+        s.snapshot().project.selectedCharacterId,
+      );
       const p = s.snapshot().project,
         m = p.masters.at(-1)!;
       const original = await fs.readFile(path.join(dir, m.file));

@@ -1,3 +1,4 @@
+import { MasterApproval } from "../components/MasterApproval";
 import { GenerationRequirements } from "../components/GenerationRequirements";
 import {
   updateStudioPrompt,
@@ -7,7 +8,10 @@ import {
   type Requirement,
 } from "../../shared/studio";
 import { AssetQuality } from "../components/AssetQuality";
-import { RESOLUTION_PROFILES } from "../../shared/asset-quality";
+import {
+  RESOLUTION_PROFILES,
+  TRANSPARENT_CHARACTER_INSTRUCTION,
+} from "../../shared/asset-quality";
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { effectiveStyle } from "../../shared/domain";
@@ -15,6 +19,8 @@ import type { Snapshot, Command } from "../../shared/domain";
 import {
   characterCreationDraftSchema,
   composeCharacterPrompt,
+  protectMasterPrompt,
+  transparencyConflicts,
   DEFAULT_COMPOSITION,
   type CharacterCreationDraft,
   type Composition,
@@ -68,6 +74,17 @@ export function CharacterCreator({
       (a) => a.characterId === character?.id,
     ),
     latest = attempts.at(-1);
+  const currentMaster = p.masters.find((m) => m.id === character?.masterId);
+  const [target, setTarget] = useState<{
+    mode: "create" | "rebuild";
+    baseMasterId?: string;
+    baseMasterSha256?: string;
+  }>(() => ({ mode: "create" }));
+  const rebuilding = target.mode === "rebuild";
+  const targetValid = rebuilding
+    ? currentMaster?.id === target.baseMasterId
+    : !currentMaster;
+  const [cutoutRequested, setCutoutRequested] = useState(0);
   const identities = p.identityAssets.filter(
     (a) => a.characterId === character?.id && !a.removedAt,
   );
@@ -93,7 +110,11 @@ export function CharacterCreator({
     const a = p.styleAssets.find((a) => a.id === id)!;
     return { id: a.id, sha256: a.sha256 };
   });
-  const [outfit, setOutfit] = useState(latest?.outfit ?? "");
+  const [outfit, setOutfit] = useState(
+    latest?.outfit ??
+      p.outfits.filter((o) => o.characterId === character?.id).at(-1)?.notes ??
+      "",
+  );
   const [identityNotes, setIdentityNotes] = useState(
     latest?.identityNotes ?? "",
   );
@@ -117,6 +138,7 @@ export function CharacterCreator({
   const settings = character
     ? {
         characterId: character.id,
+        ...target,
         identityReferences: identities.map((a) => ({
           id: a.id,
           sha256: a.sha256,
@@ -165,12 +187,45 @@ export function CharacterCreator({
     if (
       intent?.mode === "master" &&
       intent.characterId === character?.id &&
+      intent.rebuild &&
+      currentMaster
+    ) {
+      setTarget({
+        mode: "rebuild",
+        baseMasterId: currentMaster.id,
+        baseMasterSha256: currentMaster.sha256,
+      });
+      setStyleId(effectiveStyle(p, character.id)?.id ?? "");
+      setOutfit(
+        latest?.outfit ??
+          p.outfits.filter((o) => o.characterId === character.id).at(-1)
+            ?.notes ??
+          "",
+      );
+      setIdentityNotes(latest?.identityNotes ?? "");
+      setComposition({
+        ...(latest?.composition ?? DEFAULT_COMPOSITION),
+        background: DEFAULT_COMPOSITION.background,
+      });
+      setActiveId("");
+    }
+    if (
+      intent?.mode === "master" &&
+      intent.characterId === character?.id &&
       intent.candidateId
     ) {
       const candidate = p.masterCandidates.find(
         (c) => c.id === intent.candidateId && c.characterId === character.id,
       );
-      if (candidate) setActiveId(candidate.attemptId);
+      if (candidate) {
+        setActiveId(candidate.attemptId);
+        const a = attempts.find((a) => a.id === candidate.attemptId)!;
+        setTarget({
+          mode: a.mode ?? "create",
+          baseMasterId: a.baseMasterId,
+          baseMasterSha256: a.baseMasterSha256,
+        });
+      }
     }
     if (
       intent?.mode === "master" &&
@@ -199,13 +254,16 @@ export function CharacterCreator({
     ? {
         ...settings,
         operation: "create-character-master" as const,
-        prompt: composer.text,
+        prompt: protectMasterPrompt(composer.text),
       }
     : undefined;
   const running = codex.state === "running";
   const valid = Boolean(
-    !character?.masterId &&
+    targetValid &&
       draft &&
+      !transparencyConflicts(
+        draft.prompt.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, ""),
+      ) &&
       characterCreationDraftSchema.safeParse(draft).success &&
       composer.pendingBase === undefined &&
       (promptMode === "expert" || composer.base === base) &&
@@ -265,7 +323,7 @@ export function CharacterCreator({
   function importIdentity(file?: File) {
     void perform(
       async () => {
-        if (!character || character.masterId)
+        if (!character || !targetValid)
           throw new Error("Zuerst eine Entwurfsfigur anlegen.");
         if (file && file.size > 16 * 1024 * 1024)
           throw new Error("Identitätsbilder bis 16 MiB.");
@@ -317,10 +375,19 @@ export function CharacterCreator({
       message: "Figur fehlt. Einen Figurenentwurf anlegen.",
       target: "creator-identity",
     });
-  if (character?.masterId)
+  if (!targetValid)
     requirements.push({
       message:
-        "Dieser Master ist bereits gesperrt. Für weitere Ausdrücke den Expression-Modus verwenden.",
+        "Master gesperrt oder Rebuild-Ausgangsversion veraltet. In Characters ausdrücklich Master neu aufbauen wählen.",
+    });
+  const promptConflict = transparencyConflicts(
+    `${identityNotes} ${outfit} ${composition.pose} ${composition.framing} ${creative} ${promptMode === "expert" ? composer.text.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, "") : ""}`,
+  );
+  if (promptConflict)
+    requirements.push({
+      message:
+        "Prompt widerspricht der verbindlichen Alpha-Transparenz. Hintergrundanweisung korrigieren.",
+      target: "creator-prompt-builder",
     });
   if (!identities.length)
     requirements.push({
@@ -443,7 +510,11 @@ export function CharacterCreator({
       <div className="section-head">
         <div>
           <p className="eyebrow">CREATE CHARACTER</p>
-          <h2>Vom Identitätsbild zum neutralen Master</h2>
+          <h2>
+            {rebuilding
+              ? "Master neu aufbauen"
+              : "Vom Identitätsbild zum neutralen Master"}
+          </h2>
         </div>
         <button onClick={onClose}>Zur Charakterbibliothek</button>
       </div>
@@ -471,10 +542,7 @@ export function CharacterCreator({
           </label>
         </>
       )}
-      <details
-        className="creator-new-character"
-        open={!character || Boolean(character.masterId)}
-      >
+      <details className="creator-new-character" open={!character}>
         <summary>Neue Figur anlegen</summary>
         <form
           className="inline-form"
@@ -506,8 +574,10 @@ export function CharacterCreator({
           </p>
           {character.masterId && (
             <p className="warning">
-              Der freigegebene Master bleibt unverändert. Für eine weitere
-              Identität einen neuen Figurenentwurf anlegen.
+              Aktueller Master V{currentMaster?.version} bleibt aktiv.{" "}
+              {rebuilding
+                ? "Rebuild für dieselbe Figur: ein separat geprüfter Kandidat wird erst nach ausdrücklicher Freigabe zur nächsten Version."
+                : "Für einen neuen Master derselben Figur in Characters Master neu aufbauen wählen."}
             </p>
           )}
           <div className="creator-grid">
@@ -520,7 +590,7 @@ export function CharacterCreator({
                 if (
                   !busy &&
                   !running &&
-                  !character.masterId &&
+                  targetValid &&
                   e.dataTransfer.files.length === 1
                 )
                   importIdentity(e.dataTransfer.files[0]);
@@ -535,7 +605,9 @@ export function CharacterCreator({
                 du generierst.
               </p>
               <button
-                disabled={Boolean(character.masterId) || identities.length >= 3}
+                disabled={
+                  !targetValid || identities.length >= 3 || busy || running
+                }
                 onClick={() => importIdentity()}
               >
                 Identitätsbild importieren …
@@ -614,7 +686,7 @@ export function CharacterCreator({
                   value={style?.id ?? ""}
                   onChange={(e) => {
                     setStyleId(e.target.value);
-                    if (character)
+                    if (character && !rebuilding)
                       command({
                         type: "setCharacterStyle",
                         characterId: character.id,
@@ -825,6 +897,8 @@ export function CharacterCreator({
                 <AssetQuality
                   key={candidate.id}
                   source={candidate}
+                  cutoutRequested={cutoutRequested}
+                  onCutoutOpened={() => setCutoutRequested(0)}
                   project={p}
                   onSnapshot={onSnapshot}
                   disabled={busy || running}
@@ -846,27 +920,31 @@ export function CharacterCreator({
                     >
                       Masterkandidat ablehnen
                     </button>
-                    <button
-                      className="primary"
-                      disabled={Boolean(character.masterId)}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            "Identität, neutrale Mimik, Outfit und Komposition manuell geprüft? Diesen Kandidaten als unveränderlichen Master V1 freigeben?",
-                          )
+                    <MasterApproval
+                      key={candidate.id}
+                      source={candidate}
+                      disabled={busy || running || !targetValid}
+                      label={
+                        currentMaster
+                          ? `Als Master V${currentMaster.version + 1} freigeben & aktivieren`
+                          : "Als Master V1 freigeben & sperren"
+                      }
+                      onRetry={valid ? generate : undefined}
+                      onCutout={() => setCutoutRequested((v) => v + 1)}
+                      onApprove={(review) =>
+                        command(
+                          {
+                            type: "reviewMasterCandidate",
+                            id: candidate.id,
+                            status: "approved",
+                            review,
+                          },
+                          currentMaster
+                            ? "Neuer Master aktiviert; bisherige Versionen bleiben erhalten."
+                            : "Master V1 freigegeben und gesperrt.",
                         )
-                          command(
-                            {
-                              type: "reviewMasterCandidate",
-                              id: candidate.id,
-                              status: "approved",
-                            },
-                            "Master V1 freigegeben und gesperrt.",
-                          );
-                      }}
-                    >
-                      Als Master V1 freigeben & sperren
-                    </button>
+                      }
+                    />
                   </div>
                 )}
                 {Boolean(character.masterId) && (
@@ -904,6 +982,13 @@ export function CharacterCreator({
             onToggle={(e) => setPromptOpen(e.currentTarget.open)}
           >
             <summary>Prompt Builder & Generierungsdetails</summary>
+            <p className="muted">
+              Verbindliche Systemregel in jedem Modus, auch Expert Override:
+              echte Alpha-Transparenz, kein eingebrannter Hintergrund. Main
+              ergänzt diese Regel im tatsächlich gesendeten Prompt. Das Modell
+              garantiert keinen transparenten Output; die Pixelprüfung
+              entscheidet über die Freigabe.
+            </p>
             <PromptComposer
               labelPrefix="Creator"
               state={composer}

@@ -122,6 +122,13 @@ const { createHash } = require("node:crypto");
           type: "confirmMaster",
           characterId: original,
           token: r.value.token,
+          review: {
+            sourceSha256: r.value.sha256,
+            identityConfirmed: true,
+            silhouetteConfirmed: true,
+            activationConfirmed: true,
+            notes: "Synthetic silhouette and identity review",
+          },
         });
         if (!c.ok) throw new Error(c.error);
         const cut = await window.laceframe.command({
@@ -493,6 +500,14 @@ const { createHash } = require("node:crypto");
     const large = new PNG({ width: 2048, height: 2048 });
     large.data.fill(120);
     for (let i = 3; i < large.data.length; i += 4) large.data[i] = 255;
+    for (let y = 0; y < 2048; y++)
+      for (let x = 0; x < 2048; x++)
+        if (!x || !y || x === 2047 || y === 2047)
+          large.data[(y * 2048 + x) * 4 + 3] = 0;
+    for (let y = 0; y < 2048; y++)
+      for (let x = 0; x < 2048; x++)
+        if (!x || !y || x === 2047 || y === 2047)
+          large.data[(y * 2048 + x) * 4 + 3] = 0;
     const selected = (await manifest()).selectedCharacterId;
     await page.evaluate(
       async ({ bytes, id }) => {
@@ -505,6 +520,13 @@ const { createHash } = require("node:crypto");
           type: "confirmMaster",
           characterId: id,
           token: r.value.token,
+          review: {
+            sourceSha256: r.value.sha256,
+            identityConfirmed: true,
+            silhouetteConfirmed: true,
+            activationConfirmed: true,
+            notes: "Synthetic silhouette and identity review",
+          },
         });
         if (!s.ok) throw new Error(s.error);
         const weights = new Uint8Array(2048 * 2048).fill(255);

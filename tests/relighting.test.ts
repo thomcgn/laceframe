@@ -1,3 +1,4 @@
+import { seedHistoricalMaster } from "./historical-master";
 import { DEFAULT_COMPOSITION } from "../src/shared/character-creation";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
@@ -158,11 +159,11 @@ beforeEach(async () => {
       if (!i || !j || i === 15 || j === 15) p.data[(i * 16 + j) * 4 + 3] = 0;
   p.data[(8 * 16 + 8) * 4 + 3] = 128;
   const staged = await s.stage(encodePixels(p), "master.png");
-  await s.command({
-    type: "confirmMaster",
-    characterId: s.snapshot().project.selectedCharacterId,
-    token: staged.token,
-  });
+  await seedHistoricalMaster(
+    s,
+    staged,
+    s.snapshot().project.selectedCharacterId,
+  );
   await approveCutout(s.snapshot().project.masters.at(-1)!.id);
 });
 afterEach(async () => {

@@ -1,3 +1,4 @@
+import { seedHistoricalMaster } from "./historical-master";
 import { beforeEach, afterEach, it, expect, describe, vi } from "vitest";
 import { spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
@@ -28,11 +29,7 @@ beforeEach(async () => {
   await service.command({ type: "addCharacter", name: "Test character" });
   const p = service.snapshot().project;
   const image = await service.stage(png(17, 31), "master.png");
-  await service.command({
-    type: "confirmMaster",
-    characterId: p.selectedCharacterId,
-    token: image.token,
-  });
+  await seedHistoricalMaster(service, image, p.selectedCharacterId);
   const master = service.snapshot().project.masters[0];
   draft = {
     providerId: "codex-native",

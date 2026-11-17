@@ -1,3 +1,4 @@
+import { MasterApproval } from "../components/MasterApproval";
 import { useState } from "react";
 import type { Snapshot, Command } from "../../shared/domain";
 import {
@@ -27,6 +28,7 @@ export function AssetLibrary({
   const p = snapshot.project,
     characterId = p.selectedCharacterId ?? "",
     entries = libraryAssets(p, characterId);
+  const [cutoutRequested, setCutoutRequested] = useState(0);
   const [kind, setKind] = useState("all"),
     [state, setState] = useState("all");
   const selected = entries.find((a) => a.id === selectedId),
@@ -152,6 +154,16 @@ export function AssetLibrary({
                   : "Abgelehnt"}
             </span>
           </div>
+          {asset.kind === "expression" && (
+            <p>
+              Expression von Master V
+              {p.masters.find((m) => m.id === asset.masterId)?.version} ·{" "}
+              {p.characters.find((c) => c.id === asset.characterId)
+                ?.masterId === asset.masterId
+                ? "aktueller Master"
+                : "historischer Master – nicht automatisch auf die neue Version übertragen"}
+            </p>
+          )}
           <MasterCandidateCompare
             master={before}
             candidate={asset}
@@ -197,41 +209,48 @@ export function AssetLibrary({
               (asset.kind === "master-candidate" ||
                 asset.kind === "expression") && (
                 <>
-                  <button
-                    disabled={
-                      disabled ||
-                      Boolean(hardRaw) ||
-                      (asset.kind === "master-candidate" &&
-                        Boolean(
-                          p.characters.find((c) => c.id === asset.characterId)
-                            ?.masterId,
-                        ))
-                    }
-                    onClick={() => {
-                      if (asset.kind === "master-candidate") {
-                        if (
-                          !window.confirm(
-                            "Identität, Outfit, Stil, neutrale Mimik und Komposition geprüft? Als Master V1 freigeben und sperren?",
-                          )
-                        )
-                          return;
+                  {asset.kind === "master-candidate" ? (
+                    <MasterApproval
+                      key={asset.id}
+                      source={asset}
+                      disabled={disabled}
+                      label="Als Master freigeben"
+                      onApprove={(review) =>
                         command(
                           {
                             type: "reviewMasterCandidate",
                             id: asset.id,
                             status: "approved",
+                            review,
                           },
                           "Master freigegeben.",
-                        );
-                      } else
+                        )
+                      }
+                      onCutout={() => setCutoutRequested((v) => v + 1)}
+                      onRetry={() =>
+                        onStudio({
+                          mode: "master",
+                          characterId: asset.characterId,
+                          rebuild: !!p.characters.find(
+                            (c) => c.id === asset.characterId,
+                          )?.masterId,
+                          candidateId: asset.id,
+                        })
+                      }
+                    />
+                  ) : (
+                    <button
+                      disabled={disabled || Boolean(hardRaw)}
+                      onClick={() =>
                         command(
                           { type: "review", id: asset.id, status: "approved" },
                           "Expression freigegeben.",
-                        );
-                    }}
-                  >
-                    Asset freigeben
-                  </button>
+                        )
+                      }
+                    >
+                      Asset freigeben
+                    </button>
+                  )}
                   <button
                     disabled={disabled}
                     onClick={() =>
@@ -262,6 +281,8 @@ export function AssetLibrary({
           <AssetQuality
             key={asset.id}
             source={asset}
+            cutoutRequested={cutoutRequested}
+            onCutoutOpened={() => setCutoutRequested(0)}
             project={p}
             onSnapshot={onSnapshot}
             disabled={disabled}

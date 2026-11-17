@@ -9,6 +9,8 @@ import {
 import { relightInputSchema, MAX_RELIGHT_PIXELS } from "./relighting";
 import {
   qualityDerivativeSchema,
+  masterApprovalInputSchema,
+  masterApprovalRecordSchema,
   resolutionProfileSchema,
 } from "./asset-quality";
 import { z } from "zod";
@@ -64,6 +66,8 @@ export const masterSchema = z
     characterId: idSchema,
     version: z.number().int().positive(),
     previousMasterId: idSchema.optional(),
+    sourceCandidateId: idSchema.optional(),
+    masterReview: masterApprovalRecordSchema.optional(),
     qualitySourceId: idSchema.optional(),
     approvedAt: z.iso.datetime(),
     locked: z.literal(true),
@@ -394,7 +398,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
   for (const m of p.masters) {
     if (!p.characters.some((c) => c.id === m.characterId))
       fail("Unknown master character");
-    if (m.version > 1 && !m.qualitySourceId)
+    if (m.version > 1 && !m.qualitySourceId && !m.sourceCandidateId)
       fail("New master version requires reviewed quality provenance");
     if (m.qualitySourceId) {
       let q = p.qualityAssets.find((q) => q.id === m.qualitySourceId);
@@ -406,11 +410,13 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       }
       if (
         !q ||
-        (m.previousMasterId
-          ? q.sourceId !== m.previousMasterId
-          : !p.masterCandidates.some(
-              (c) => c.id === q!.sourceId && c.characterId === m.characterId,
-            ))
+        (m.sourceCandidateId
+          ? q.sourceId !== m.sourceCandidateId
+          : m.previousMasterId
+            ? q.sourceId !== m.previousMasterId
+            : !p.masterCandidates.some(
+                (c) => c.id === q!.sourceId && c.characterId === m.characterId,
+              ))
       )
         fail("Invalid master improvement ancestry");
     }
@@ -587,7 +593,42 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
         .length > 3
     )
       fail("Too many identity photos");
+  for (const m of p.masters) {
+    if (m.masterReview && m.masterReview.sourceSha256 !== m.sha256)
+      fail("Invalid master review hash");
+    if (m.sourceCandidateId) {
+      if (!m.masterReview) fail("Generated master requires recorded review");
+      const candidate = p.masterCandidates.find(
+        (c) => c.id === m.sourceCandidateId && c.characterId === m.characterId,
+      );
+      const attempt = p.masterAttempts.find(
+        (a) => a.id === candidate?.attemptId,
+      );
+      if (
+        !candidate ||
+        !attempt ||
+        (attempt.mode === "rebuild"
+          ? m.previousMasterId !== attempt.baseMasterId
+          : Boolean(m.previousMasterId))
+      )
+        fail("Invalid master generation provenance");
+      if (
+        !m.qualitySourceId &&
+        (candidate?.approvedMasterId !== m.id || candidate?.sha256 !== m.sha256)
+      )
+        fail("Invalid direct master approval");
+    }
+  }
   for (const a of p.masterAttempts) {
+    const base = p.masters.find((m) => m.id === a.baseMasterId);
+    if (
+      a.mode === "rebuild"
+        ? !base ||
+          base.characterId !== a.characterId ||
+          base.sha256 !== a.baseMasterSha256
+        : Boolean(a.baseMasterId || a.baseMasterSha256)
+    )
+      fail("Invalid rebuild origin");
     if (
       !p.characters.some((c) => c.id === a.characterId) ||
       new Set(a.identityReferences.map((r) => r.id)).size !==
@@ -836,6 +877,7 @@ export type StagedImage = {
   height: number;
   format: "png" | "webp";
   preview: string;
+  quality?: import("./asset-quality").QualityReport;
 };
 export type StagedIdentityImage = Omit<StagedImage, "format"> & {
   format: "png" | "webp" | "jpg";
@@ -902,6 +944,7 @@ export const commandSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("reviewMasterCandidate"),
+      review: masterApprovalInputSchema.optional(),
       id: idSchema,
       status: z.enum(["approved", "rejected"]),
     })
@@ -1011,6 +1054,7 @@ export const commandSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("confirmMaster"),
+      review: masterApprovalInputSchema.optional(),
       characterId: idSchema,
       token: idSchema,
     })

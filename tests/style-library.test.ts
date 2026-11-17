@@ -1,3 +1,4 @@
+import { seedHistoricalMaster } from "./historical-master";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs/promises";
 import os from "node:os";
@@ -23,11 +24,7 @@ beforeEach(async () => {
   await service.command({ type: "addCharacter", name: "Synthetic identity A" });
   characterId = service.snapshot().project.selectedCharacterId!;
   const staged = await service.stage(png(23, 31), "identity.png");
-  await service.command({
-    type: "confirmMaster",
-    characterId,
-    token: staged.token,
-  });
+  await seedHistoricalMaster(service, staged, characterId);
   await service.command({
     type: "addArtDirection",
     name: "Shared style",
