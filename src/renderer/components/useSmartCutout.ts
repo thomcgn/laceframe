@@ -39,6 +39,8 @@ export function useSmartCutout(
     protectedMask: Uint8Array;
     forcedMask: Uint8Array;
     limited: Uint8Array;
+    polygonProtected: Uint8Array;
+    polygonForced: Uint8Array;
     conflicts: number;
     removed: number;
     durationMs: number;
@@ -59,12 +61,19 @@ export function useSmartCutout(
     serial.current++;
     setRunning(false);
   };
+  function queue(draft: CutoutDraft) {
+    // Invalidate synchronously, before a queued old worker message can arrive.
+    wanted.current = { draft, serial: ++serial.current };
+    setRunning(true);
+    setError("");
+  }
   function update(next: CutoutDraft, record = true, previous?: CutoutDraft) {
     const h = record
       ? commitCutout(current.current, next, previous)
       : { ...current.current, present: next };
     current.current = h;
-    setHistory(h);
+    if (record) setHistory(h);
+    queue(next);
     setDirty(true);
     setCancelled(false);
   }
@@ -72,6 +81,7 @@ export function useSmartCutout(
     const h = undoCutout(current.current);
     current.current = h;
     setHistory(h);
+    queue(h.present);
     setDirty(true);
     setCancelled(false);
   }
@@ -79,6 +89,7 @@ export function useSmartCutout(
     const h = redoCutout(current.current);
     current.current = h;
     setHistory(h);
+    queue(h.present);
     setDirty(true);
     setCancelled(false);
   }
@@ -120,11 +131,8 @@ export function useSmartCutout(
   }, [enabled, id, width, height, recipeId]);
   useEffect(() => {
     if (!enabled || !image || cancelled) return;
-    const next = ++serial.current;
-    wanted.current = { draft: history.present, serial: next };
-    setRunning(true);
-    setError("");
-  }, [enabled, image, history.present, cancelled]);
+    queue(current.current.present);
+  }, [enabled, image, cancelled]);
   useEffect(() => {
     if (!enabled || !image) return;
     const interval = window.setInterval(() => {
@@ -150,7 +158,11 @@ export function useSmartCutout(
       const w = worker.current;
       w.onmessage = (e) => {
         inflight.current = false;
-        if (e.data.serial !== serial.current) return;
+        if (
+          e.data.serial !== serial.current ||
+          request.draft !== current.current.present
+        )
+          return;
         if (e.data.error) {
           setError(e.data.error);
           setRunning(false);
@@ -182,7 +194,7 @@ export function useSmartCutout(
       !running &&
       !error &&
       !cancelled &&
-      result.draft === history.present,
+      result.draft === current.current.present,
     cancel: () => {
       stop();
       wanted.current = undefined;

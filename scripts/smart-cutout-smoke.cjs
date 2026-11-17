@@ -1,3 +1,4 @@
+const { selectMaskTool, zoomMask } = require("./smoke-ui.cjs");
 // Real pixel pipeline/worker/editor. Synthetic 1254px fixture only; no generation.
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises"),
@@ -32,6 +33,21 @@ const fs = require("node:fs/promises"),
       env,
     });
     page = await app.firstWindow();
+    // Test-only observation; production workers and preload are unchanged.
+    await page.evaluate(() => {
+      window.Worker = new Proxy(window.Worker, {
+        construct(Target, args) {
+          const w = Reflect.construct(Target, args);
+          if (String(args[0]).includes("smart-cutout.worker")) {
+            window.__cutoutWorker = w;
+            w.addEventListener("message", (e) => {
+              window.__cutoutMessage = e.data;
+            });
+          }
+          return w;
+        },
+      });
+    });
     page.setDefaultTimeout(20000);
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("worker", (w) => {
@@ -49,7 +65,7 @@ const fs = require("node:fs/promises"),
         name: "Freistellung Berechnung",
         exact: true,
       }),
-    ).toContainText("Vorschau bereit");
+    ).toContainText("Vorschau bereit", { timeout: 20000 });
     await expect(
       dialog().getByRole("button", {
         name: "Freigestellten Kandidaten speichern",
@@ -68,9 +84,7 @@ const fs = require("node:fs/promises"),
     );
   };
   const brush = async (tool, x, y) => {
-    await dialog()
-      .getByLabel("Maskenwerkzeug", { exact: true })
-      .selectOption(tool);
+    await selectMaskTool(dialog(), tool);
     await clickPixel(x, y);
     await ready();
   };
@@ -160,9 +174,432 @@ const fs = require("node:fs/promises"),
     await ready();
     expect(await rgba(625, 950)).toEqual([0, 0, 0, 255]);
     const before = await fs.readFile(path.join(project, "laceframe.json"));
+    // UX-02: live stroke assertions intentionally happen BEFORE pointerup.
+    const canvasPoint = async (x, y) => {
+      const r = await dialog().locator("canvas").boundingBox();
+      return {
+        x: r.x + ((x + 0.5) / 1254) * r.width,
+        y: r.y + ((y + 0.5) / 1254) * r.height,
+      };
+    };
+    const liveStroke = async (tool, x, y, alpha) => {
+      // CDP mouse events do not activate an OS window like a physical click does.
+      // Establish focus so this test does not accidentally exercise the blur policy.
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].focus(),
+      );
+      await page.bringToFront();
+      await page.waitForFunction(() => document.hasFocus());
+      await selectMaskTool(dialog(), tool);
+      await dialog()
+        .getByLabel("Schutzmaske anzeigen", { exact: true })
+        .uncheck();
+      await page.evaluate(() => {
+        window.__editorEvents = [];
+        if (!window.__eventsListening) {
+          window.__eventsListening = true;
+          for (const t of [
+            "pointerdown",
+            "pointerup",
+            "pointercancel",
+            "lostpointercapture",
+            "focusin",
+            "focusout",
+          ])
+            document.addEventListener(
+              t,
+              (e) => {
+                window.__editorEvents.push({
+                  type: t,
+                  target: e.target.className,
+                  related: e.relatedTarget?.className,
+                  buttons: e.buttons,
+                  id: e.pointerId,
+                });
+                if (window.__editorEvents.length > 128)
+                  window.__editorEvents.shift();
+              },
+              true,
+            );
+          window.addEventListener("blur", () =>
+            window.__editorEvents.push({ type: "window-blur" }),
+          );
+        }
+      });
+      const pt = await canvasPoint(x, y);
+      await page.mouse.move(pt.x, pt.y);
+      await page.mouse.down();
+      await page.mouse.move(pt.x + 8, pt.y, { steps: 16 });
+      await expect.poll(async () => (await rgba(x, y))[3]).toBe(alpha);
+      // A delayed loss for a reused pointer ID must not end the new capture.
+      await dialog()
+        .getByLabel("Maskenzeichenfläche", { exact: true })
+        .evaluate((el) => {
+          if (!el.hasPointerCapture(1))
+            throw new Error(
+              "Live stroke lost capture before pointerup: " +
+                JSON.stringify(window.__editorEvents),
+            );
+          el.dispatchEvent(
+            new window.PointerEvent("lostpointercapture", {
+              pointerId: 1,
+              bubbles: true,
+            }),
+          );
+        });
+      if (
+        await dialog()
+          .getByRole("button", {
+            name: "Freigestellten Kandidaten speichern",
+            exact: true,
+          })
+          .isEnabled()
+      )
+        console.log(
+          "Unexpected early stroke finish",
+          tool,
+          await page.evaluate(() => window.__editorEvents),
+        );
+      await expect(
+        dialog().getByRole("button", {
+          name: "Freigestellten Kandidaten speichern",
+          exact: true,
+        }),
+      ).toBeDisabled();
+      await page.mouse.up();
+      await ready();
+    };
+    await selectMaskTool(dialog(), "force");
+    await dialog()
+      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .uncheck();
+    await liveStroke("force", 600, 650, 0);
+    await dialog()
+      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .uncheck();
+    await liveStroke("force-erase", 600, 650, 255);
+    await liveStroke("erase", 650, 650, 0);
+    await liveStroke("paint", 650, 650, 255);
+    await selectMaskTool(dialog(), "pick");
+    await clickPixel(100, 100);
+    await ready();
+    await selectMaskTool(dialog(), "protect");
+    await dialog()
+      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .uncheck();
+    await liveStroke("protect", 100, 100, 255);
+    await dialog()
+      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .uncheck();
+    await liveStroke("protect-erase", 100, 100, 0);
+    // Every full gesture is one undo step even with many pointer moves.
+    await dialog()
+      .getByRole("button", { name: "Rückgängig", exact: true })
+      .click();
+    await ready();
+    await dialog()
+      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .uncheck();
+    expect((await rgba(100, 100))[3]).toBe(255);
+    await dialog()
+      .getByRole("button", { name: "Wiederholen", exact: true })
+      .click();
+    await ready();
+    expect((await rgba(100, 100))[3]).toBe(0);
+    await selectMaskTool(dialog(), "protect");
+    await dialog().getByLabel("Pinselgröße", { exact: true }).fill("40");
+    let hp = await canvasPoint(625, 600);
+    await page.mouse.move(hp.x, hp.y);
+    const cursor = dialog().getByTestId("brush-cursor");
+    await expect(cursor).toBeVisible();
+    let bounds = await cursor.boundingBox(),
+      cb = await dialog().locator("canvas").boundingBox();
+    expect(Math.abs(bounds.width - (40 * cb.width) / 1254)).toBeLessThan(1);
+    await zoomMask(dialog(), 2);
+    hp = await canvasPoint(625, 600);
+    await page.mouse.move(hp.x, hp.y);
+    bounds = await cursor.boundingBox();
+    cb = await dialog().locator("canvas").boundingBox();
+    expect(Math.abs(bounds.width - (40 * cb.width) / 1254)).toBeLessThan(1);
+    await dialog().getByRole("button", { name: "100 %", exact: true }).click();
+    expect(
+      Math.abs((await dialog().locator("canvas").boundingBox()).width - 1254),
+    ).toBeLessThan(1);
+    await dialog()
+      .getByRole("button", { name: "Einpassen", exact: true })
+      .click();
+    // Wheel zoom preserves the native point under the mouse.
+    hp = await canvasPoint(625, 600);
+    cb = await dialog().locator("canvas").boundingBox();
+    const nativeBefore = ((hp.x - cb.x) * 1254) / cb.width;
+    await page.mouse.move(hp.x, hp.y);
+    await page.mouse.wheel(0, -120);
+    await page.waitForTimeout(80);
+    cb = await dialog().locator("canvas").boundingBox();
+    expect(
+      Math.abs(((hp.x - cb.x) * 1254) / cb.width - nativeBefore),
+    ).toBeLessThan(1);
+    // A temporary hand changes only the view, for Alt and Space alike.
+    for (const key of ["Alt", "Space"]) {
+      const v = await dialog()
+        .getByLabel("Maskenzeichenfläche", { exact: true })
+        .boundingBox();
+      await dialog().getByLabel("Maskenzeichenfläche", { exact: true }).focus();
+      const beforePixels = await dialog()
+        .locator("canvas")
+        .evaluate((c) => c.toDataURL());
+      await page.keyboard.down(key);
+      await page.mouse.move(v.x + v.width / 2, v.y + v.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(v.x + v.width / 2 + 20, v.y + v.height / 2 + 10);
+      await page.keyboard.up(key);
+      await expect(
+        dialog().getByLabel("Maskenzeichenfläche", { exact: true }),
+      ).toHaveCSS("cursor", "grabbing");
+      await expect(cursor).toBeHidden();
+      await page.mouse.up();
+      await expect(
+        dialog().getByLabel("Maskenzeichenfläche", { exact: true }),
+      ).toHaveCSS("cursor", "none");
+      expect(
+        await dialog()
+          .locator("canvas")
+          .evaluate((c) => c.toDataURL()),
+      ).toBe(beforePixels);
+      await expect(
+        dialog()
+          .getByRole("toolbar")
+          .getByRole("button", { name: "Schützen", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
+    await dialog()
+      .getByRole("button", { name: "Einpassen", exact: true })
+      .click();
+    // Pointer cancellation preserves completed paint as one undoable gesture.
+    await selectMaskTool(dialog(), "force");
+    hp = await canvasPoint(700, 650);
+    await page.mouse.move(hp.x, hp.y);
+    await page.mouse.down();
+    await page.mouse.move(hp.x + 8, hp.y, { steps: 12 });
+    await dialog()
+      .getByLabel("Maskenzeichenfläche", { exact: true })
+      .evaluate((el) =>
+        el.dispatchEvent(
+          new window.PointerEvent("pointercancel", {
+            pointerId: 1,
+            bubbles: true,
+          }),
+        ),
+      );
+    await page.mouse.up();
+    await ready();
+    await dialog()
+      .getByRole("button", { name: "Rückgängig", exact: true })
+      .click();
+    await ready();
+    // Shortcuts never replace the tool while a name is being typed.
+    await dialog()
+      .getByLabel("Maskenname", { exact: true })
+      .fill("B E I H L [ ]");
+    await expect(
+      dialog()
+        .getByRole("toolbar")
+        .getByRole("button", { name: "Hintergrund erzwingen", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await dialog()
+      .getByLabel("Maskenname", { exact: true })
+      .fill("Polygon precision");
+    await dialog().getByLabel("Maskenzeichenfläche", { exact: true }).focus();
+    await page.keyboard.press("b");
+    await expect(
+      dialog()
+        .getByRole("toolbar")
+        .getByRole("button", { name: "Pinsel", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("]");
+    await expect(
+      dialog().getByLabel("Pinselgröße", { exact: true }),
+    ).toHaveValue("41");
+    await page.keyboard.press("[");
+    await expect(
+      dialog().getByLabel("Pinselgröße", { exact: true }),
+    ).toHaveValue("40");
+    for (const [width, height] of [
+      [960, 720],
+      [1280, 800],
+      [1440, 900],
+      [1920, 1080],
+    ]) {
+      if (width === 1920) {
+        await app.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].maximize(),
+        );
+        await expect
+          .poll(() =>
+            app.evaluate(({ BrowserWindow }) =>
+              BrowserWindow.getAllWindows()[0].isMaximized(),
+            ),
+          )
+          .toBe(true);
+      }
+      await page.setViewportSize({ width, height });
+      await dialog()
+        .getByRole("button", { name: "Einpassen", exact: true })
+        .click();
+      const editorBox = await dialog().boundingBox(),
+        imageBox = await dialog()
+          .getByLabel("Maskenzeichenfläche", { exact: true })
+          .boundingBox();
+      expect(editorBox.width).toBeGreaterThan(width - 40);
+      expect(imageBox.height).toBeGreaterThan(height * 0.6);
+      for (const name of [
+        "Editor schließen",
+        "Freigestellten Kandidaten speichern",
+      ]) {
+        const b = await dialog()
+          .getByRole("button", { name, exact: true })
+          .boundingBox();
+        expect(b.y + b.height).toBeLessThanOrEqual(height);
+      }
+      expect(
+        await page.evaluate(
+          () =>
+            document.documentElement.scrollWidth <= window.innerWidth &&
+            document.body.style.overflow === "hidden",
+        ),
+      ).toBe(true);
+      hp = await canvasPoint(625, 600);
+      await page.mouse.move(hp.x, hp.y);
+      await fs.mkdir("artifacts", { recursive: true });
+      await page.screenshot({
+        path: `artifacts/precision-editor-${width}.png`,
+      });
+    }
+    const hidpi = await page.context().newCDPSession(page);
+    await hidpi.send("Emulation.setDeviceMetricsOverride", {
+      width: 960,
+      height: 720,
+      deviceScaleFactor: 2,
+      mobile: false,
+    });
+    await dialog().getByRole("button", { name: "100 %", exact: true }).click();
+    expect(await page.evaluate(() => window.devicePixelRatio)).toBe(2);
+    expect(
+      Math.abs((await dialog().locator("canvas").boundingBox()).width - 1254),
+    ).toBeLessThan(1);
+    hp = await canvasPoint(625, 600);
+    await page.mouse.move(hp.x, hp.y);
+    await expect(cursor).toBeVisible();
+    expect(Math.abs((await cursor.boundingBox()).width - 40)).toBeLessThan(1);
+    await hidpi.send("Emulation.clearDeviceMetricsOverride");
+    await hidpi.detach();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await dialog()
+      .getByRole("button", { name: "Einpassen", exact: true })
+      .click();
+    await dialog()
+      .getByRole("button", { name: "Maske zurücksetzen", exact: true })
+      .click();
+    await ready();
+    await dialog()
+      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .uncheck();
+    await selectMaskTool(dialog(), "paint");
+    const beforeHand = await dialog()
+      .locator("canvas")
+      .evaluate((c) => c.toDataURL());
+    for (const key of ["Alt", "Space"]) {
+      await dialog().getByLabel("Maskenzeichenfläche", { exact: true }).focus();
+      await page.keyboard.down(key);
+      await expect(
+        dialog().getByLabel("Maskenzeichenfläche", { exact: true }),
+      ).toHaveCSS("cursor", "grab");
+      const h = await canvasPoint(625, 600);
+      await page.mouse.move(h.x, h.y);
+      await page.mouse.down();
+      await page.mouse.move(h.x + 24, h.y + 12, { steps: 12 });
+      await expect(
+        dialog().getByLabel("Maskenzeichenfläche", { exact: true }),
+      ).toHaveCSS("cursor", "grabbing");
+      await page.keyboard.up(key);
+      await expect(
+        dialog().getByLabel("Maskenzeichenfläche", { exact: true }),
+      ).toHaveCSS("cursor", "grabbing");
+      await expect(cursor).toBeHidden();
+      await page.mouse.up();
+      await expect(
+        dialog().getByLabel("Maskenzeichenfläche", { exact: true }),
+      ).toHaveCSS("cursor", "none");
+      await expect(
+        dialog()
+          .getByRole("toolbar")
+          .getByRole("button", { name: "Pinsel", exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        await dialog()
+          .locator("canvas")
+          .evaluate((c) => c.toDataURL()),
+      ).toBe(beforeHand);
+    }
+    await dialog()
+      .getByRole("button", { name: "Einpassen", exact: true })
+      .click();
+    const stableBefore = await dialog()
+      .locator("canvas")
+      .evaluate((c) => c.toDataURL());
+    await page.evaluate(() => {
+      const d = window.__cutoutMessage;
+      window.__cutoutWorker.dispatchEvent(
+        new window.MessageEvent("message", {
+          data: { ...d, serial: -1, weights: new Uint8Array(d.weights.length) },
+        }),
+      );
+    });
+    await ready();
+    expect(
+      await dialog()
+        .locator("canvas")
+        .evaluate((c) => c.toDataURL()),
+    ).toBe(stableBefore);
+    // Focus loss commits the completed portion once and releases pointer capture.
+    const loss = await canvasPoint(700, 650);
+    await page.mouse.move(loss.x, loss.y);
+    await page.mouse.down();
+    await page.mouse.move(loss.x + 10, loss.y, { steps: 8 });
+    await page.evaluate(() => window.dispatchEvent(new window.Event("blur")));
+    await page.mouse.up();
+    await ready();
+    await dialog()
+      .getByRole("button", { name: "Rückgängig", exact: true })
+      .click();
+    await ready();
+    expect(
+      await dialog()
+        .locator("canvas")
+        .evaluate((c) => c.toDataURL()),
+    ).toBe(stableBefore);
+    // Wheel zoom keeps the native pixel below the cursor registered.
+    const anchor = await canvasPoint(700, 650),
+      priorCanvas = await dialog().locator("canvas").boundingBox();
+    await page.mouse.move(anchor.x, anchor.y);
+    await page.mouse.wheel(0, -130);
+    await expect
+      .poll(async () => (await dialog().locator("canvas").boundingBox()).width)
+      .toBeGreaterThan(priorCanvas.width);
+    const afterCanvas = await dialog().locator("canvas").boundingBox();
+    expect(
+      Math.abs(((anchor.x - afterCanvas.x) / afterCanvas.width) * 1254 - 700.5),
+    ).toBeLessThan(0.5);
+    expect(
+      Math.abs(
+        ((anchor.y - afterCanvas.y) / afterCanvas.height) * 1254 - 650.5,
+      ),
+    ).toBeLessThan(0.5);
+    await dialog()
+      .getByRole("button", { name: "Einpassen", exact: true })
+      .click();
     // Polygon input uses the real transformed canvas and exact original pixels.
-    const toolSelect = () =>
-      dialog().getByLabel("Maskenwerkzeug", { exact: true });
+    const toolSelect = (id) => selectMaskTool(dialog(), id);
     const area = () =>
       dialog().getByLabel("Maskenzeichenfläche", { exact: true });
     const polygonStatus = () =>
@@ -171,10 +608,16 @@ const fs = require("node:fs/promises"),
       dialog().getByRole("button", { name: "Polygon anwenden", exact: true });
     const discardPolygon = () =>
       dialog().getByRole("button", { name: "Auswahl verwerfen", exact: true });
-    await toolSelect().selectOption("polygon");
+    await toolSelect("polygon");
     await clickPixel(550, 550);
     await clickPixel(700, 550);
     await clickPixel(700, 700);
+    const rubber = dialog().getByTestId("polygon-rubber-band");
+    const hoverPoint = await canvasPoint(650, 600);
+    await page.mouse.move(hoverPoint.x, hoverPoint.y);
+    expect(
+      Math.abs(Number(await rubber.getAttribute("x2")) - 650.5),
+    ).toBeLessThan(2);
     await area().press("Backspace");
     await expect(polygonStatus()).toContainText("2 / 128");
     await area().press("Control+z");
@@ -184,11 +627,14 @@ const fs = require("node:fs/promises"),
     await area().press("Escape");
     await expect(polygonStatus()).toContainText("0 / 128");
     // Zoom + pan: vertices remain in source coordinates, never CSS coordinates.
-    await dialog().getByLabel("Maskenzoom", { exact: true }).selectOption("2");
+    await zoomMask(dialog(), 2);
     await area().scrollIntoViewIfNeeded();
     const polygonBox = await area().boundingBox();
     await page.keyboard.down("Alt");
-    await page.mouse.move(polygonBox.x + polygonBox.width / 2, polygonBox.y + polygonBox.height / 2);
+    await page.mouse.move(
+      polygonBox.x + polygonBox.width / 2,
+      polygonBox.y + polygonBox.height / 2,
+    );
     await page.mouse.down();
     await page.mouse.move(
       polygonBox.x + polygonBox.width / 2 + 15,
@@ -224,7 +670,7 @@ const fs = require("node:fs/promises"),
     await expect(polygonStatus()).toContainText("geschlossen");
     await discardPolygon().click();
     await dialog()
-      .getByRole("button", { name: "Maskenansicht zurücksetzen", exact: true })
+      .getByRole("button", { name: "Einpassen", exact: true })
       .click();
     // Browser double-click sends duplicate pointerdown: only one corner is kept.
     await clickPixel(550, 550);
@@ -250,11 +696,11 @@ const fs = require("node:fs/promises"),
     );
     await expect(applyPolygon()).toBeDisabled();
     await discardPolygon().click();
-    await toolSelect().selectOption("pick");
+    await toolSelect("pick");
     await clickPixel(100, 100);
     await ready();
     expect((await rgba(625, 960))[3]).toBe(0); // Jacket touches same-color background.
-    await toolSelect().selectOption("polygon");
+    await toolSelect("polygon");
     for (const [x, y] of [
       [410, 170],
       [840, 170],
@@ -326,6 +772,7 @@ const fs = require("node:fs/promises"),
       .getByRole("button", { name: "Rückgängig", exact: true })
       .click();
     await ready();
+    await selectMaskTool(dialog(), "pick");
     // Remove the extra seed, retaining just the limit polygon for existing checks.
     await dialog()
       .getByText("Seeds und erweiterte Auswahl", { exact: true })
@@ -338,14 +785,14 @@ const fs = require("node:fs/promises"),
       .getByText("Seeds und erweiterte Auswahl", { exact: true })
       .click();
     // Protected coat and hair are explicitly painted; no semantic inference.
+    await selectMaskTool(dialog(), "protect");
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("200");
     await brush("protect", 625, 960);
     expect(await rgba(625, 960)).toEqual([40, 100, 70, 255]);
+    await selectMaskTool(dialog(), "protect");
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("90");
     await brush("protect", 625, 230);
-    await dialog()
-      .getByLabel("Maskenwerkzeug", { exact: true })
-      .selectOption("pick");
+    await selectMaskTool(dialog(), "pick");
     await clickPixel(100, 100);
     await ready();
     await expect(
@@ -358,6 +805,7 @@ const fs = require("node:fs/promises"),
     expect(await rgba(625, 960)).toEqual([0, 0, 0, 255]);
     expect(await rgba(625, 230)).toEqual([9, 5, 4, 255]);
     expect(await rgba(520, 430)).toEqual([0, 0, 0, 255]);
+    await selectMaskTool(dialog(), "protect");
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("12");
     await brush("force", 600, 650);
     await dialog()
@@ -390,15 +838,15 @@ const fs = require("node:fs/promises"),
       .getByRole("button", { name: "Wiederholen", exact: true })
       .click();
     await ready();
+    await selectMaskTool(dialog(), "pick");
     await dialog().getByLabel("Kantenweichheit", { exact: true }).fill("2");
     await ready();
+    await selectMaskTool(dialog(), "pick");
     await dialog().getByLabel("Farbtoleranz", { exact: true }).fill("14");
     await ready();
     // Zoom/pan are tested before another native seed is sampled. The canvas bounding rect is authoritative.
-    await dialog().getByLabel("Maskenzoom", { exact: true }).selectOption("2");
-    await dialog()
-      .getByLabel("Maskenwerkzeug", { exact: true })
-      .selectOption("pan");
+    await zoomMask(dialog(), 2);
+    await selectMaskTool(dialog(), "pan");
     const box = await dialog()
       .getByLabel("Maskenzeichenfläche", { exact: true })
       .boundingBox();
@@ -409,13 +857,11 @@ const fs = require("node:fs/promises"),
       box.y + box.height / 2 + 10,
     );
     await page.mouse.up();
-    await dialog()
-      .getByLabel("Maskenwerkzeug", { exact: true })
-      .selectOption("pick");
+    await selectMaskTool(dialog(), "pick");
     await clickPixel(250, 450);
     await ready();
     await dialog()
-      .getByRole("button", { name: "Maskenansicht zurücksetzen", exact: true })
+      .getByRole("button", { name: "Einpassen", exact: true })
       .click();
     await dialog()
       .getByLabel("Freistellung Prüfansicht", { exact: true })
@@ -509,6 +955,7 @@ const fs = require("node:fs/promises"),
     await expect(
       dialog().getByText("Angewendete Polygone (1/32)", { exact: true }),
     ).toBeVisible();
+    await selectMaskTool(dialog(), "protect");
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("20");
     await brush("protect", 600, 650);
     await dialog()
@@ -664,7 +1111,7 @@ const fs = require("node:fs/promises"),
     );
     expect(errors).toEqual([]);
     console.log(
-      "PASS smart cutout: actual 1254px worker, pipette/zoom/pan, protected/forced conflicts, threshold/feather/undo/redo, no intermediate writes, recipe restart/revision, Master V2, exact PNG export, original hash and both desktop sizes.",
+      "PASS smart cutout + UX-02: six live brush operations before pointerup, real cursor/HiDPI 2x, icon/keyboard tools, Alt/Space hand, wheel anchor/vertical zoom/fit/100%, resize 960/1280/1440/1920 maximized, pointercancel/blur/stale-worker rejection, actual 1254px worker, pipette/zoom/pan, protected/forced conflicts, threshold/feather/undo/redo, no intermediate writes, recipe restart/revision, Master V2, exact PNG export, original hash and both desktop sizes.",
     );
   } finally {
     if (app) {

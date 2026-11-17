@@ -19,3 +19,27 @@ exports.nav = async (page, view, legacy = false) => {
       await tools.locator("summary").first().click();
   }
 };
+
+exports.selectMaskTool = async (editor, id) => {
+  const names = {
+    pick: "Pipette",
+    auto: "Automatische Hintergrundauswahl",
+    paint: "Pinsel",
+    erase: "Radierer",
+    protect: "Schützen",
+    "protect-erase": "Schutz radieren",
+    force: "Hintergrund erzwingen",
+    "force-erase": "Erzwungenen Hintergrund radieren",
+    polygon: "Polygon/Lasso",
+    pan: "Verschieben",
+  };
+  await editor
+    .getByRole("toolbar", { name: "Maskenwerkzeuge" })
+    .getByRole("button", { name: names[id], exact: true })
+    .click();
+};
+exports.zoomMask = async (editor, factor) => {
+  const slider = editor.getByLabel("Maskenzoom", { exact: true });
+  const value = await slider.inputValue();
+  await slider.fill(String(Number(value) + Math.log2(factor)));
+};

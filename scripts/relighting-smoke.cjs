@@ -320,7 +320,35 @@ const { createHash } = require("node:crypto");
     await mask.getByLabel("Pinselgröße", { exact: true }).fill("20");
     const picture = mask.getByAltText("Masken-Master");
     const b = await picture.boundingBox();
-    await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width / 2 + 5, b.y + b.height / 2, {
+      steps: 10,
+    });
+    await expect
+      .poll(() =>
+        mask
+          .locator("canvas")
+          .evaluate(
+            (c) =>
+              c
+                .getContext("2d")
+                .getImageData(
+                  Math.floor(c.width / 2),
+                  Math.floor(c.height / 2),
+                  1,
+                  1,
+                ).data[3],
+          ),
+      )
+      .toBeGreaterThan(0);
+    await expect(
+      mask.getByRole("button", {
+        name: "Maskenrevision speichern",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    await page.mouse.up();
     await mask
       .getByRole("button", { name: "Maskenrevision speichern", exact: true })
       .click();
@@ -500,8 +528,29 @@ const { createHash } = require("node:crypto");
         .getByRole("status", { name: "Lichtberechnung", exact: true })
         .innerText(),
     );
-    const metrics=await app.evaluate(({app})=>app.getAppMetrics().map(p=>({type:p.type,workingSetKiB:p.memory.workingSetSize,peakWorkingSetKiB:p.memory.peakWorkingSetSize})));
-    await fs.writeFile("artifacts/relighting-performance.json",JSON.stringify({worker:await page.getByRole("status",{name:"Lichtberechnung",exact:true}).innerText(),gpu:gpu.gpu,processes:metrics},null,2));
+    const metrics = await app.evaluate(({ app }) =>
+      app
+        .getAppMetrics()
+        .map((p) => ({
+          type: p.type,
+          workingSetKiB: p.memory.workingSetSize,
+          peakWorkingSetKiB: p.memory.peakWorkingSetSize,
+        })),
+    );
+    await fs.writeFile(
+      "artifacts/relighting-performance.json",
+      JSON.stringify(
+        {
+          worker: await page
+            .getByRole("status", { name: "Lichtberechnung", exact: true })
+            .innerText(),
+          gpu: gpu.gpu,
+          processes: metrics,
+        },
+        null,
+        2,
+      ),
+    );
     expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(
       largeBefore,
     );

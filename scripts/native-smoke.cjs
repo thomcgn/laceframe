@@ -1,3 +1,4 @@
+const { selectMaskTool, zoomMask } = require("./smoke-ui.cjs");
 const { field, image, text, nav } = require("./smoke-ui.cjs");
 // Packaged Electron integration with a protocol fixture. No live AI calls.
 const { _electron: electron, expect } = require("@playwright/test");
@@ -741,6 +742,22 @@ const path = require("node:path");
       await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5, {
         steps: 8,
       });
+      await expect
+        .poll(() =>
+          editor.locator("canvas").evaluate((c) => {
+            const a = c
+              .getContext("2d")
+              .getImageData(0, 0, c.width, c.height).data;
+            return a.some((v, i) => i % 4 === 3 && v > 0);
+          }),
+        )
+        .toBe(true);
+      await expect(
+        editor.getByRole("button", {
+          name: "Maskenrevision speichern",
+          exact: true,
+        }),
+      ).toBeDisabled();
       await page.mouse.up();
       const maskAlpha = () =>
         editor.locator("canvas").evaluate((c) => {
@@ -751,6 +768,14 @@ const path = require("node:path");
           for (let i = 3; i < data.length; i += 4) sum += data[i];
           return sum;
         });
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            window.requestAnimationFrame(() =>
+              window.requestAnimationFrame(resolve),
+            ),
+          ),
+      );
       const painted = await maskAlpha();
       expect(painted).toBeGreaterThan(0);
       await app.evaluate(({ BrowserWindow }) =>
@@ -768,32 +793,28 @@ const path = require("node:path");
       await editor
         .getByRole("button", { name: "Rückgängig", exact: true })
         .click();
-      expect(await maskAlpha()).toBe(0);
+      await expect.poll(maskAlpha).toBe(0);
       await editor
         .getByRole("button", { name: "Wiederholen", exact: true })
         .click();
-      expect(await maskAlpha()).toBe(painted);
+      await expect.poll(maskAlpha).toBe(painted);
       box = await maskImage.boundingBox();
-      await editor
-        .getByLabel("Maskenwerkzeug", { exact: true })
-        .selectOption("erase");
+      await selectMaskTool(editor, "erase");
       await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
-      expect(await maskAlpha()).toBeLessThan(painted);
+      await expect.poll(maskAlpha).toBeLessThan(painted);
       await editor
         .getByRole("button", { name: "Rückgängig", exact: true })
         .click();
-      expect(await maskAlpha()).toBe(painted);
+      await expect.poll(maskAlpha).toBe(painted);
       await editor
         .getByRole("button", { name: "Maske zurücksetzen", exact: true })
         .click();
-      expect(await maskAlpha()).toBe(0);
+      await expect.poll(maskAlpha).toBe(0);
       await editor
         .getByRole("button", { name: "Rückgängig", exact: true })
         .click();
-      expect(await maskAlpha()).toBe(painted);
-      await editor
-        .getByLabel("Maskenwerkzeug", { exact: true })
-        .selectOption("paint");
+      await expect.poll(maskAlpha).toBe(painted);
+      await selectMaskTool(editor, "paint");
       const touch = await page.context().newCDPSession(page);
       const touchPoint = {
         x: box.x + box.width * 0.25,
@@ -811,16 +832,14 @@ const path = require("node:path");
         type: "touchEnd",
         touchPoints: [],
       });
-      expect(await maskAlpha()).toBeGreaterThan(painted);
+      await expect.poll(maskAlpha).toBeGreaterThan(painted);
       await editor
         .getByLabel("Maskenzeichenfläche", { exact: true })
         .press("Control+z");
-      expect(await maskAlpha()).toBe(painted);
+      await expect.poll(maskAlpha).toBe(painted);
       await touch.detach();
-      await editor.getByLabel("Maskenzoom", { exact: true }).selectOption("2");
-      await editor
-        .getByLabel("Maskenwerkzeug", { exact: true })
-        .selectOption("pan");
+      await zoomMask(editor, 2);
+      await selectMaskTool(editor, "pan");
       const previousTransform = await editor
         .locator(".mask-stage")
         .getAttribute("style");
@@ -833,7 +852,7 @@ const path = require("node:path");
       ).not.toBe(previousTransform);
       await editor
         .getByRole("button", {
-          name: "Maskenansicht zurücksetzen",
+          name: "Einpassen",
           exact: true,
         })
         .click();
@@ -1084,7 +1103,9 @@ const path = require("node:path");
     await page
       .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();
-    await expect(page.getByRole("heading", {name: "Synthetic Native", exact: true})).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Synthetic Native", exact: true }),
+    ).toBeVisible();
     await nav(page, "Studio");
     await expect(field(page, "Bearbeitungsmodus", { exact: true })).toHaveValue(
       "hard",
