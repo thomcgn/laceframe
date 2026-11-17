@@ -124,6 +124,21 @@ const { createHash } = require("node:crypto");
           token: r.value.token,
         });
         if (!c.ok) throw new Error(c.error);
+        const cut = await window.laceframe.command({
+          type: "createCutout",
+          sourceId: c.value.project.masters.at(-1).id,
+          name: "Reviewed transparent fixture",
+          weights: new Uint8Array(128 * 96).fill(255),
+        });
+        if (!cut.ok) throw new Error(cut.error);
+        const checked = await window.laceframe.command({
+          type: "reviewQuality",
+          id: cut.value.project.qualityAssets.at(-1).id,
+          status: "approved",
+          notes: "Synthetic silhouette and alpha manually reviewed",
+          confirmStyleAndSilhouette: true,
+        });
+        if (!checked.ok) throw new Error(checked.error);
       },
       [...bytes],
     );
@@ -248,8 +263,10 @@ const { createHash } = require("node:crypto");
     let p = await manifest(),
       q = p.qualityAssets.at(-1);
     expect(q.status).toBe("candidate");
-    expect(p.masters).toHaveLength(1);
-    expect(q.sourceSha256).toBe(hash(bytes));
+    expect(p.masters).toHaveLength(2);
+    expect(q.sourceSha256).toBe(
+      p.qualityAssets.find((q) => q.operation === "cutout").sha256,
+    );
     const rendered = PNG.sync.read(
       await fs.readFile(path.join(project, q.file)),
     );
@@ -283,9 +300,9 @@ const { createHash } = require("node:crypto");
     await quality
       .getByRole("button", { name: "Qualitätsversion freigeben", exact: true })
       .click();
-    await expect.poll(async () => (await manifest()).masters.length).toBe(2);
+    await expect.poll(async () => (await manifest()).masters.length).toBe(3);
     await expect(
-      page.getByAltText("Freigegebener Master V2", { exact: true }),
+      page.getByAltText("Freigegebener Master V3", { exact: true }),
     ).toBeVisible();
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
@@ -367,7 +384,7 @@ const { createHash } = require("node:crypto");
     expect(q.relighting.regions).toHaveLength(1);
     expect(q.relighting.regions[0].mask.type).toBe("lighting-weight");
     // Export the earlier approved exact preview, independent of newest candidate.
-    const approved = p.masters[1];
+    const approved = p.masters[2];
     await chooser(exports);
     const exported = await page.evaluate(
       (id) =>
@@ -390,7 +407,7 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();
     await expect(
-      page.getByAltText("Freigegebener Master V2", { exact: true }),
+      page.getByAltText("Freigegebener Master V3", { exact: true }),
     ).toBeVisible();
     expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(
       saved,
@@ -490,6 +507,28 @@ const { createHash } = require("node:crypto");
           token: r.value.token,
         });
         if (!s.ok) throw new Error(s.error);
+        const weights = new Uint8Array(2048 * 2048).fill(255);
+        for (let x = 0; x < 2048; x++) {
+          weights[x] = 0;
+          weights[2047 * 2048 + x] = 0;
+          weights[x * 2048] = 0;
+          weights[x * 2048 + 2047] = 0;
+        }
+        const cut = await window.laceframe.command({
+          type: "createCutout",
+          sourceId: s.value.project.masters.at(-1).id,
+          name: "Large explicit cutout",
+          weights,
+        });
+        if (!cut.ok) throw new Error(cut.error);
+        const checked = await window.laceframe.command({
+          type: "reviewQuality",
+          id: cut.value.project.qualityAssets.at(-1).id,
+          status: "approved",
+          notes: "Large synthetic silhouette and alpha manually reviewed",
+          confirmStyleAndSilhouette: true,
+        });
+        if (!checked.ok) throw new Error(checked.error);
       },
       { bytes: [...PNG.sync.write(large)], id: selected },
     );
@@ -501,7 +540,7 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();
     await expect(
-      page.getByAltText("Freigegebener Master V1", { exact: true }),
+      page.getByAltText("Freigegebener Master V2", { exact: true }),
     ).toBeVisible();
     const largeBefore = await fs.readFile(path.join(project, "laceframe.json"));
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
@@ -529,13 +568,11 @@ const { createHash } = require("node:crypto");
         .innerText(),
     );
     const metrics = await app.evaluate(({ app }) =>
-      app
-        .getAppMetrics()
-        .map((p) => ({
-          type: p.type,
-          workingSetKiB: p.memory.workingSetSize,
-          peakWorkingSetKiB: p.memory.peakWorkingSetSize,
-        })),
+      app.getAppMetrics().map((p) => ({
+        type: p.type,
+        workingSetKiB: p.memory.workingSetSize,
+        peakWorkingSetKiB: p.memory.peakWorkingSetSize,
+      })),
     );
     await fs.writeFile(
       "artifacts/relighting-performance.json",
@@ -561,7 +598,7 @@ const { createHash } = require("node:crypto");
     console.log(
       "PASS relighting: worker live updates without disk writes, real GPU/CPU premultiplied agreement (GPU=" +
         gpu.gpu +
-        "), nearest display, quantized light, alpha/hidden RGB, undo/redo/reset, manual region painting, exact preview PNG hash, separate candidate, human Master V2 review, recipe restore, export identity, discard/restart and both desktop sizes. No live generation.",
+        "), nearest display, quantized light, alpha/hidden RGB, undo/redo/reset, manual region painting, exact preview PNG hash, separate candidate, human Master V3 review after reviewed cutout, recipe restore, export identity, discard/restart and both desktop sizes. No live generation.",
     );
   } catch (e) {
     if (page && !page.isClosed()) {

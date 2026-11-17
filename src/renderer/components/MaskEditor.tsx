@@ -1,3 +1,4 @@
+import { cutoutFrame } from "./cutout-preview";
 import { EditorTools, editorTools } from "./EditorTools";
 import {
   fitScale,
@@ -70,6 +71,7 @@ export function MaskEditor({
     recipeId,
   );
   const [showProtected, setShowProtected] = useState(false),
+    [showForced, setShowForced] = useState(false),
     [showSelection, setShowSelection] = useState(false),
     [view, setView] = useState("result"),
     [backdrop, setBackdrop] = useState("checker");
@@ -124,8 +126,14 @@ export function MaskEditor({
     else apply(redoMask(history));
   };
   const pixels = useRef(history.present);
+  const [sourceError, setSourceError] = useState("");
+  const [paintError, setPaintError] = useState("");
   const [src, setSrc] = useState(""),
     [error, setError] = useState("");
+  const [painted, setPainted] = useState(false);
+  const [paintedResult, setPaintedResult] = useState<typeof smart.result>();
+  const [paintedWeights, setPaintedWeights] = useState<Uint8Array>();
+  const [loadRevision, setLoadRevision] = useState(0);
   const [ready, setReady] = useState(false),
     [saving, setSaving] = useState(false),
     [dirty, setDirty] = useState(false);
@@ -174,8 +182,8 @@ export function MaskEditor({
     if (gesture.current) finish(gesture.current.id);
     setTool(id);
     if (id === "auto") smart.resume();
-    if (id.startsWith("protect") || id.startsWith("force"))
-      setShowProtected(true);
+    if (id.startsWith("protect")) setShowProtected(true);
+    if (id.startsWith("force")) setShowForced(true);
   }
   function zoomAt(
     next: number,
@@ -241,6 +249,7 @@ export function MaskEditor({
     window.addEventListener("keyup", up);
     return () => {
       cancelAnimationFrame(frame.current);
+      frame.current = 0;
       document.body.style.overflow = overflow;
       window.removeEventListener("blur", blur);
       window.removeEventListener("keyup", up);
@@ -251,8 +260,17 @@ export function MaskEditor({
     const ctx = canvas.current?.getContext("2d");
     if (!ctx) return;
     const image = ctx.createImageData(master.width, master.height);
-    if (cutout && originalPixels.current) {
-      image.data.set(originalPixels.current);
+    if (cutout) {
+      const source = automatic
+        ? smart.image
+        : originalPixels.current
+          ? {
+              width: master.width,
+              height: master.height,
+              data: originalPixels.current,
+            }
+          : undefined;
+      if (!source) return;
       const draft = smart.current.current.present;
       const result = smart.result;
       const protectedMask = draft.protected,
@@ -260,31 +278,25 @@ export function MaskEditor({
       const protectedAt = (i: number) =>
         protectedMask[i] || result?.polygonProtected[i];
       const forcedAt = (i: number) => forcedMask[i] || result?.polygonForced[i];
-      if (automatic && smart.image) image.data.set(smart.image.data);
-      weights.forEach((w, i) => {
-        if (automatic && result && result.draft !== draft)
-          w = protectedAt(i)
+      if (automatic && result && result.draft !== draft)
+        weights = Uint8Array.from(weights, (_, i) =>
+          protectedAt(i)
             ? 255
             : forcedAt(i)
               ? 0
               : Math.round(
                   (draft.manual[i] * (255 - result.selection[i])) / 255,
-                );
-        if (view !== "original")
-          image.data[i * 4 + 3] = Math.round((image.data[i * 4 + 3] * w) / 255);
-        if (view === "alpha") {
-          image.data[i * 4] =
-            image.data[i * 4 + 1] =
-            image.data[i * 4 + 2] =
-              image.data[i * 4 + 3];
-          image.data[i * 4 + 3] = 255;
-        }
+                ),
+        );
+      image.data.set(cutoutFrame(source, weights, view));
+      weights.forEach((_, i) => {
         if (
           automatic &&
+          view !== "original" &&
           ((showProtected && protectedAt(i)) ||
             (showSelection &&
               (smart.result?.selection[i] || smart.result?.limited[i])) ||
-            (showProtected && forcedAt(i)))
+            (showForced && forcedAt(i)))
         ) {
           const color = protectedAt(i)
             ? forcedAt(i)
@@ -300,7 +312,7 @@ export function MaskEditor({
           image.data[i * 4 + 3] = 255;
         }
         // Tint the actual retained image; never replace it with a mask-only canvas.
-        if (overlay) {
+        if (overlay && view !== "original") {
           const tint = 0.35;
           for (let channel = 0; channel < 3; channel++)
             image.data[i * 4 + channel] = Math.round(
@@ -310,6 +322,9 @@ export function MaskEditor({
         }
       });
       ctx.putImageData(image, 0, 0);
+      setPainted(true);
+      setPaintedResult(smart.result);
+      setPaintedWeights(weights);
       return;
     }
     weights.forEach((w, i) => {
@@ -323,6 +338,16 @@ export function MaskEditor({
   useEffect(() => {
     let live = true;
     void (async () => {
+      setReady(false);
+      setPainted(false);
+      setPaintedResult(undefined);
+      setPaintedWeights(undefined);
+      setSourceError("");
+      setPaintError("");
+      originalPixels.current = null;
+      if (automatic) {
+        return;
+      }
       const m = await window.laceframe.preview(master.id);
       if (!m.ok) throw new Error(m.error);
       let weights = initialWeights
@@ -332,11 +357,17 @@ export function MaskEditor({
         const img = new Image();
         img.src = m.value;
         await img.decode();
+        if (
+          img.naturalWidth !== master.width ||
+          img.naturalHeight !== master.height
+        )
+          throw new Error("Falsche Bildgröße.");
         const c = document.createElement("canvas");
         c.width = master.width;
         c.height = master.height;
         const ctx = c.getContext("2d")!;
         ctx.drawImage(img, 0, 0);
+        if (!live) return;
         originalPixels.current = ctx.getImageData(0, 0, c.width, c.height).data;
       }
       if (mask) {
@@ -365,7 +396,12 @@ export function MaskEditor({
         setReady(true);
       }
     })().catch((e) => {
-      if (live) setError(String(e));
+      if (live)
+        setSourceError(
+          e instanceof Error
+            ? e.message
+            : "Original konnte nicht geladen werden.",
+        );
     });
     const element = viewport.current!;
     const resize = () =>
@@ -377,7 +413,23 @@ export function MaskEditor({
       live = false;
       observer.disconnect();
     };
-  }, [master.id, master.width, master.height, mask?.id]);
+  }, [
+    master.id,
+    master.width,
+    master.height,
+    mask?.id,
+    automatic,
+    loadRevision,
+  ]);
+  useEffect(() => {
+    if (automatic) {
+      setReady(Boolean(smart.image));
+      if (!smart.image) {
+        setPainted(false);
+        setPaintedResult(undefined);
+      }
+    }
+  }, [automatic, smart.image]);
   useEffect(() => {
     const previous = document.activeElement;
     dialog.current?.querySelector<HTMLInputElement>("input")?.focus();
@@ -385,21 +437,37 @@ export function MaskEditor({
       if (previous instanceof HTMLElement) previous.focus();
     };
   }, [ready]);
-  liveRender.current = () =>
-    render(automatic && smart.result ? smart.result.weights : pixels.current);
+  liveRender.current = () => {
+    try {
+      render(
+        automatic
+          ? (smart.result?.weights ?? smart.history.present.manual)
+          : pixels.current,
+      );
+    } catch (e) {
+      setPainted(false);
+      setPaintError(
+        e instanceof Error
+          ? e.message
+          : "Vorschau konnte nicht gezeichnet werden.",
+      );
+    }
+  };
   useEffect(() => {
     pixels.current = history.present;
     requestRender();
-  }, [history, overlay, ready]);
+  }, [history, overlay, ready, view]);
   useEffect(() => {
-    if (automatic && smart.result) requestRender();
+    if (automatic && smart.image) requestRender();
   }, [
     automatic,
+    smart.image,
     smart.result,
     smart.history.present,
     ready,
     overlay,
     showProtected,
+    showForced,
     showSelection,
     view,
   ]);
@@ -536,21 +604,38 @@ export function MaskEditor({
         </h2>
         <p className="editor-description">
           {cutout
-            ? "Weiß erhält die Figur · Schwarz entfernt · Grau reduziert Alpha. Pipette wählt Hintergrundfarben; Schutz gewinnt. Farbe allein erkennt keine Haare oder Silhouetten."
-            : "Weiß erlaubt · Schwarz schützt · Grau überblendet."}{" "}
-          Gespeichert in {master.width} × {master.height} Masterpixeln.{" "}
-          {cutout
-            ? "Keine automatische Erkennung von Haaren oder Silhouetten."
-            : "Keine KI-Inpainting-Garantie."}
+            ? "Original bleibt unverändert. Hintergrund manuell wählen; Schutz gewinnt. Keine automatische Silhouettenerkennung."
+            : "Weiß erlaubt · Schwarz schützt · Grau überblendet. Keine KI-Inpainting-Garantie."}{" "}
+          {master.width} × {master.height} native Bildpixel.
         </p>
-        {error && (
+        {(error || sourceError || paintError) && (
           <p role="alert" className="error">
-            {error}
+            {error || sourceError || paintError}
           </p>
         )}
-        {automatic && smart.error && (
+        {(error ||
+          sourceError ||
+          paintError ||
+          (automatic && (smart.error || smart.loadError))) && (
+          <button
+            disabled={saving}
+            onClick={() => {
+              setError("");
+              setSourceError("");
+              setPaintError("");
+              setPainted(false);
+              if (automatic) {
+                if (smart.loadError) smart.retryLoad();
+                else smart.resume();
+              } else setLoadRevision((v) => v + 1);
+            }}
+          >
+            Erneut versuchen
+          </button>
+        )}
+        {automatic && (smart.error || smart.loadError) && (
           <p role="alert" className="error">
-            {smart.error}
+            {smart.loadError || smart.error}
           </p>
         )}
         <EditorTools
@@ -564,6 +649,26 @@ export function MaskEditor({
           disabled={!ready || saving || (automatic && !smart.image)}
         >
           <aside className="editor-sidebar" aria-label="Werkzeugeinstellungen">
+            <h3>{editorTools.find((t) => t.id === tool)?.name}</h3>
+            <p className="tool-help">
+              {tool.startsWith("protect")
+                ? "Diese Pixel bleiben erhalten, auch wenn sie dieselbe Farbe wie der Hintergrund haben."
+                : tool.startsWith("force")
+                  ? "Diese Pixel werden ausdrücklich transparent. Figur schützen hat Vorrang."
+                  : tool === "paint"
+                    ? cutout
+                      ? "Pixel erhalten: Pinsel stellt die ursprüngliche Deckkraft bis zum Maskenwert wieder her."
+                      : "Pinsel erlaubt Änderungen innerhalb der Maske."
+                    : tool === "erase"
+                      ? cutout
+                        ? "Radierer reduziert die Deckkraft innerhalb des sichtbaren Pinselrings."
+                        : "Radierer schützt Pixel vor Änderungen."
+                      : tool === "pan"
+                        ? "Ziehen verschiebt ausschließlich die Ansicht."
+                        : tool === "polygon"
+                          ? "Eine manuelle Region schützt die Figur, entfernt Hintergrund oder begrenzt die automatische Auswahl."
+                          : "Im Original auf eine sichtbare Hintergrundfarbe klicken. Die Auswahl verwendet diese Farben."}
+            </p>
             {automatic && (
               <div className="smart-cutout-controls">
                 {tool === "polygon" && (
@@ -642,53 +747,53 @@ export function MaskEditor({
                     </button>
                   </div>
                 )}
-                {!!smart.history.present.settings.polygons?.length && (
-                  <details>
-                    <summary>
-                      Angewendete Polygone (
-                      {smart.history.present.settings.polygons.length}/32)
-                    </summary>
-                    <p>
-                      Polygonmasken ergänzen Pinselmasken. Schutz gewinnt. Zum
-                      Korrigieren Polygon entfernen oder rückgängig machen.
-                    </p>
-                    {smart.history.present.settings.polygons.map((op, i) => (
-                      <div key={i}>
-                        {i + 1}:{" "}
-                        {op.operation === "limit"
-                          ? "Automatik nur außerhalb"
-                          : op.operation === "protect"
-                            ? "Figur schützen"
-                            : "Hintergrund entfernen"}{" "}
-                        · {op.points.length} Ecken
-                        <button
-                          onClick={() =>
-                            smart.update({
-                              ...smart.history.present,
-                              settings: {
-                                ...smart.history.present.settings,
-                                polygons:
-                                  smart.history.present.settings.polygons!.filter(
-                                    (_, j) => j !== i,
-                                  ),
-                              },
-                            })
-                          }
-                        >
-                          Polygon {i + 1} entfernen
-                        </button>
-                      </div>
-                    ))}
-                  </details>
-                )}
+                {tool === "polygon" &&
+                  !!smart.history.present.settings.polygons?.length && (
+                    <section className="applied-polygons">
+                      <h4>
+                        Angewendete Polygone (
+                        {smart.history.present.settings.polygons.length}/32)
+                      </h4>
+                      <p>
+                        Polygonmasken ergänzen Pinselmasken. Schutz gewinnt. Zum
+                        Korrigieren Polygon entfernen oder rückgängig machen.
+                      </p>
+                      {smart.history.present.settings.polygons.map((op, i) => (
+                        <div key={i}>
+                          {i + 1}:{" "}
+                          {op.operation === "limit"
+                            ? "Automatik nur außerhalb"
+                            : op.operation === "protect"
+                              ? "Figur schützen"
+                              : "Hintergrund entfernen"}{" "}
+                          · {op.points.length} Ecken
+                          <button
+                            onClick={() =>
+                              smart.update({
+                                ...smart.history.present,
+                                settings: {
+                                  ...smart.history.present.settings,
+                                  polygons:
+                                    smart.history.present.settings.polygons!.filter(
+                                      (_, j) => j !== i,
+                                    ),
+                                },
+                              })
+                            }
+                          >
+                            Polygon {i + 1} entfernen
+                          </button>
+                        </div>
+                      ))}
+                    </section>
+                  )}
 
                 <div
                   className="color-selection-settings"
                   hidden={!["pick", "auto"].includes(tool)}
                 >
                   <label>
-                    Farbtoleranz · ΔE76{" "}
-                    {smart.history.present.settings.tolerance}
+                    Farbtoleranz {smart.history.present.settings.tolerance}
                     <input
                       aria-label="Farbtoleranz"
                       type="range"
@@ -721,7 +826,7 @@ export function MaskEditor({
                         })
                       }
                     />
-                    Zusammenhängende Auswahl (4 Nachbarn)
+                    Zusammenhängende Auswahl
                   </label>
                   {!smart.history.present.settings.connected && (
                     <p className="warning">
@@ -748,50 +853,13 @@ export function MaskEditor({
                       }
                     />
                   </label>
+                  <button
+                    disabled={smart.running || !smart.image}
+                    onClick={smart.resume}
+                  >
+                    Hintergrundauswahl aktualisieren
+                  </button>{" "}
                 </div>
-                <details open className="review-settings">
-                  <summary>Prüfansicht und Hintergrund</summary>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={showProtected}
-                      onChange={(e) => setShowProtected(e.target.checked)}
-                    />
-                    Schutzmaske anzeigen
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={showSelection}
-                      onChange={(e) => setShowSelection(e.target.checked)}
-                    />
-                    Auswahl anzeigen
-                  </label>
-                  <label>
-                    Prüfansicht
-                    <select
-                      aria-label="Freistellung Prüfansicht"
-                      value={view}
-                      onChange={(e) => setView(e.target.value)}
-                    >
-                      <option value="result">Ergebnis</option>
-                      <option value="original">Original</option>
-                      <option value="alpha">Alpha</option>
-                    </select>
-                  </label>
-                  <label>
-                    Prüfhintergrund
-                    <select
-                      aria-label="Freistellung Prüfhintergrund"
-                      value={backdrop}
-                      onChange={(e) => setBackdrop(e.target.value)}
-                    >
-                      <option value="checker">Schachbrett</option>
-                      <option value="light">Hell</option>
-                      <option value="dark">Dunkel</option>
-                    </select>
-                  </label>
-                </details>
                 {["pick", "auto"].includes(tool) && (
                   <>
                     {smart.history.present.settings.seeds.at(-1) && (
@@ -812,33 +880,8 @@ export function MaskEditor({
                           .rgba.join(", ")}
                       </div>
                     )}
-                    <details>
-                      <summary>Seeds und erweiterte Auswahl</summary>
-                      <p>
-                        ΔE76: euklidischer Abstand in CIE L*a*b* (sRGB, D65).
-                        Vergleich mit den Originalfarben aller Seeds. Kein
-                        semantisches Haar-/Kleidungsmodell.
-                      </p>
-                      <label>
-                        Auswahl erweitern/verkleinern{" "}
-                        {smart.history.present.settings.expand} px
-                        <input
-                          aria-label="Auswahl erweitern"
-                          type="range"
-                          min={-3}
-                          max={3}
-                          value={smart.history.present.settings.expand}
-                          onChange={(e) =>
-                            smart.update({
-                              ...smart.history.present,
-                              settings: {
-                                ...smart.history.present.settings,
-                                expand: Number(e.target.value),
-                              },
-                            })
-                          }
-                        />
-                      </label>
+                    <section aria-label="Ausgewählte Hintergrundfarben">
+                      <h4>Ausgewählte Hintergrundfarben</h4>
                       {smart.history.present.settings.seeds.map((seed, i) => (
                         <div className="cutout-seed" key={i}>
                           <i
@@ -846,7 +889,7 @@ export function MaskEditor({
                               background: `rgba(${seed.rgba[0]},${seed.rgba[1]},${seed.rgba[2]},${seed.rgba[3] / 255})`,
                             }}
                           />
-                          Seed {i + 1} · ({seed.x}, {seed.y}) · RGBA{" "}
+                          Hintergrundfarbe {i + 1} · ({seed.x}, {seed.y}) · RGBA{" "}
                           {seed.rgba.join(", ")}
                           <button
                             onClick={() =>
@@ -862,11 +905,11 @@ export function MaskEditor({
                               })
                             }
                           >
-                            Seed {i + 1} entfernen
+                            Hintergrundfarbe {i + 1} entfernen
                           </button>
                         </div>
                       ))}
-                    </details>
+                    </section>
                   </>
                 )}
               </div>
@@ -884,18 +927,6 @@ export function MaskEditor({
               </p>
             )}
             <div className="mask-toolbar">
-              <label>
-                Name
-                <input
-                  aria-label="Maskenname"
-                  value={name}
-                  maxLength={120}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    setDirty(true);
-                  }}
-                />
-              </label>
               <div hidden={!brushTools.has(tool)} className="brush-settings">
                 <label>
                   Pinsel {diameter} px
@@ -912,7 +943,7 @@ export function MaskEditor({
                   />
                 </label>
                 <label hidden={!["paint"].includes(tool)}>
-                  Freigabewert {strength}
+                  Pixel erhalten · {strength}/255
                   <input
                     aria-label="Maskenwert"
                     type="range"
@@ -923,36 +954,51 @@ export function MaskEditor({
                   />
                 </label>
               </div>
+            </div>
+            <details className="editor-advanced">
+              <summary>Erweitert</summary>{" "}
               <label>
+                Name
                 <input
-                  type="checkbox"
-                  checked={overlay}
-                  onChange={(e) => setOverlay(e.target.checked)}
+                  aria-label="Maskenname"
+                  value={name}
+                  maxLength={120}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setDirty(true);
+                  }}
                 />
-                Maskenüberlagerung
               </label>
-              <button
-                disabled={
-                  strokeActive ||
-                  (automatic
-                    ? !smart.history.past.length && !polygonPast.length
-                    : !history.past.length)
-                }
-                onClick={undo}
-              >
-                Rückgängig
-              </button>
-              <button
-                disabled={
-                  strokeActive ||
-                  (automatic
-                    ? !smart.history.future.length && !polygonFuture.length
-                    : !history.future.length)
-                }
-                onClick={redo}
-              >
-                Wiederholen
-              </button>
+              {automatic && ["pick", "auto"].includes(tool) && (
+                <>
+                  {" "}
+                  <p>
+                    ΔE76: euklidischer Abstand in CIE L*a*b* (sRGB, D65).
+                    Vergleich mit den Originalfarben aller Seeds. Kein
+                    semantisches Haar-/Kleidungsmodell.
+                  </p>
+                  <label>
+                    Auswahl erweitern/verkleinern{" "}
+                    {smart.history.present.settings.expand} px
+                    <input
+                      aria-label="Auswahl erweitern"
+                      type="range"
+                      min={-3}
+                      max={3}
+                      value={smart.history.present.settings.expand}
+                      onChange={(e) =>
+                        smart.update({
+                          ...smart.history.present,
+                          settings: {
+                            ...smart.history.present.settings,
+                            expand: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                </>
+              )}{" "}
               <button
                 onClick={() => {
                   discardPolygon();
@@ -984,13 +1030,88 @@ export function MaskEditor({
               >
                 Maske zurücksetzen
               </button>
-            </div>
+            </details>
             <small>
               Alt/Leertaste+Ziehen: Pan · Rad: Zoom · Umschalt+Rad: Pan ·
               Strg+Z: Undo. {editorTools.find((t) => t.id === tool)?.name}
             </small>
           </aside>
           <div className="editor-image-area">
+            {cutout ? (
+              <div
+                className="editor-display"
+                aria-label="Darstellung · verändert keine Bildpixel"
+              >
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showProtected}
+                    onChange={(e) => setShowProtected(e.target.checked)}
+                  />
+                  Schutzbereich anzeigen
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showForced}
+                    onChange={(e) => setShowForced(e.target.checked)}
+                  />
+                  Entfernten Bereich anzeigen
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showSelection}
+                    onChange={(e) => setShowSelection(e.target.checked)}
+                  />
+                  Auswahl anzeigen
+                </label>
+                <label>
+                  Bildansicht
+                  <select
+                    aria-label="Freistellung Bildansicht"
+                    value={view}
+                    onChange={(e) => setView(e.target.value)}
+                  >
+                    <option value="result">Ergebnis</option>
+                    <option value="original">Original</option>
+                    <option value="alpha">Alpha</option>
+                  </select>
+                </label>
+                <label>
+                  Prüfhintergrund
+                  <select
+                    aria-label="Freistellung Prüfhintergrund"
+                    value={backdrop}
+                    onChange={(e) => setBackdrop(e.target.value)}
+                  >
+                    <option value="checker">Schachbrett</option>
+                    <option value="light">Hell</option>
+                    <option value="dark">Dunkel</option>
+                  </select>
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={overlay}
+                    onChange={(e) => setOverlay(e.target.checked)}
+                  />
+                  Maskenüberlagerung
+                </label>
+              </div>
+            ) : (
+              <div className="editor-display">
+                {" "}
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={overlay}
+                    onChange={(e) => setOverlay(e.target.checked)}
+                  />
+                  Maskenüberlagerung
+                </label>
+              </div>
+            )}
             <div
               ref={viewport}
               className={`mask-viewport ${backdrop === "checker" ? "checker" : "cutout-" + backdrop}`}
@@ -1123,7 +1244,7 @@ export function MaskEditor({
                     return;
                   }
                   if (smart.history.present.settings.seeds.length >= 32) {
-                    setError("Maximal 32 Farbseeds.");
+                    setError("Maximal 32 ausgewählte Hintergrundfarben.");
                     return;
                   }
                   setError("");
@@ -1349,28 +1470,61 @@ export function MaskEditor({
             </div>
           </div>
         </fieldset>
-        {automatic && (
+        {cutout && (
           <p role="status" aria-label="Freistellung Berechnung">
-            {smart.cancelled
-              ? "Auswahl abgebrochen. Neu berechnen, bevor gespeichert werden kann."
-              : smart.running
-                ? "Auswahl wird berechnet …"
-                : smart.result
-                  ? `Vorschau bereit · ${Math.round(smart.result.durationMs)} ms · ${smart.result.removed} reduzierte Maskenpixel · ${smart.result.conflicts} Konflikte (Schutz gewinnt)`
-                  : "Original wird geladen …"}
+            {sourceError || smart.loadError
+              ? "Ladefehler · Quelle/Vorschau nicht verfügbar"
+              : paintError || (automatic && smart.error)
+                ? "Berechnungsfehler · keine speicherbare Vorschau"
+                : !ready
+                  ? "Original wird geladen …"
+                  : !painted
+                    ? "Original geladen · Darstellung wird vorbereitet …"
+                    : !automatic
+                      ? "Vorschau bereit · Original geladen"
+                      : smart.cancelled
+                        ? "Auswahl abgebrochen. Neu berechnen, bevor gespeichert werden kann."
+                        : smart.running
+                          ? "Auswahl wird berechnet …"
+                          : smart.result &&
+                              smart.ready &&
+                              paintedResult === smart.result
+                            ? `Vorschau bereit · ${Math.round(smart.result.durationMs)} ms · ${smart.result.removed} reduzierte Maskenpixel · ${smart.result.conflicts} Konflikte (Schutz gewinnt)`
+                            : "Original geladen · Vorschau wird gezeichnet …"}
           </p>
         )}
         <div className="button-row">
-          {automatic && (
+          {" "}
+          <button
+            disabled={
+              saving ||
+              !ready ||
+              strokeActive ||
+              (automatic
+                ? !smart.history.past.length && !polygonPast.length
+                : !history.past.length)
+            }
+            onClick={undo}
+          >
+            Rückgängig
+          </button>
+          <button
+            disabled={
+              saving ||
+              !ready ||
+              strokeActive ||
+              (automatic
+                ? !smart.history.future.length && !polygonFuture.length
+                : !history.future.length)
+            }
+            onClick={redo}
+          >
+            Wiederholen
+          </button>
+          {automatic && smart.running && (
             <>
               <button disabled={!smart.running} onClick={smart.cancel}>
                 Auswahl abbrechen
-              </button>
-              <button
-                disabled={smart.running || !smart.image}
-                onClick={smart.resume}
-              >
-                Auswahl neu berechnen
               </button>
             </>
           )}
@@ -1390,6 +1544,13 @@ export function MaskEditor({
             className="primary"
             disabled={
               !ready ||
+              !!sourceError ||
+              !!paintError ||
+              (cutout &&
+                (!painted ||
+                  (automatic
+                    ? paintedResult !== smart.result
+                    : paintedWeights !== history.present))) ||
               (automatic && (!smart.ready || polygon.points.length > 0)) ||
               saving ||
               !name.trim() ||

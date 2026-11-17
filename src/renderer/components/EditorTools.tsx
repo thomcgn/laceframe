@@ -25,7 +25,7 @@ export const editorTools = [
   },
   {
     id: "protect",
-    name: "Schützen",
+    name: "Figur schützen",
     key: "",
     path: "M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z",
   },
@@ -37,13 +37,13 @@ export const editorTools = [
   },
   {
     id: "force",
-    name: "Hintergrund erzwingen",
+    name: "Hintergrund entfernen",
     key: "",
     path: "M4 4h16v16H4ZM8 12h8",
   },
   {
     id: "force-erase",
-    name: "Erzwungenen Hintergrund radieren",
+    name: "Entfernung radieren",
     key: "",
     path: "M4 4h16v16H4ZM8 12h8M2 22 22 2",
   },

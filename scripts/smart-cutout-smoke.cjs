@@ -192,7 +192,10 @@ const fs = require("node:fs/promises"),
       await page.waitForFunction(() => document.hasFocus());
       await selectMaskTool(dialog(), tool);
       await dialog()
-        .getByLabel("Schutzmaske anzeigen", { exact: true })
+        .getByLabel("Schutzbereich anzeigen", { exact: true })
+        .uncheck();
+      await dialog()
+        .getByLabel("Entfernten Bereich anzeigen", { exact: true })
         .uncheck();
       await page.evaluate(() => {
         window.__editorEvents = [];
@@ -271,11 +274,17 @@ const fs = require("node:fs/promises"),
     };
     await selectMaskTool(dialog(), "force");
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     await liveStroke("force", 600, 650, 0);
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     await liveStroke("force-erase", 600, 650, 255);
     await liveStroke("erase", 650, 650, 0);
@@ -285,11 +294,17 @@ const fs = require("node:fs/promises"),
     await ready();
     await selectMaskTool(dialog(), "protect");
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     await liveStroke("protect", 100, 100, 255);
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     await liveStroke("protect-erase", 100, 100, 0);
     // Every full gesture is one undo step even with many pointer moves.
@@ -298,7 +313,10 @@ const fs = require("node:fs/promises"),
       .click();
     await ready();
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     expect((await rgba(100, 100))[3]).toBe(255);
     await dialog()
@@ -369,7 +387,7 @@ const fs = require("node:fs/promises"),
       await expect(
         dialog()
           .getByRole("toolbar")
-          .getByRole("button", { name: "Schützen", exact: true }),
+          .getByRole("button", { name: "Figur schützen", exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
     }
     await dialog()
@@ -398,14 +416,22 @@ const fs = require("node:fs/promises"),
       .click();
     await ready();
     // Shortcuts never replace the tool while a name is being typed.
+    if (
+      (await dialog().locator(".editor-advanced").getAttribute("open")) === null
+    )
+      await dialog().locator(".editor-advanced summary").click();
     await dialog()
       .getByLabel("Maskenname", { exact: true })
       .fill("B E I H L [ ]");
     await expect(
       dialog()
         .getByRole("toolbar")
-        .getByRole("button", { name: "Hintergrund erzwingen", exact: true }),
+        .getByRole("button", { name: "Hintergrund entfernen", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
+    if (
+      (await dialog().locator(".editor-advanced").getAttribute("open")) === null
+    )
+      await dialog().locator(".editor-advanced summary").click();
     await dialog()
       .getByLabel("Maskenname", { exact: true })
       .fill("Polygon precision");
@@ -497,12 +523,19 @@ const fs = require("node:fs/promises"),
     await dialog()
       .getByRole("button", { name: "Einpassen", exact: true })
       .click();
+    if (
+      (await dialog().locator(".editor-advanced").getAttribute("open")) === null
+    )
+      await dialog().locator(".editor-advanced summary").click();
     await dialog()
       .getByRole("button", { name: "Maske zurücksetzen", exact: true })
       .click();
     await ready();
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     await selectMaskTool(dialog(), "paint");
     const beforeHand = await dialog()
@@ -730,7 +763,10 @@ const fs = require("node:fs/promises"),
     await applyPolygon().click();
     await ready();
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     expect((await rgba(625, 960))[3]).toBe(255);
     expect((await rgba(100, 100))[3]).toBe(0);
@@ -760,7 +796,10 @@ const fs = require("node:fs/promises"),
       await applyPolygon().click();
       await ready();
       await dialog()
-        .getByLabel("Schutzmaske anzeigen", { exact: true })
+        .getByLabel("Schutzbereich anzeigen", { exact: true })
+        .uncheck();
+      await dialog()
+        .getByLabel("Entfernten Bereich anzeigen", { exact: true })
         .uncheck();
       expect((await rgba(600, 600))[3]).toBe(operation === "force" ? 0 : 128);
     }
@@ -775,15 +814,12 @@ const fs = require("node:fs/promises"),
     await selectMaskTool(dialog(), "pick");
     // Remove the extra seed, retaining just the limit polygon for existing checks.
     await dialog()
-      .getByText("Seeds und erweiterte Auswahl", { exact: true })
-      .click();
-    await dialog()
-      .getByRole("button", { name: "Seed 1 entfernen", exact: true })
+      .getByRole("button", {
+        name: "Hintergrundfarbe 1 entfernen",
+        exact: true,
+      })
       .click();
     await ready();
-    await dialog()
-      .getByText("Seeds und erweiterte Auswahl", { exact: true })
-      .click();
     // Protected coat and hair are explicitly painted; no semantic inference.
     await selectMaskTool(dialog(), "protect");
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("200");
@@ -799,7 +835,10 @@ const fs = require("node:fs/promises"),
       dialog().getByLabel("Aufgenommene Farbe", { exact: true }),
     ).toContainText(/RGBA [0-4], [0-4], [0-4], 255/);
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     expect((await rgba(100, 100))[3]).toBe(0);
     expect(await rgba(625, 960)).toEqual([0, 0, 0, 255]);
@@ -809,7 +848,10 @@ const fs = require("node:fs/promises"),
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("12");
     await brush("force", 600, 650);
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     expect((await rgba(600, 650))[3]).toBe(0);
     // Force on the protected coat is a visible conflict; protection wins.
@@ -821,7 +863,10 @@ const fs = require("node:fs/promises"),
       }),
     ).toContainText(/[1-9]\d* Konflikte \(Schutz gewinnt\)/);
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     expect((await rgba(625, 960))[3]).toBe(255);
     await dialog()
@@ -864,15 +909,15 @@ const fs = require("node:fs/promises"),
       .getByRole("button", { name: "Einpassen", exact: true })
       .click();
     await dialog()
-      .getByLabel("Freistellung Prüfansicht", { exact: true })
+      .getByLabel("Freistellung Bildansicht", { exact: true })
       .selectOption("original");
     expect((await rgba(100, 100))[3]).toBe(255);
     await dialog()
-      .getByLabel("Freistellung Prüfansicht", { exact: true })
+      .getByLabel("Freistellung Bildansicht", { exact: true })
       .selectOption("alpha");
     expect(await rgba(100, 100)).toEqual([0, 0, 0, 255]);
     await dialog()
-      .getByLabel("Freistellung Prüfansicht", { exact: true })
+      .getByLabel("Freistellung Bildansicht", { exact: true })
       .selectOption("result");
     for (const [width, height] of [
       [960, 720],
@@ -952,6 +997,7 @@ const fs = require("node:fs/promises"),
     await expect(
       dialog().getByLabel("Kantenweichheit", { exact: true }),
     ).toHaveValue("2");
+    await selectMaskTool(dialog(), "polygon");
     await expect(
       dialog().getByText("Angewendete Polygone (1/32)", { exact: true }),
     ).toBeVisible();
@@ -959,12 +1005,19 @@ const fs = require("node:fs/promises"),
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("20");
     await brush("protect", 600, 650);
     await dialog()
-      .getByLabel("Schutzmaske anzeigen", { exact: true })
+      .getByLabel("Schutzbereich anzeigen", { exact: true })
+      .uncheck();
+    await dialog()
+      .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
     expect((await rgba(600, 650))[3]).toBe(255);
     // Cancel invalidates save; explicit retry restores a usable current preview.
+    await selectMaskTool(dialog(), "pick");
     await dialog()
-      .getByRole("button", { name: "Auswahl neu berechnen", exact: true })
+      .getByRole("button", {
+        name: "Hintergrundauswahl aktualisieren",
+        exact: true,
+      })
       .click();
     await dialog()
       .getByRole("button", { name: "Auswahl abbrechen", exact: true })
@@ -976,7 +1029,10 @@ const fs = require("node:fs/promises"),
       }),
     ).toBeDisabled();
     await dialog()
-      .getByRole("button", { name: "Auswahl neu berechnen", exact: true })
+      .getByRole("button", {
+        name: "Hintergrundauswahl aktualisieren",
+        exact: true,
+      })
       .click();
     await ready();
     await dialog()

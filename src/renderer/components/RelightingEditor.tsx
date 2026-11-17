@@ -59,7 +59,7 @@ export function RelightingEditor({
   });
   const [past, setPast] = useState<Draft[]>([]),
     [future, setFuture] = useState<Draft[]>([]);
-  const [pixels, setPixels] = useState<RelightPixels>(),
+  const [pixels, setPixels] = useState<RelightPixels & { sha256: string }>(),
     [output, setOutput] = useState<{
       pixels: RelightPixels;
       sha: string;
@@ -240,6 +240,7 @@ export function RelightingEditor({
       const r = await window.laceframe.command({
         type: "createRelighting",
         sourceId: source.id,
+        sourceSha256: pixels!.sha256,
         light: draft.light,
         regions: draft.regions.map((r) => ({
           ...r,

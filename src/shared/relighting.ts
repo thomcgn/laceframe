@@ -56,6 +56,7 @@ export type LightRegion = z.infer<typeof lightRegionSchema> & {
 export const relightInputSchema = z
   .object({
     sourceId: z.uuid(),
+    sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
     light: lightSchema,
     regions: z
       .array(
@@ -191,3 +192,10 @@ export function relightPixels(
     }
   return { ...source, data };
 }
+
+export type RelightEligibility = {
+  allowed: boolean;
+  reason: string;
+  sourceSha256?: string;
+  cutoutId?: string;
+};

@@ -724,6 +724,10 @@ const path = require("node:path");
         exact: true,
       });
       await expect(editor.getByAltText("Masken-Master")).toBeVisible();
+      if (
+        (await editor.locator(".editor-advanced").getAttribute("open")) === null
+      )
+        await editor.locator(".editor-advanced summary").click();
       await editor
         .getByLabel("Maskenname", { exact: true })
         .fill("Synthetic expression region");
@@ -800,6 +804,10 @@ const path = require("node:path");
         .getByRole("button", { name: "Rückgängig", exact: true })
         .click();
       await expect.poll(maskAlpha).toBe(painted);
+      if (
+        (await editor.locator(".editor-advanced").getAttribute("open")) === null
+      )
+        await editor.locator(".editor-advanced summary").click();
       await editor
         .getByRole("button", { name: "Maske zurücksetzen", exact: true })
         .click();

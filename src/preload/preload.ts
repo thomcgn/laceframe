@@ -6,6 +6,8 @@ const bridge: LaceframeBridge = {
   smartCutoutRecipe: (id) =>
     ipcRenderer.invoke("image:smart-cutout-recipe", id),
   analysisSource: (id) => ipcRenderer.invoke("image:analysis-source", id),
+  relightEligibility: (id) =>
+    ipcRenderer.invoke("image:relight-eligibility", id),
   relightSource: (id) => ipcRenderer.invoke("image:relight-source", id),
   relightRecipe: (id) => ipcRenderer.invoke("image:relight-recipe", id),
   cutoutMask: (id) => ipcRenderer.invoke("image:cutout-mask", id),

@@ -21,10 +21,10 @@ exports.selectMaskTool = async (editor, id) => {
     auto: "Automatische Hintergrundauswahl",
     paint: "Pinsel",
     erase: "Radierer",
-    protect: "Schützen",
+    protect: "Figur schützen",
     "protect-erase": "Schutz radieren",
-    force: "Hintergrund erzwingen",
-    "force-erase": "Erzwungenen Hintergrund radieren",
+    force: "Hintergrund entfernen",
+    "force-erase": "Entfernung radieren",
     polygon: "Polygon/Lasso",
     pan: "Verschieben",
   };

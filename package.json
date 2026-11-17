@@ -14,7 +14,7 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:desktop": "node scripts/desktop-smoke.cjs && node scripts/expression-designer-smoke.cjs && node scripts/quality-smoke.cjs && node scripts/relighting-smoke.cjs && node scripts/style-analysis-smoke.cjs && node scripts/smart-cutout-smoke.cjs",
+    "test:desktop": "node scripts/desktop-smoke.cjs && node scripts/expression-designer-smoke.cjs && node scripts/quality-smoke.cjs && node scripts/relighting-smoke.cjs && node scripts/style-analysis-smoke.cjs && node scripts/smart-cutout-smoke.cjs && node scripts/cutout-stability-smoke.cjs",
     "test:desktop:native": "node scripts/native-smoke.cjs && node scripts/creator-smoke.cjs",
     "test:dev": "node scripts/dev-smoke.cjs"
   },
