@@ -201,7 +201,9 @@ export function selectBackground(
   if (lab.length !== n * 3) throw new Error("Ungültiger Lab-Puffer");
   const protectedMask = d.protected.slice(),
     forcedMask = d.forced.slice(),
-    limited = new Uint8Array(n);
+    limited = new Uint8Array(n),
+    polygonProtected = new Uint8Array(n),
+    polygonForced = new Uint8Array(n);
   for (const op of d.settings.polygons ?? []) {
     const region = rasterizePolygon(op, p.width, p.height);
     const target =
@@ -210,7 +212,12 @@ export function selectBackground(
         : op.operation === "force"
           ? forcedMask
           : limited;
-    for (let i = 0; i < n; i++) if (region[i]) target[i] = 255;
+    for (let i = 0; i < n; i++)
+      if (region[i]) {
+        target[i] = 255;
+        if (op.operation === "protect") polygonProtected[i] = 255;
+        if (op.operation === "force") polygonForced[i] = 255;
+      }
   }
   const selected = new Uint8Array(n),
     eligible = new Uint8Array(n),
@@ -288,6 +295,8 @@ export function selectBackground(
     protectedMask,
     forcedMask,
     limited,
+    polygonProtected,
+    polygonForced,
     conflicts,
     removed,
   };

@@ -1,3 +1,4 @@
+const { selectMaskTool } = require("./smoke-ui.cjs");
 const { field, image, nav } = require("./smoke-ui.cjs");
 // Synthetic local pixels only. No provider, image turn, remote request or private project.
 const { _electron: electron, expect } = require("@playwright/test");
@@ -147,9 +148,7 @@ const { createHash } = require("node:crypto");
     await expect
       .poll(() => editor.evaluate((el) => el.scrollWidth <= el.clientWidth))
       .toBe(true);
-    await editor
-      .getByLabel("Maskenwerkzeug", { exact: true })
-      .selectOption("erase");
+    await selectMaskTool(editor, "erase");
     await editor.getByLabel("Pinselgröße", { exact: true }).fill("5");
     let box = await editor.locator("canvas").boundingBox();
     const trace = async (x1, y1, x2, y2) => {
@@ -211,9 +210,7 @@ const { createHash } = require("node:crypto");
     await expect(editor.getByLabel("Maskenname", { exact: true })).toHaveValue(
       "Retained silhouette",
     );
-    await editor
-      .getByLabel("Maskenwerkzeug", { exact: true })
-      .selectOption("paint");
+    await selectMaskTool(editor, "paint");
     await editor.getByLabel("Pinselgröße", { exact: true }).fill("3");
     await editor.getByLabel("Maskenwert", { exact: true }).fill("128");
     box = await editor.locator("canvas").boundingBox();
@@ -347,10 +344,24 @@ const { createHash } = require("node:crypto");
         ),
       )
       .toBe(true);
-    await page.locator("section.library-workspace .master-compare").first().getByLabel("Create Zoom", {exact: true}).selectOption("400");
-    await q.getByLabel("Create Zoom", {exact: true}).selectOption("400");
-    await expect.poll(() => page.locator("section.library-workspace img:visible").evaluateAll(images => images.length > 0 && images.every(img => img.complete && img.naturalWidth > 0))).toBe(true);
-    await page.evaluate(() => window.scrollTo(0,0));
+    await page
+      .locator("section.library-workspace .master-compare")
+      .first()
+      .getByLabel("Create Zoom", { exact: true })
+      .selectOption("400");
+    await q.getByLabel("Create Zoom", { exact: true }).selectOption("400");
+    await expect
+      .poll(() =>
+        page
+          .locator("section.library-workspace img:visible")
+          .evaluateAll(
+            (images) =>
+              images.length > 0 &&
+              images.every((img) => img.complete && img.naturalWidth > 0),
+          ),
+      )
+      .toBe(true);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: "artifacts/ux01-library-1440.png",
       fullPage: true,
