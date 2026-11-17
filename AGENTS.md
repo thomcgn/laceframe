@@ -27,3 +27,13 @@ Task 01 and Task 02 (including live native Codex ImageGen) are implemented per d
 ## Additive roadmap: Art Direction / Expression Identity
 
 After the current Create workspace / compact UX work is integrated, implement `docs/CODEX_02B_ART_DIRECTION.md` using `docs/ART_DIRECTION_AND_EXPRESSION_IDENTITY.md`. Preserve approved masters and image-generation support from the live feature branch. Art style is project-level; character identity, outfit and personal emotion behavior are independent. Per-character overrides must never overwrite shared emotion definitions or another character's settings. Do not attempt the full photo-to-master wizard until this layer is stable.
+
+## Risk-based testing (LF-00)
+
+- During implementation, start with the affected unit tests, targeted lint and typecheck; then use `npm run check:fast`. Do not repeatedly package Electron or run unrelated full desktop suites for small changes.
+- Before a PR, run FAST and `npm run classify:changes`. For MEDIUM run `npm run check:targeted` where desktop execution is available; HIGH requires FULL. TARGETED automatically escalates HIGH and offers no skip/level/group override. FAST alone is a development component, not a complete HIGH-risk certificate.
+- `npm run check:full` includes every unit and both complete desktop commands. All existing assertions remain mandatory. After a failure, diagnose and rerun the affected tests; do not repeatedly rerun the whole suite to obtain a green log.
+- Run memory-intensive local profiles sequentially. Reuse packaged artifacts only when the input fingerprint, platform/Node and actual executable/app.asar hashes match; do not mark stale builds as verified.
+- After opening the PR, inspect its actual GitHub Actions results, fix failures and check the required `quality-gate`. Distinguish local evidence, fixture-backed native jobs and actual CI execution. No live generation or private-project fixtures.
+- GitHub Actions is authoritative for complete pre-merge regression when available. If CI is unavailable, perform the required complete coverage locally and report failures/limitations explicitly. Do not merge PRs or change branch-protection rules automatically.
+- See `docs/TEST_STRATEGY.md` for exact mappings, measurements, profile scope and one-time branch-protection setup. Do not start the next product roadmap phase without its required merge and explicit user release.
