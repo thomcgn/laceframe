@@ -89,7 +89,10 @@ export class GenerationController {
       await this.service.recordGeneration(attempt.id, this.clock.snapshot());
       const request = creation
         ? await this.service.creatorRequest(draft)
-        : this.provider.prepare(saved.project, draft);
+        : this.provider.prepare(saved.project, {
+            ...draft,
+            prompt: attempt.promptRevision.prompt,
+          });
       if (!creation && "referenceAssetPath" in request) {
         request.referenceAssetPath = await this.service.masterFile(
           draft.masterId,

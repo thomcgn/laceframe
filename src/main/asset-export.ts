@@ -18,7 +18,7 @@ export async function writeExport(
     throw new Error(
       "Export außerhalb des Projekts speichern; interne Assets bleiben unverändert.",
     );
-  if (!/^[A-Za-z0-9_-]+\.png$/.test(payload.name))
+  if (!/^[A-Za-z0-9_-]+\.(?:png|json)$/.test(payload.name))
     throw new Error("Ungültiger Exportname.");
   const files = [
     { name: payload.name, bytes: payload.bytes },

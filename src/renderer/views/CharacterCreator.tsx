@@ -990,6 +990,45 @@ export function CharacterCreator({
               entscheidet über die Freigabe.
             </p>
             <PromptComposer
+              sources={[
+                {
+                  layer: "System",
+                  source:
+                    "Echte Alpha-Anforderung, immutable Referenzen, technische Prüfung und manuelle Freigabe (Main/Provider).",
+                },
+                {
+                  layer: "Style",
+                  source: style
+                    ? `${style.name} · R${style.revision}`
+                    : "Kein gemeinsamer Style",
+                },
+                {
+                  layer: "Character Identity",
+                  source: `${character?.name} · ausgewählte private Identitätsreferenzen und Identitätsnotizen`,
+                },
+                {
+                  layer: "Outfit",
+                  source:
+                    "Editierbarer Outfitentwurf dieser Figur; unabhängig vom Stil.",
+                },
+                {
+                  layer: "Expression Performance",
+                  source:
+                    "Neutraler Master; keine persönliche Emotionsperformance.",
+                },
+                {
+                  layer: "Composition",
+                  source:
+                    "Pose, Framing, Hintergrund und Auflösungsziel aus diesem Creator-Entwurf.",
+                },
+                {
+                  layer: "Creative Supplements",
+                  source:
+                    promptMode === "expert"
+                      ? "Expert Override mit verbindlichen Systemregeln."
+                      : creative || "Keine Ergänzung",
+                },
+              ]}
               labelPrefix="Creator"
               state={composer}
               onChange={setComposer}

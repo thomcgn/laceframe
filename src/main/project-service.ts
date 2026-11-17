@@ -1,3 +1,17 @@
+import { protectExpressionPrompt } from "../shared/generation";
+import {
+  parsePackJSON,
+  serializePack,
+  packSelectionSchema,
+  planPack,
+  localImportName,
+  exportStyle,
+  exportExpressions,
+  migrationLines,
+  emptyStyle,
+  type PackPreview,
+  type PackSelection,
+} from "../shared/packs";
 import {
   selectBackground,
   validateCutoutImage,
@@ -221,6 +235,7 @@ export class ProjectService {
     const now = new Date().toISOString();
     const project = projectSchema.parse({
       schemaVersion: 2,
+      portablePacksVersion: 1,
       visualStyleVersion: 1,
       maskingVersion: 1,
       smartCutoutVersion: 1,
@@ -361,6 +376,10 @@ export class ProjectService {
           maskWeights(m);
         }
       }
+    for (const migration of project.styleMigrations)
+      for (const source of migration.sources)
+        if (hashBytes(Buffer.from(source.text)) !== source.sha256)
+          throw new Error("Stilmigrations-Originalhash verändert.");
     const source = raw as Record<string, unknown>;
     const versionOne = source.schemaVersion === 1;
     const needsArtMigration =
@@ -374,7 +393,8 @@ export class ProjectService {
       source.characterCreationVersion !== 1 ||
       source.assetQualityVersion !== 1 ||
       !Object.hasOwn(source, "styleAnalyses") ||
-      source.smartCutoutVersion !== 1
+      source.smartCutoutVersion !== 1 ||
+      source.portablePacksVersion !== 1
         ? bytes
         : undefined;
     this.legacyBackupName = versionOne
@@ -391,7 +411,9 @@ export class ProjectService {
                 ? "laceframe.v2.pre-asset-quality.backup.json"
                 : !Object.hasOwn(source, "styleAnalyses")
                   ? "laceframe.v2.pre-style-analysis.backup.json"
-                  : "laceframe.v2.pre-smart-cutout.backup.json";
+                  : source.smartCutoutVersion !== 1
+                    ? "laceframe.v2.pre-smart-cutout.backup.json"
+                    : "laceframe.v2.pre-portable-packs.backup.json";
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -484,6 +506,7 @@ export class ProjectService {
   private async save(project: Project) {
     const validated = projectSchema.parse({
       ...project,
+      portablePacksVersion: 1,
       maskingVersion: 1,
       smartCutoutVersion: 1,
       characterCreationVersion: 1,
@@ -547,6 +570,208 @@ export class ProjectService {
     };
     let removeFile: { file: string; sha256: string } | undefined;
     switch (cmd.type) {
+      case "updateStructuredStyle": {
+        const profile = p.artDirections.find((a) => a.id === cmd.profileId);
+        if (!profile || profile.revision !== cmd.sourceRevision)
+          throw new Error("Stilrevision geändert. Erneut öffnen.");
+        // Only text data; imported reference hashes are descriptive, never filesystem commands.
+        parsePackJSON(
+          JSON.stringify({
+            format: "laceframe.style",
+            schemaVersion: 1,
+            id: profile.id,
+            revision: profile.revision,
+            style: cmd.style,
+            provenance: { application: "laceframe", note: "" },
+          }),
+        );
+        profile.portableStyle = structuredClone(cmd.style);
+        profile.revision++;
+        this.archiveStyle(p, profile);
+        break;
+      }
+      case "migrateStyleRules": {
+        const profile = p.artDirections.find((a) => a.id === cmd.profileId);
+        if (!profile || profile.revision !== cmd.sourceRevision)
+          throw new Error("Stilrevision geändert. Erneut öffnen.");
+        const lines = migrationLines(profile);
+        if (
+          lines.length !== cmd.choices.length ||
+          new Set(cmd.choices.map((c) => c.index)).size !== lines.length ||
+          cmd.choices.some((c) => c.index >= lines.length)
+        )
+          throw new Error("Migration passt nicht zur Originalrevision.");
+        const clean = emptyStyle(profile.name);
+        clean.positiveRules = cmd.choices
+          .filter((c) => c.category === "style" && c.text.trim())
+          .map((c) => c.text);
+        clean.composition = cmd.choices
+          .filter((c) => c.category === "composition")
+          .map((c) => c.text)
+          .join("\n");
+        if (!clean.positiveRules.length)
+          throw new Error("Mindestens eine Stilregel ausdrücklich auswählen.");
+        clean.referenceHashes = (profile.styleReferenceIds ?? []).map(
+          (id) => p.styleAssets.find((a) => a.id === id)!.sha256,
+        );
+        const sources = (
+          [
+            "renderRules",
+            "description",
+            "lightingRules",
+            "colorRules",
+            "framingRules",
+          ] as const
+        )
+          .filter((field) => profile[field] !== undefined)
+          .map((field) => ({
+            field,
+            text: profile[field]!,
+            sha256: hashBytes(Buffer.from(profile[field]!)),
+          }));
+        p.styleMigrations.push({
+          id: randomUUID(),
+          profileId: profile.id,
+          sourceRevision: profile.revision,
+          createdAt: new Date().toISOString(),
+          sources,
+          choices: structuredClone(cmd.choices),
+        });
+        profile.portableStyle = clean;
+        profile.renderRules = "Structured rendering rules below.";
+        profile.description = "";
+        profile.lightingRules = "";
+        profile.colorRules = "";
+        profile.framingRules = "";
+        profile.revision++;
+        this.archiveStyle(p, profile);
+        break;
+      }
+      case "importPack": {
+        // Revalidate the same bounded wire format even for direct IPC commands.
+        const pack = parsePackJSON(JSON.stringify(cmd.pack));
+        if (cmd.projectHash !== hashBytes(Buffer.from(JSON.stringify(p))))
+          throw new Error(
+            "Projekt seit der Vorschau geändert. Pack erneut prüfen.",
+          );
+        const rows = planPack(p, pack);
+        if (
+          cmd.choices.length !== rows.length ||
+          new Set(cmd.choices.map((c) => c.key)).size !== rows.length ||
+          rows.some((r) => !cmd.choices.some((c) => c.key === r.key))
+        )
+          throw new Error("Importentscheidungen passen nicht zur Vorschau.");
+        for (const row of rows) {
+          const choice = cmd.choices.find((c) => c.key === row.key)!;
+          if (choice.action === "skip") continue;
+          if (
+            choice.action === "update" &&
+            (!row.targetId || row.status === "Konflikt")
+          )
+            throw new Error(
+              "Kein eindeutiges Importziel. Als neu importieren oder überspringen.",
+            );
+          if (pack.format === "laceframe.style") {
+            const data = pack.style;
+            const target =
+              choice.action === "update"
+                ? p.artDirections.find((a) => a.id === row.targetId)
+                : undefined;
+            const refs = p.styleAssets
+              .filter((a) => data.referenceHashes.includes(a.sha256))
+              .map((a) => a.id)
+              .slice(0, 6);
+            for (const id of refs) await this.preview(id);
+            const fields = {
+              name: localImportName(
+                data.name,
+                p.artDirections
+                  .filter((a) => a.id !== target?.id)
+                  .map((a) => a.name),
+              ),
+              portableName: data.name,
+              ...data.legacy,
+              renderRules: data.legacy.renderRules,
+              portableId: pack.id,
+              portableRevision: pack.revision,
+              portableProvenance: structuredClone(pack.provenance),
+              portableStyle: structuredClone(data),
+              styleReferenceIds: refs,
+            };
+            const profile = target ?? {
+              id: randomUUID(),
+              revision: 0,
+              ...fields,
+            };
+            if (target)
+              for (const key of [
+                "description",
+                "lightingRules",
+                "colorRules",
+                "framingRules",
+              ] as const)
+                delete target[key];
+            Object.assign(profile, fields);
+            profile.revision++;
+            if (!target) p.artDirections.push(profile);
+            this.archiveStyle(p, profile, false);
+            if (!p.defaultArtDirectionId) p.defaultArtDirectionId = profile.id;
+          } else {
+            const f = pack.families.find((f) => f.id === row.key)!;
+            const target =
+              choice.action === "update"
+                ? p.families.find((a) => a.id === row.targetId)
+                : undefined;
+            const family = target ?? {
+              id: randomUUID(),
+              label: f.label,
+              slug: f.slug,
+              order: p.families.length,
+            };
+            Object.assign(family, {
+              label: f.label,
+              slug: localImportName(
+                f.slug,
+                p.families
+                  .filter((a) => a.id !== target?.id)
+                  .map((a) => a.slug),
+              ),
+              portableSlug: f.slug,
+              portableId: f.id,
+              portableOrigin: {
+                id: pack.id,
+                revision: pack.revision,
+                provenance: structuredClone(pack.provenance),
+              },
+            });
+            if (!target) p.families.push(family);
+            for (const v of f.variants) {
+              const targets = target
+                ? p.variants.filter(
+                    (a) =>
+                      a.familyId === family.id &&
+                      (a.portableId ?? a.id) === v.id,
+                  )
+                : [];
+              if (targets.length > 1)
+                throw new Error(
+                  "Mehrdeutige Varianten-ID; als neue Familie importieren.",
+                );
+              const existing = targets[0];
+              const { id: externalId, ...fields } = v;
+              if (existing) Object.assign(existing, fields);
+              else
+                p.variants.push({
+                  ...fields,
+                  id: randomUUID(),
+                  familyId: family.id,
+                  portableId: externalId,
+                });
+            }
+          }
+        }
+        break;
+      }
       case "createRelighting": {
         if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
         const source = this.qualitySource(cmd.sourceId);
@@ -1221,7 +1446,7 @@ export class ProjectService {
             compositionVersion: 1,
             createdAt: now,
             basePrompt,
-            prompt,
+            prompt: protectExpressionPrompt(prompt),
             supplementaryInstructions,
           },
         });
@@ -1352,6 +1577,7 @@ export class ProjectService {
         for (const ref of fields.styleReferenceIds ?? [])
           await this.preview(ref);
         Object.assign(profile, fields);
+        if (profile.portableName) profile.portableName = fields.name;
         profile.revision += 1;
         this.archiveStyle(p, profile);
         break;
@@ -1463,6 +1689,8 @@ export class ProjectService {
         const f = p.families.find((f) => f.id === cmd.id);
         if (!f) throw new Error("Familie fehlt.");
         Object.assign(f, { label: cmd.label, slug: cmd.slug });
+        if (f.portableSlug) f.portableSlug = cmd.slug;
+        if (f.portableOrigin) f.portableOrigin.revision++;
         break;
       }
       case "addVariant":
@@ -1479,6 +1707,8 @@ export class ProjectService {
         const index = p.variants.findIndex((v) => v.id === cmd.variant.id);
         if (index < 0) throw new Error("Variante fehlt.");
         p.variants[index] = cmd.variant;
+        const family = p.families.find((f) => f.id === cmd.variant.familyId);
+        if (family?.portableOrigin) family.portableOrigin.revision++;
         break;
       }
       case "confirmMaster": {
@@ -1573,7 +1803,45 @@ export class ProjectService {
       this.staged = undefined;
     return this.snapshot();
   }
-  private archiveStyle(p: Project, profile: ArtDirection) {
+  previewPack(json: string): PackPreview {
+    const p = this.snapshot().project,
+      pack = parsePackJSON(json);
+    return {
+      pack,
+      rows: planPack(p, pack),
+      projectHash: hashBytes(Buffer.from(JSON.stringify(p))),
+    };
+  }
+  exportPack(input: PackSelection) {
+    const request = packSelectionSchema.parse(input),
+      p = this.snapshot().project;
+    const profile = p.artDirections.find((a) => a.id === request.profileId);
+    if (request.kind === "style" && !profile)
+      throw new Error("Stilprofil auswählen.");
+    if (request.kind === "style" && request.styleScopeReviewed !== true)
+      throw new Error(
+        "Style-Export erst nach manueller Prüfung: nur Rendering, keine Identität, Outfits oder Emotionsanweisungen.",
+      );
+    const pack =
+      request.kind === "style"
+        ? exportStyle(p, profile!)
+        : exportExpressions(
+            p,
+            request.familyIds ?? p.families.map((f) => f.id),
+          );
+    return {
+      name: `${request.kind}-${pack.id}-r${pack.revision}.json`,
+      bytes: Buffer.from(serializePack(pack)),
+    };
+  }
+  private archiveStyle(
+    p: Project,
+    profile: ArtDirection,
+    incrementPortable = true,
+  ) {
+    if (incrementPortable && profile.portableRevision)
+      profile.portableRevision++;
+
     const { id, ...fields } = profile;
     p.artDirectionRevisions.push(structuredClone({ ...fields, profileId: id }));
   }

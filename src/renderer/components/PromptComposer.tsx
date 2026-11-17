@@ -11,9 +11,11 @@ export function PromptComposer({
   labelPrefix,
   mode,
   onModeChange,
+  sources,
   extraInstructions,
   onExtraChange,
 }: {
+  sources?: { layer: string; source: string }[];
   labelPrefix?: string;
   state: ComposerState;
   onChange: (s: ComposerState) => void;
@@ -29,6 +31,24 @@ export function PromptComposer({
         labelPrefix ? "creator-prompt-builder" : "prompt-builder"
       }
     >
+      {sources && (
+        <details className="prompt-sources">
+          <summary>Welche Quelle liefert welche Regel?</summary>
+          <p>
+            Technische Systemregeln, Freigabe und Provenienz bleiben
+            verbindlich, auch im Expert Override. Der vollständige tatsächlich
+            gespeicherte Prompt ist am Versuch einsehbar.
+          </p>
+          <dl>
+            {sources.map((s) => (
+              <div key={s.layer}>
+                <dt>{s.layer}</dt>
+                <dd>{s.source}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
       <label>
         Promptmodus
         <select

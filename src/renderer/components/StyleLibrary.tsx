@@ -1,3 +1,5 @@
+import { PackTools } from "./PackTools";
+import { StyleRuleTools } from "./StyleRuleTools";
 import { StyleAnalyzer } from "./StyleAnalyzer";
 import { useEffect, useState } from "react";
 import type { Snapshot } from "../../shared/domain";
@@ -41,13 +43,14 @@ export function StyleLibrary({
     [revision, setRevision] = useState<number | undefined>();
   const [dirty, setDirty] = useState(false);
   const [analysisDirty, setAnalysisDirty] = useState(false);
+  const [packDirty, setPackDirty] = useState(false);
   useEffect(
-    () => onDirtyChange(dirty || analysisDirty),
-    [dirty, analysisDirty, onDirtyChange],
+    () => onDirtyChange(dirty || analysisDirty || packDirty),
+    [dirty, analysisDirty, packDirty, onDirtyChange],
   );
   function canDiscard() {
     if (
-      (dirty || analysisDirty) &&
+      (dirty || analysisDirty || packDirty) &&
       !window.confirm("Ungespeicherte Stilregeln verwerfen?")
     )
       return false;
@@ -190,6 +193,33 @@ export function StyleLibrary({
           Historische Revision · schreibgeschützt. Änderungen erfolgen
           ausschließlich an der aktuellen Revision.
         </p>
+      )}
+      <PackTools
+        key={`pack:${profile?.id}/${profile?.revision}`}
+        snapshot={snapshot}
+        kind="style"
+        profileId={profile?.id}
+        disabled={
+          busy ||
+          dirty ||
+          analysisDirty ||
+          packDirty ||
+          creating ||
+          Boolean(historical)
+        }
+        perform={perform}
+        onSnapshot={acceptSnapshot}
+      />
+      {profile && !creating && !historical && (
+        <StyleRuleTools
+          key={`rules:${profile.id}/${profile.revision}`}
+          snapshot={snapshot}
+          profile={profile}
+          onDirtyChange={setPackDirty}
+          disabled={busy || dirty || analysisDirty}
+          perform={perform}
+          onSnapshot={acceptSnapshot}
+        />
       )}
       <form
         onChange={() => setDirty(true)}
@@ -424,7 +454,7 @@ export function StyleLibrary({
           snapshot={snapshot}
           profileId={profile.id}
           perform={perform}
-          busy={busy || dirty}
+          busy={busy || dirty || packDirty}
           onSnapshot={onSnapshot}
           onDirtyChange={setAnalysisDirty}
         />

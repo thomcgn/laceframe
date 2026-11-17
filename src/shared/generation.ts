@@ -1,3 +1,4 @@
+import { structuredStyleText, type StyleContent } from "./packs";
 import {
   TRANSPARENT_CHARACTER_INSTRUCTION,
   VISUAL_STYLE_INSTRUCTION,
@@ -146,6 +147,12 @@ export function validateExternalURL(input: unknown): string {
     throw new Error("Nur https://chatgpt.com/ darf extern geöffnet werden.");
   return CHATGPT_URL;
 }
+/** Apply technical alpha requirements to future submissions without rewriting historical records. */
+export function protectExpressionPrompt(prompt: string): string {
+  return prompt.includes(TRANSPARENT_CHARACTER_INSTRUCTION)
+    ? prompt
+    : `${prompt.trim()}\n\n${TRANSPARENT_CHARACTER_INSTRUCTION}`;
+}
 export function composePrompt(input: {
   mask?: z.infer<typeof maskSelectionSchema>;
   characterName: string;
@@ -154,6 +161,7 @@ export function composePrompt(input: {
   variant: Variant;
   artDirection?: {
     name: string;
+    portableStyle?: StyleContent;
     renderRules: string;
     lightingRules?: string;
     colorRules?: string;
@@ -170,6 +178,7 @@ export function composePrompt(input: {
     input.artDirection
       ? `STYLE LOCK — ${input.artDirection.name}\nRendering: ${input.artDirection.renderRules}\nLighting: ${input.artDirection.lightingRules?.trim() || "Follow the master"}\nColor: ${input.artDirection.colorRules?.trim() || "Follow the master"}\nFraming: ${input.artDirection.framingRules?.trim() || "Follow the master"}\nThis is the project's illustration style, NOT an instruction to copy another character's face, clothes or personality.`
       : "",
+    structuredStyleText(input.artDirection?.portableStyle),
     input.styleReferences?.length
       ? `REFERENCE ROLES: Image 1 is the IDENTITY MASTER. Images 2–${input.styleReferences.length + 1} are STYLE ONLY, in the listed order: ${input.styleReferences.map((r, i) => `image ${i + 2}: ID ${r.id}, SHA-256 ${r.sha256}`).join("; ")}. Borrow rendering, lighting and palette treatment only. NEVER copy faces, hair, freckles, gender presentation, clothing, accessories, poses or personality from style references. Identity and outfit come ONLY from image 1. Edit image 1; style pictures are not edit targets.`
       : "",

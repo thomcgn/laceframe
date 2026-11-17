@@ -1215,3 +1215,9 @@ button.text-link { border:0; background:transparent; padding:2px 0; color:var(--
 .master-approval input[type="checkbox"] { width: auto; flex: 0 0 auto; margin-top: .25rem; }
 .button-row:has(> .master-approval) { align-items: flex-start; }
 .button-row > .master-approval { flex: 1 0 100%; }
+
+.pack-tools, .style-rule-tools { border:1px solid #526273; padding:12px; margin:12px 0; min-width:0; }
+.pack-tools pre, .style-rule-tools pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:320px; overflow:auto; }
+.pack-tools article, .style-rule-tools article { border-top:1px solid #42505f; padding:8px 0; }
+.pack-tools label:has(input[type=checkbox]), .style-rule-tools label:has(input[type=checkbox]) { display:flex; align-items:center; gap:8px; }
+.pack-tools input[type=checkbox], .style-rule-tools input[type=checkbox] { width:auto; }
