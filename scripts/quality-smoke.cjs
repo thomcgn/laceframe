@@ -139,6 +139,10 @@ const { createHash } = require("node:crypto");
     expect(tinted).not.toEqual(await previewPixel(16, 16));
     await editor.getByLabel("Maskenüberlagerung", { exact: true }).uncheck();
     expect(await previewPixel(12, 16)).toEqual([190, 70, 30, 255]);
+    if (
+      (await editor.locator(".editor-advanced").getAttribute("open")) === null
+    )
+      await editor.locator(".editor-advanced summary").click();
     await editor
       .getByLabel("Maskenname", { exact: true })
       .fill("Retained silhouette");
@@ -252,9 +256,9 @@ const { createHash } = require("node:crypto");
         exact: true,
       })
       .click();
-    await expect(q.getByRole("status")).toContainText(
-      "Black_Coat_Master_V2_32x32.png",
-    );
+    await expect(
+      q.getByRole("status").filter({ hasText: "Exportiert:" }),
+    ).toContainText("Black_Coat_Master_V2_32x32.png");
     const exported = await fs.readFile(
       path.join(exports, "Black_Coat_Master_V2_32x32.png"),
     );

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  validateCutoutImage,
+  validateCutoutDraft,
   type CutoutDraft,
   type CutoutHistory,
   type CutoutImage,
@@ -28,6 +30,8 @@ export function useSmartCutout(
     future: [],
   });
   const current = useRef(history);
+  const [loadRevision, setLoadRevision] = useState(0);
+  const [loadError, setLoadError] = useState("");
   const [image, setImage] = useState<CutoutImage>(),
     [error, setError] = useState(""),
     [dirty, setDirty] = useState(false),
@@ -96,9 +100,19 @@ export function useSmartCutout(
   useEffect(() => {
     if (!enabled) return;
     let live = true;
+    stop();
+    wanted.current = undefined;
+    setImage(undefined);
+    setResult(undefined);
+    setError("");
+    setLoadError("");
+    setCancelled(false);
     void (async () => {
       const source = await window.laceframe.cutoutSource(id);
       if (!source.ok) throw new Error(source.error);
+      validateCutoutImage(source.value);
+      if (source.value.width !== width || source.value.height !== height)
+        throw new Error("Bildquelle passt nicht zu den Asset-Abmessungen.");
       let d: CutoutDraft = {
         settings: defaultCutoutSettings(),
         manual: initial
@@ -112,6 +126,7 @@ export function useSmartCutout(
         if (!r.ok) throw new Error(r.error);
         d = r.value;
       }
+      d = validateCutoutDraft(source.value, d);
       if (live) {
         const h = { past: [], present: d, future: [] };
         current.current = h;
@@ -120,7 +135,7 @@ export function useSmartCutout(
       }
     })().catch((e) => {
       if (live)
-        setError(
+        setLoadError(
           e instanceof Error ? e.message : "Bild konnte nicht geladen werden",
         );
     });
@@ -128,7 +143,7 @@ export function useSmartCutout(
       live = false;
       stop();
     };
-  }, [enabled, id, width, height, recipeId]);
+  }, [enabled, id, width, height, recipeId, loadRevision]);
   useEffect(() => {
     if (!enabled || !image || cancelled) return;
     queue(current.current.present);
@@ -167,6 +182,35 @@ export function useSmartCutout(
           setError(e.data.error);
           setRunning(false);
         } else {
+          const count = width * height;
+          if (
+            ![
+              "weights",
+              "selection",
+              "protectedMask",
+              "forcedMask",
+              "limited",
+              "polygonProtected",
+              "polygonForced",
+            ].every(
+              (key) =>
+                e.data[key] instanceof Uint8Array &&
+                e.data[key].length === count,
+            ) ||
+            !Number.isFinite(e.data.durationMs) ||
+            !Number.isInteger(e.data.removed) ||
+            e.data.removed < 0 ||
+            e.data.removed > count ||
+            !Number.isInteger(e.data.conflicts) ||
+            e.data.conflicts < 0 ||
+            e.data.conflicts > count
+          ) {
+            setError(
+              "Ungültige Freistellungsvorschau. Hintergrundauswahl erneut aktualisieren.",
+            );
+            setRunning(false);
+            return;
+          }
           setResult({ ...e.data, draft: request.draft });
           setRunning(false);
         }
@@ -180,6 +224,8 @@ export function useSmartCutout(
   return {
     history,
     image,
+    loadError,
+    retryLoad: () => setLoadRevision((v) => v + 1),
     error,
     dirty,
     result,
@@ -193,6 +239,7 @@ export function useSmartCutout(
       !!result &&
       !running &&
       !error &&
+      !loadError &&
       !cancelled &&
       result.draft === current.current.present,
     cancel: () => {

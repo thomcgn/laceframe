@@ -1,3 +1,4 @@
+import type { RelightEligibility } from "../../shared/relighting";
 import { StyleComparison } from "./StyleComparison";
 import { RelightingEditor } from "./RelightingEditor";
 import { useEffect, useState } from "react";
@@ -178,6 +179,35 @@ export function AssetQuality({
     : sourceQuality?.relighting
       ? sourceQuality
       : undefined;
+  const [eligibility, setEligibility] = useState<RelightEligibility>();
+  const [recipeEligibility, setRecipeEligibility] =
+    useState<RelightEligibility>();
+  useEffect(() => {
+    if (!expanded) return;
+    let live = true;
+    setEligibility(undefined);
+    setRecipeEligibility(undefined);
+    const read = (id: string, set: (e: RelightEligibility) => void) => {
+      void window.laceframe
+        .relightEligibility(id)
+        .then((r) => {
+          if (live) set(r.ok ? r.value : { allowed: false, reason: r.error });
+        })
+        .catch(() => {
+          if (live)
+            set({
+              allowed: false,
+              reason:
+                "Freistellungsprüfung fehlgeschlagen. Quelle erneut öffnen.",
+            });
+        });
+    };
+    read(active.id, setEligibility);
+    if (lightingRecipe) read(lightingRecipe.sourceId, setRecipeEligibility);
+    return () => {
+      live = false;
+    };
+  }, [expanded, active.id, project, lightingRecipe?.id]);
   const busy = disabled || working;
   async function command(c: Command) {
     setWorking(true);
@@ -294,14 +324,14 @@ export function AssetQuality({
             </p>
             <div className="button-row">
               <button
-                disabled={busy}
+                disabled={busy || !eligibility?.allowed}
                 onClick={() => setRelighting({ source: active })}
               >
                 Live Relighting öffnen
               </button>
               {lightingRecipe && (
                 <button
-                  disabled={busy}
+                  disabled={busy || !recipeEligibility?.allowed}
                   onClick={() => {
                     const parent = [
                       ...project.masters,
@@ -328,6 +358,18 @@ export function AssetQuality({
                 Ausdrücklich Rohbild exportieren
               </button>
             </div>
+            <p role="status" aria-label="Relighting Freigabe">
+              {eligibility?.reason ??
+                "Freistellungs-Herkunft und Alpha werden geprüft …"}
+            </p>
+            {lightingRecipe &&
+              recipeEligibility &&
+              !recipeEligibility.allowed && (
+                <p className="warning">
+                  Lichtrevision bleibt historisch erhalten. Keine neue Revision:{" "}
+                  {recipeEligibility.reason}
+                </p>
+              )}
             <label>
               <input
                 type="checkbox"

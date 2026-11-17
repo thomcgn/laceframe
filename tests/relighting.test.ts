@@ -1,4 +1,4 @@
-import {DEFAULT_COMPOSITION} from "../src/shared/character-creation";
+import { DEFAULT_COMPOSITION } from "../src/shared/character-creation";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
 import path from "node:path";
@@ -163,18 +163,31 @@ beforeEach(async () => {
     characterId: s.snapshot().project.selectedCharacterId,
     token: staged.token,
   });
+  await approveCutout(s.snapshot().project.masters.at(-1)!.id);
 });
 afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
+async function approveCutout(id: string) {
+  const source = await s.cutoutSource(id);
+  await s.command({
+    type: "createCutout",
+    sourceId: id,
+    name: "Reviewed fixture cutout",
+    weights: new Uint8Array(source.width * source.height).fill(255),
+  });
+  await review();
+  return s.snapshot().project.qualityAssets.at(-1)!;
+}
 async function derive(
-  id = s.snapshot().project.masters[0].id,
+  id = s.snapshot().project.masters.at(-1)!.id,
   regions: LightRegion[] = [],
 ) {
   const p = await s.relightSource(id);
   return s.command({
     type: "createRelighting",
     sourceId: id,
+    sourceSha256: p.sha256,
     light,
     regions: regions.map((r) => ({ ...r, weights: new Uint8Array(r.weights) })),
     previewPixelSha256: hashBytes(relightPixels(p, light, regions).data),
@@ -189,18 +202,58 @@ const review = async () =>
     confirmStyleAndSilhouette: true,
   });
 describe("relighting project lifecycle", () => {
-  it("relights an unapproved master candidate before first manual Master V1 approval, retaining its sources", async()=>{
-    await s.command({type:"addCharacter",name:"Draft identity"});const c=s.snapshot().project.selectedCharacterId!;
-    const st=await s.stageIdentity(encodePixels(pixels()),"identity.png");await s.command({type:"importIdentityReference",characterId:c,token:st.token});const identity=s.snapshot().project.identityAssets[0];
-    await s.command({type:"prepareCharacterMaster",draft:{operation:"create-character-master",characterId:c,identityReferences:[{id:identity.id,sha256:identity.sha256}],identityNotes:"",styleReferences:[],outfit:"Simple jacket",composition:DEFAULT_COMPOSITION,prompt:"Synthetic fixture only"}});
-    const a=s.snapshot().project.masterAttempts[0],now=new Date().toISOString();await s.recordGeneration(a.id,{status:"running",startedAt:now,durationMs:0});
-    const output=await fs.readFile(path.join(dir,s.snapshot().project.masters[0].file));await s.importMasterGeneration(a.id,output,()=>({status:"completed",startedAt:now,endedAt:new Date().toISOString(),durationMs:1}));const candidate=s.snapshot().project.masterCandidates[0];
-    await derive(candidate.id);expect(s.snapshot().project.characters.find(x=>x.id===c)?.masterId).toBeUndefined();await review();const m=s.snapshot().project.masters.at(-1)!;expect(m.characterId).toBe(c);expect(m.version).toBe(1);expect(s.snapshot().project.masterCandidates[0]).toEqual(candidate);expect(s.snapshot().project.identityAssets[0]).toEqual(identity);
+  it("rejects an unapproved master candidate before cutout/review, retaining its sources", async () => {
+    await s.command({ type: "addCharacter", name: "Draft identity" });
+    const c = s.snapshot().project.selectedCharacterId!;
+    const st = await s.stageIdentity(encodePixels(pixels()), "identity.png");
+    await s.command({
+      type: "importIdentityReference",
+      characterId: c,
+      token: st.token,
+    });
+    const identity = s.snapshot().project.identityAssets[0];
+    await s.command({
+      type: "prepareCharacterMaster",
+      draft: {
+        operation: "create-character-master",
+        characterId: c,
+        identityReferences: [{ id: identity.id, sha256: identity.sha256 }],
+        identityNotes: "",
+        styleReferences: [],
+        outfit: "Simple jacket",
+        composition: DEFAULT_COMPOSITION,
+        prompt: "Synthetic fixture only",
+      },
+    });
+    const a = s.snapshot().project.masterAttempts[0],
+      now = new Date().toISOString();
+    await s.recordGeneration(a.id, {
+      status: "running",
+      startedAt: now,
+      durationMs: 0,
+    });
+    const output = await fs.readFile(
+      path.join(dir, s.snapshot().project.masters.at(-1)!.file),
+    );
+    await s.importMasterGeneration(a.id, output, () => ({
+      status: "completed",
+      startedAt: now,
+      endedAt: new Date().toISOString(),
+      durationMs: 1,
+    }));
+    const candidate = s.snapshot().project.masterCandidates[0];
+    const before = s.snapshot().project;
+    await expect(derive(candidate.id)).rejects.toThrow(/Freistellung/);
+    expect(s.snapshot().project).toEqual(before);
+    expect(
+      s.snapshot().project.characters.find((x) => x.id === c)?.masterId,
+    ).toBeUndefined();
+    expect(s.snapshot().project.identityAssets[0]).toEqual(identity);
   });
 
   it("keeps hard-lock protected pixels exact and rejects a raw/derived bypass", async () => {
     const p = s.snapshot().project,
-      m = p.masters[0],
+      m = p.masters.at(-1)!,
       weights = new Uint8Array(256);
     weights[8 * 16 + 8] = 255;
     await s.command({
@@ -237,31 +290,38 @@ describe("relighting project lifecycle", () => {
       token: staged.token,
     });
     const raw = s.snapshot().project.assets[0];
-    await expect(derive(raw.id)).rejects.toThrow("zuerst compositen");
+    await expect(derive(raw.id)).rejects.toThrow(/Freistellung/);
     await s.command({
       type: "createComposite",
       rawId: raw.id,
       registrationConfirmed: true,
     });
     const composite = s.snapshot().project.assets[1];
-    await expect(derive(composite.id)).rejects.toThrow("schützt diese Pixel");
+    await approveCutout(composite.id);
+    const approvedComposite = s.snapshot().project.assets.at(-1)!;
+    await expect(derive(approvedComposite.id)).rejects.toThrow(
+      "schützt diese Pixel",
+    );
     const r = { ...region(), weights };
-    const source = await s.relightSource(composite.id);
+    const source = await s.relightSource(approvedComposite.id);
     const out = relightPixels(source, DEFAULT_LIGHT, [r]);
     await s.command({
       type: "createRelighting",
-      sourceId: composite.id,
+      sourceId: approvedComposite.id,
+      sourceSha256: source.sha256,
       light: DEFAULT_LIGHT,
       regions: [{ ...r, weights: new Uint8Array(weights) }],
       previewPixelSha256: hashBytes(out.data),
     });
-    const q = s.snapshot().project.qualityAssets[0],
+    const q = s
+        .snapshot()
+        .project.qualityAssets.filter((q) => q.operation === "relighting")[0],
       actual = decodePixels(await fs.readFile(path.join(dir, q.file)));
     for (let i = 0; i < 256; i++)
       if (!weights[i])
-        expect([...actual.data.slice(i * 4, i * 4 + 4)]).toEqual(
-          [...source.data.slice(i * 4, i * 4 + 4)],
-        );
+        expect([...actual.data.slice(i * 4, i * 4 + 4)]).toEqual([
+          ...source.data.slice(i * 4, i * 4 + 4),
+        ]);
     await review();
     expect(s.snapshot().project.assets.at(-1)?.masterId).toBe(m.id);
   });
@@ -269,7 +329,7 @@ describe("relighting project lifecycle", () => {
   it("reads/updates previews without writes, rejects stale hashes and preserves existing open projects byte-exactly", async () => {
     const file = path.join(dir, "laceframe.json"),
       before = await fs.readFile(file);
-    const id = s.snapshot().project.masters[0].id;
+    const id = s.snapshot().project.masters.at(-1)!.id;
     for (let i = 0; i < 3; i++)
       relightPixels(await s.relightSource(id), { ...light, intensity: i });
     expect(await fs.readFile(file)).toEqual(before);
@@ -277,6 +337,7 @@ describe("relighting project lifecycle", () => {
       s.command({
         type: "createRelighting",
         sourceId: id,
+        sourceSha256: s.snapshot().project.masters.at(-1)!.sha256,
         light,
         regions: [],
         previewPixelSha256: "0".repeat(64),
@@ -287,15 +348,17 @@ describe("relighting project lifecycle", () => {
     expect(await fs.readFile(file)).toEqual(before);
   });
   it("persists exact PNG preview pixels, source hash, immutable mask revisions and independent candidate/approval/master versions", async () => {
-    const m = s.snapshot().project.masters[0],
+    const m = s.snapshot().project.masters.at(-1)!,
       original = await fs.readFile(path.join(dir, m.file)),
       before = await fs.readFile(path.join(dir, "laceframe.json"));
     const r = region();
     r.weights[0] = 0;
     await derive(m.id, [r]);
-    const q = s.snapshot().project.qualityAssets[0];
+    const q = s
+      .snapshot()
+      .project.qualityAssets.filter((q) => q.operation === "relighting")[0];
     expect(q.status).toBe("candidate");
-    expect(s.snapshot().project.masters).toHaveLength(1);
+    expect(s.snapshot().project.masters).toHaveLength(2);
     expect(q.sourceSha256).toBe(m.sha256);
     expect(q.relighting?.algorithm).toBe("2d-rgba8-lut-v1");
     expect(
@@ -316,27 +379,32 @@ describe("relighting project lifecycle", () => {
     );
     expect(await reopened.relightRecipe(q.id)).toEqual(recipe);
     await review();
-    expect(s.snapshot().project.masters).toHaveLength(2);
-    expect(s.snapshot().project.masters[1].qualitySourceId).toBe(q.id);
+    expect(s.snapshot().project.masters).toHaveLength(3);
+    expect(s.snapshot().project.masters[2].qualitySourceId).toBe(q.id);
     const exported = await s.exportPayload({
-      id: s.snapshot().project.masters[1].id,
+      id: s.snapshot().project.masters[2].id,
       raw: false,
       provenance: true,
     });
     expect(exported.bytes).toEqual(await fs.readFile(path.join(dir, q.file)));
     expect(
-      JSON.parse(exported.provenance!).derivatives[0].relighting.pixelSha256,
+      JSON.parse(exported.provenance!).derivatives.find(
+        (q: { operation: string }) => q.operation === "relighting",
+      ).relighting.pixelSha256,
     ).toBe(q.relighting!.pixelSha256);
     expect(await fs.readFile(path.join(dir, m.file))).toEqual(original);
     await derive(q.id);
-    expect(s.snapshot().project.qualityAssets).toHaveLength(2);
+    expect(s.snapshot().project.qualityAssets).toHaveLength(3);
     expect(
-      s.snapshot().project.qualityAssets[0].relighting?.regions[0].revision,
+      s
+        .snapshot()
+        .project.qualityAssets.filter((q) => q.operation === "relighting")[0]
+        .relighting?.regions[0].revision,
     ).toBe(1);
   });
   it("promotes an expression derivative only after human review and retains its original master and old bytes", async () => {
     const p = s.snapshot().project,
-      m = p.masters[0];
+      m = p.masters.at(-1)!;
     const staged = await s.stage(
       await fs.readFile(path.join(dir, m.file)),
       "expression.png",
@@ -349,17 +417,23 @@ describe("relighting project lifecycle", () => {
       token: staged.token,
     });
     const source = s.snapshot().project.assets[0];
-    await derive(source.id);
-    expect(s.snapshot().project.assets).toHaveLength(1);
+    await approveCutout(source.id);
+    await derive(s.snapshot().project.assets.at(-1)!.id);
+    expect(s.snapshot().project.assets).toHaveLength(2);
     await review();
-    const a = s.snapshot().project.assets[1];
+    const a = s.snapshot().project.assets[2];
     expect(a.masterId).toBe(m.id);
     expect(a.status).toBe("approved");
-    expect(a.qualitySourceId).toBe(s.snapshot().project.qualityAssets[0].id);
+    expect(a.qualitySourceId).toBe(
+      s
+        .snapshot()
+        .project.qualityAssets.filter((q) => q.operation === "relighting")[0]
+        .id,
+    );
     expect(s.snapshot().project.assets[0]).toEqual(source);
   });
   it("validates duplicate/foreign/reused masks and rejects paths, corrupt masks, PNG data and forged pixel provenance on reopen", async () => {
-    const m = s.snapshot().project.masters[0];
+    const m = s.snapshot().project.masters.at(-1)!;
     await expect(
       derive(m.id, [region(), { ...region(), id: "not-uuid" }]),
     ).rejects.toThrow();
@@ -379,10 +453,11 @@ describe("relighting project lifecycle", () => {
     ).rejects.toThrow("Bearbeitungsmaske");
     await derive(m.id, [r]);
     const p = s.snapshot().project,
-      q = p.qualityAssets[0];
+      q = p.qualityAssets.filter((q) => q.operation === "relighting")[0];
     const forged = structuredClone(p);
-    forged.qualityAssets[0].relighting!.regions[0].mask.file =
-      "../../etc/passwd";
+    forged.qualityAssets.find(
+      (q) => q.operation === "relighting",
+    )!.relighting!.regions[0].mask.file = "../../etc/passwd";
     expect(projectSchema.safeParse(forged).success).toBe(false);
     await fs.chmod(path.join(dir, q.relighting!.regions[0].mask.file), 0o644);
     await fs.writeFile(
@@ -392,7 +467,7 @@ describe("relighting project lifecycle", () => {
     await expect(new ProjectService().open(dir)).rejects.toThrow();
   });
   it("reuses expression masks explicitly without changing their edit-permission meaning or hashes", async () => {
-    const m = s.snapshot().project.masters[0],
+    const m = s.snapshot().project.masters.at(-1)!,
       weights = new Uint8Array(256).fill(255);
     await s.command({
       type: "saveMask",
@@ -413,7 +488,10 @@ describe("relighting project lifecycle", () => {
     await derive(m.id, [r]);
     expect(s.snapshot().project.masks[0]).toEqual(mask);
     const recipe = await s.relightRecipe(
-      s.snapshot().project.qualityAssets[0].id,
+      s
+        .snapshot()
+        .project.qualityAssets.filter((q) => q.operation === "relighting")[0]
+        .id,
     );
     expect(recipe.recipe.regions[0].mask.type).toBe("lighting-weight");
     expect(

@@ -539,6 +539,10 @@ export class ProjectService {
         if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
         const source = this.qualitySource(cmd.sourceId);
         const pixels = await this.relightSource(source.id);
+        if (pixels.sha256 !== cmd.sourceSha256)
+          throw new Error(
+            "Die Relighting-Quelle wurde seit dem Öffnen verändert. Quelle erneut prüfen.",
+          );
         const ids = new Set(cmd.regions.map((r) => r.id));
         if (ids.size !== cmd.regions.length)
           throw new Error("Doppelte Lichtregion.");
@@ -1703,19 +1707,179 @@ export class ProjectService {
       sha256: source.sha256,
     };
   }
-  async relightSource(id: string) {
-    const source = this.qualitySource(id);
+  /** Trusted, bounded ancestry and byte verification. Old records remain readable/exportable. */
+  private async checkedRelightSource(id: string) {
+    const p = projectSchema.parse(this.snapshot().project);
+    const all = [
+      ...p.masters,
+      ...p.assets,
+      ...p.masterCandidates,
+      ...p.qualityAssets,
+    ];
+    const source = all.find((a) => a.id === id);
+    if (!source) throw new Error("Kein Charakterasset ausgewählt.");
     if (source.width * source.height > 4_194_304)
       throw new Error(
         "Live Relighting: maximal 4 Megapixel; keine automatische Verkleinerung.",
       );
-    const pixels = await this.pixels(await this.verifiedBytes(source.id));
+    const chain: typeof all = [],
+      seen = new Set<string>();
+    let node = source,
+      cutoutId: string | undefined;
+    while (true) {
+      if (seen.has(node.id) || chain.length >= 64)
+        throw new Error("Ungültige oder zu lange Freistellungs-Herkunft.");
+      seen.add(node.id);
+      chain.push(node);
+      if (node.characterId !== source.characterId)
+        throw new Error(
+          "Freistellungs-Herkunft gehört zu einer anderen Figur.",
+        );
+      let parentId: string | undefined;
+      if ("sourceId" in node) {
+        if (
+          (!cutoutId || node.operation === "cutout") &&
+          (node.status !== "approved" ||
+            !node.reviewedAt ||
+            !node.notes?.trim())
+        )
+          throw new Error(
+            "Live Relighting erfordert eine ausdrücklich freigegebene Freistellung und freigegebene Folgeversionen.",
+          );
+        if (node.operation === "cutout") cutoutId ??= node.id;
+        parentId = node.sourceId;
+      } else if ("qualitySourceId" in node && node.qualitySourceId) {
+        const qualityId = node.qualitySourceId;
+        const q = p.qualityAssets.find((q) => q.id === qualityId);
+        if (
+          !q ||
+          q.status !== "approved" ||
+          q.sha256 !== node.sha256 ||
+          q.width !== node.width ||
+          q.height !== node.height ||
+          ("locked" in node
+            ? q.approvedMasterId !== node.id
+            : q.approvedExpressionId !== node.id)
+        )
+          throw new Error("Ungültige Freigabe-Verknüpfung der Freistellung.");
+        parentId = q.id;
+      }
+      if (!parentId) break;
+      const parent = all.find((a) => a.id === parentId);
+      if (!parent) throw new Error("Freistellungs-Herkunft fehlt.");
+      if ("sourceId" in node && parent.sha256 !== node.sourceSha256)
+        throw new Error("Quellhash der Freistellung stimmt nicht überein.");
+      node = parent;
+    }
+    if (!cutoutId)
+      throw new Error(
+        "Live Relighting ist erst nach der Freistellung und Freigabe dieses Portraits möglich.",
+      );
+    let pixels: Pixels | undefined;
+    for (const a of chain.reverse()) {
+      const actual = await this.pixels(await this.verifiedBytes(a.id));
+      if (actual.width !== a.width || actual.height !== a.height)
+        throw new Error("Bildabmessungen der Herkunft stimmen nicht überein.");
+      if ("sourceId" in a) {
+        if (!pixels) throw new Error("Freistellungsquelle fehlt.");
+        let expected: Pixels;
+        if (a.operation === "cutout") {
+          if (!a.mask) throw new Error("Freistellungsmaske fehlt.");
+          const bytes = await readLimited(
+            await safePath(this.directory, a.mask.file),
+            MAX_IMAGE_BYTES,
+          );
+          if (hashBytes(bytes) !== a.mask.sha256)
+            throw new Error("Freistellungsmaske verändert.");
+          const mask = decodePixels(bytes);
+          if (mask.width !== a.width || mask.height !== a.height)
+            throw new Error("Falsche Freistellungsmaske.");
+          const weights = maskWeights(mask);
+          if (a.smartCutout) {
+            const draft = await this.smartCutoutRecipe(a.id);
+            const verified = selectBackground(pixels, draft);
+            if (!Buffer.from(verified.weights).equals(Buffer.from(weights)))
+              throw new Error("Freistellungsrezept passt nicht zur Maske.");
+            if (hashBytes(actual.data) !== a.smartCutout.pixelSha256)
+              throw new Error("Freistellungs-Pixelprovenienz verändert.");
+          }
+          expected = cutoutPixels(pixels, weights);
+        } else if (a.operation === "relighting") {
+          if (!a.relighting) throw new Error("Lichtrezept fehlt.");
+          const recipe = await this.relightRecipe(a.id);
+          expected = relightPixels(
+            pixels,
+            recipe.recipe.light,
+            recipe.recipe.regions.map((r, i) => ({
+              ...r,
+              weights: recipe.weights[i],
+            })),
+          );
+          if (hashBytes(actual.data) !== a.relighting.pixelSha256)
+            throw new Error("Licht-Pixelprovenienz verändert.");
+        } else {
+          if (!a.profile) throw new Error("Auflösungsprofil fehlt.");
+          expected = resizePixels(pixels, a.profile);
+        }
+        if (
+          expected.width !== actual.width ||
+          expected.height !== actual.height ||
+          !Buffer.from(expected.data).equals(Buffer.from(actual.data))
+        )
+          throw new Error(
+            "Abgeleitete Pixel stimmen nicht mit der Freistellungs-Herkunft überein.",
+          );
+      } else if (
+        pixels &&
+        (!Buffer.from(pixels.data).equals(Buffer.from(actual.data)) ||
+          pixels.width !== actual.width ||
+          pixels.height !== actual.height)
+      ) {
+        throw new Error(
+          "Freigegebene Assetkopie stimmt nicht mit der Herkunft überein.",
+        );
+      }
+      pixels = actual;
+    }
+    if (
+      !pixels ||
+      analyzePixels(pixels, source.format).status !== "transparent"
+    )
+      throw new Error(
+        "Live Relighting benötigt echte, nicht leere Alpha-Transparenz. Hintergrund freistellen und freigeben.",
+      );
     validateRelightSize(pixels);
     return {
       width: pixels.width,
       height: pixels.height,
       data: new Uint8Array(pixels.data),
+      sha256: source.sha256,
+      cutoutId,
     };
+  }
+  async relightEligibility(id: string) {
+    try {
+      const source = await this.checkedRelightSource(id);
+      return {
+        allowed: true,
+        reason:
+          "Freistellung freigegeben · Herkunft, Bildintegrität und Alpha geprüft.",
+        sourceSha256: source.sha256,
+        cutoutId: source.cutoutId,
+      };
+    } catch (error) {
+      return {
+        allowed: false,
+        reason:
+          error instanceof Error &&
+          !/ENOENT|EACCES|ENOTDIR|ZodError/.test(error.message)
+            ? error.message
+            : "Freistellungs-Herkunft oder Bildintegrität konnte nicht bestätigt werden.",
+      };
+    }
+  }
+  async relightSource(id: string) {
+    return this.checkedRelightSource(id);
   }
   async relightRecipe(id: string) {
     const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);

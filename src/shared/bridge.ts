@@ -1,5 +1,9 @@
 import type { CutoutDraft, CutoutImage } from "./smart-cutout";
-import type { RelightPixels, RelightRecord } from "./relighting";
+import type {
+  RelightPixels,
+  RelightRecord,
+  RelightEligibility,
+} from "./relighting";
 import type { QualityReport, ExportAssetRequest } from "./asset-quality";
 import type { CharacterCreationDraft } from "./character-creation";
 import type {
@@ -20,7 +24,10 @@ export interface LaceframeBridge {
   analysisSource(
     id: string,
   ): Promise<Result<RelightPixels & { sha256: string }>>;
-  relightSource(id: string): Promise<Result<RelightPixels>>;
+  relightEligibility(id: string): Promise<Result<RelightEligibility>>;
+  relightSource(
+    id: string,
+  ): Promise<Result<RelightPixels & { sha256: string }>>;
   relightRecipe(
     id: string,
   ): Promise<Result<{ recipe: RelightRecord; weights: Uint8Array[] }>>;

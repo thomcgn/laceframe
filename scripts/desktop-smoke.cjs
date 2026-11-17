@@ -106,6 +106,7 @@ const { createHash } = require("node:crypto");
         "preview",
         "providers",
         "qualityReport",
+        "relightEligibility",
         "relightRecipe",
         "relightSource",
         "revealMaster",

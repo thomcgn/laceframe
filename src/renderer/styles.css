@@ -1190,3 +1190,17 @@ button.text-link { border:0; background:transparent; padding:2px 0; color:var(--
 
 .precision-editor label:has(input[type=checkbox]) {flex-direction:row;justify-content:flex-start;}
 .editor-zoom button {font-size:11px;}
+
+/* Cutout: tool parameters left, display-only controls directly above the image. */
+.precision-editor .editor-image-area {grid-template-rows:auto minmax(0,1fr);}
+.precision-editor .editor-display {grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;background:var(--slate);padding:5px 8px;border-radius:6px;}
+.precision-editor .editor-display label {flex:0 1 auto;}
+.precision-editor .editor-display select {width:auto;padding:4px;}
+.precision-editor .editor-display input[type=checkbox] {margin:0;}
+.precision-editor .editor-sidebar h3 {color:var(--sage);margin:0 0 5px;}
+.precision-editor .editor-sidebar h4 {font-size:12px;margin:5px 0;}
+.precision-editor .editor-sidebar section,.precision-editor .editor-advanced {margin-block:8px;}
+.precision-editor .editor-advanced {border-top:1px solid #526273;padding-top:7px;}
+.precision-editor .editor-sidebar .color-selection-settings {display:grid;gap:8px;}
+.precision-editor .editor-sidebar .applied-polygons {display:grid;gap:5px;}
+.precision-editor .editor-sidebar p {margin:5px 0;}
