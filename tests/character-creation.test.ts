@@ -475,3 +475,14 @@ describe("native createCharacterMaster operation, approval and expression handof
     expect(supportsMultipleLocalImages(schema)).toBe(true);
   });
 });
+
+it("composes canvas occupancy for the selected framing without forcing a bust crop", async () => {
+  await identity();
+  const settings = draft();
+  settings.composition.framing = "Full body, boots and both hands visible";
+  const prompt = composeCharacterPrompt(service.snapshot().project, settings);
+  expect(prompt).toContain("Full body, boots and both hands visible");
+  expect(prompt).toContain("avoid a tiny figure in a corner");
+  expect(prompt).toContain("do not force a bust portrait");
+  expect(prompt).toContain("not proof of actual provider output dimensions");
+});

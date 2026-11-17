@@ -176,6 +176,7 @@ export function composeCharacterPrompt(
       d.mode === "rebuild"
         ? `REBUILD A COMPLETE NEW NEUTRAL CHARACTER MASTER for the SAME character. This is a new generation, NOT an edit/cutout of previous master ${d.baseMasterId}. The previous master remains historical and is not an image input.`
         : "CREATE A NEW NEUTRAL CHARACTER MASTER — not an expression edit. No approved master exists yet.",
+      `COMPOSITION: Fill the available canvas appropriately for the selected framing (${d.composition.framing}) and profile (${d.composition.profile}). Center the requested subject, keep framing-relevant body parts inside the image, and avoid a tiny figure in a corner or excessive empty transparent margins. Respect the chosen framing; do not force a bust portrait or crop a requested full-body figure. Requested ${d.composition.targetWidth} × ${d.composition.targetHeight} is a target, not proof of actual provider output dimensions.`,
       `IDENTITY REFERENCE — images 1–${d.identityReferences.length}: ${d.identityReferences.map((r) => `${r.id} SHA-256 ${r.sha256}`).join("; ")}. These are the SAME person/character. Preserve individual facial structure, eyes, nose, mouth, hair texture/style and distinctive features. Do not infer identity from style images.`,
       `IDENTITY NOTES: ${d.identityNotes || "Follow only the identity references."}`,
       style

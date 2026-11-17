@@ -1,3 +1,5 @@
+import { IdentityComparison } from "./IdentityComparison";
+import { usePreview } from "./useImagePreview";
 import { useEffect, useRef, useState } from "react";
 import {
   comparisonCanvas,
@@ -6,40 +8,15 @@ import {
   sliderKey,
 } from "../../shared/comparison";
 type Image = { id: string; width: number; height: number };
-function usePreview(id?: string) {
-  const [value, setValue] = useState({ src: "", error: "" });
-  useEffect(() => {
-    let live = true;
-    setValue({ src: "", error: "" });
-    if (id)
-      void window.laceframe
-        .preview(id)
-        .then((r) => {
-          if (live)
-            setValue(
-              r.ok ? { src: r.value, error: "" } : { src: "", error: r.error },
-            );
-        })
-        .catch(() => {
-          if (live)
-            setValue({
-              src: "",
-              error: "Vorschau konnte nicht geladen werden.",
-            });
-        });
-    return () => {
-      live = false;
-    };
-  }, [id]);
-  return value;
-}
-export function MasterCandidateCompare({
+function PixelComparison({
   master,
   candidate,
   mask,
   beforeLabel = "Master",
   previewPrefix = "Create",
+  enhanced = false,
 }: {
+  enhanced?: boolean;
   beforeLabel?: string;
   previewPrefix?: string;
   master?: Image;
@@ -84,6 +61,55 @@ export function MasterCandidateCompare({
       normalized ? undefined : candidate,
     ),
     view = comparisonTransform(canvas, size, zoom, pan);
+  const pixelZoomRef = useRef<
+    (value: number, point?: { x: number; y: number }) => void
+  >(() => {});
+  const [hand, setHand] = useState(true),
+    held = useRef(false);
+  function pixelZoom(
+    value: number,
+    point = { x: size.width / 2, y: size.height / 2 },
+  ) {
+    const next = Math.max(0.1, Math.min(1600, value)),
+      scale = next / 100;
+    setPan({
+      x:
+        point.x -
+        ((point.x - view.x) / view.scale) * scale -
+        (size.width - canvas.width * scale) / 2,
+      y:
+        point.y -
+        ((point.y - view.y) / view.scale) * scale -
+        (size.height - canvas.height * scale) / 2,
+    });
+    setZoom(next);
+  }
+  pixelZoomRef.current = pixelZoom;
+  const scaleRef = useRef(view.scale);
+  scaleRef.current = view.scale;
+  useEffect(() => {
+    if (!enhanced) return;
+    const element = viewport.current!;
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = element.getBoundingClientRect();
+      pixelZoomRef.current(
+        scaleRef.current * 100 * Math.exp(-e.deltaY * 0.001),
+        { x: e.clientX - r.left, y: e.clientY - r.top },
+      );
+    };
+    const release = () => {
+      held.current = false;
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    window.addEventListener("keyup", release);
+    window.addEventListener("blur", release);
+    return () => {
+      element.removeEventListener("wheel", wheel);
+      window.removeEventListener("keyup", release);
+      window.removeEventListener("blur", release);
+    };
+  }, [enhanced]);
   function moveSlider(x: number) {
     const rect = stage.current?.getBoundingClientRect();
     if (rect) setPosition(sliderPosition(x, rect.left, rect.width));
@@ -147,9 +173,16 @@ export function MasterCandidateCompare({
           <select
             aria-label="Create Zoom"
             value={zoom}
-            onChange={(e) =>
-              setZoom(e.target.value === "fit" ? "fit" : Number(e.target.value))
-            }
+            onChange={(e) => {
+              if (!enhanced)
+                setZoom(
+                  e.target.value === "fit" ? "fit" : Number(e.target.value),
+                );
+              else if (e.target.value === "fit") {
+                setZoom("fit");
+                setPan({ x: 0, y: 0 });
+              } else pixelZoom(Number(e.target.value));
+            }}
           >
             <option value="fit">Einpassen</option>
             {[25, 50, 100, 200, 400].map((n) => (
@@ -159,6 +192,35 @@ export function MasterCandidateCompare({
             ))}
           </select>
         </label>
+        {enhanced && (
+          <>
+            <button
+              aria-label="Pixelvergleich verkleinern"
+              onClick={() => pixelZoom(view.scale * 80)}
+            >
+              −
+            </button>
+            <input
+              aria-label="Pixelvergleich Zoom"
+              type="range"
+              min="0.1"
+              max="1600"
+              step="0.1"
+              value={view.scale * 100}
+              onChange={(e) => pixelZoom(Number(e.target.value))}
+            />
+            <output>{(view.scale * 100).toFixed(1)}%</output>
+            <button
+              aria-label="Pixelvergleich vergrößern"
+              onClick={() => pixelZoom(view.scale * 125)}
+            >
+              +
+            </button>
+            <button aria-pressed={hand} onClick={() => setHand((v) => !v)}>
+              Hand-Werkzeug
+            </button>
+          </>
+        )}
         {mode === "overlay" && (
           <label>
             Deckkraft {opacity}%
@@ -189,7 +251,11 @@ export function MasterCandidateCompare({
         tabIndex={0}
         aria-label="Vergleichsfläche · ziehen zum Verschieben, Pfeiltasten zum Schwenken"
         onPointerDown={(e) => {
-          if (e.button !== 0) return;
+          if (
+            e.button !== 0 ||
+            (enhanced && !hand && !held.current && !e.altKey)
+          )
+            return;
           e.currentTarget.focus();
           e.currentTarget.setPointerCapture(e.pointerId);
           dragging.current = {
@@ -218,6 +284,15 @@ export function MasterCandidateCompare({
         }}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
+          if (enhanced && (e.code === "Space" || e.key === "Alt")) {
+            e.preventDefault();
+            held.current = true;
+            return;
+          }
+          if (enhanced && ["+", "=", "-"].includes(e.key)) {
+            e.preventDefault();
+            pixelZoom(view.scale * (e.key === "-" ? 80 : 125));
+          }
           const d = 24;
           if (
             ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
@@ -391,5 +466,40 @@ export function MasterCandidateCompare({
         freigegebene Identität.
       </p>
     </section>
+  );
+}
+
+export function MasterCandidateCompare(
+  props: Parameters<typeof PixelComparison>[0] & {
+    identityComparison?: boolean;
+    requested?: { width: number; height: number };
+  },
+) {
+  const [kind, setKind] = useState("identity");
+  if (!props.identityComparison) return <PixelComparison {...props} />;
+  return (
+    <div className="identity-comparison-switch">
+      <label>
+        Vergleich{" "}
+        <select
+          aria-label="Identitätsvergleich oder Pixelvergleich"
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+        >
+          <option value="identity">Identitätsvergleich</option>
+          <option value="pixel">Pixelvergleich · erweitert</option>
+        </select>
+      </label>
+      {kind === "identity" ? (
+        <IdentityComparison
+          master={props.master}
+          candidate={props.candidate}
+          prefix={props.previewPrefix ?? "Create"}
+          requested={props.requested}
+        />
+      ) : (
+        <PixelComparison {...props} enhanced />
+      )}
+    </div>
   );
 }

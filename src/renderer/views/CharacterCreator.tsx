@@ -260,15 +260,15 @@ export function CharacterCreator({
   const running = codex.state === "running";
   const valid = Boolean(
     targetValid &&
-      draft &&
-      !transparencyConflicts(
-        draft.prompt.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, ""),
-      ) &&
-      characterCreationDraftSchema.safeParse(draft).success &&
-      composer.pendingBase === undefined &&
-      (promptMode === "expert" || composer.base === base) &&
-      codex.available &&
-      (identities.length + styleRefs.length <= 1 || codex.multipleReferences),
+    draft &&
+    !transparencyConflicts(
+      draft.prompt.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, ""),
+    ) &&
+    characterCreationDraftSchema.safeParse(draft).success &&
+    composer.pendingBase === undefined &&
+    (promptMode === "expert" || composer.base === base) &&
+    codex.available &&
+    (identities.length + styleRefs.length <= 1 || codex.multipleReferences),
   );
   const wasRunning = useRef(false);
   useEffect(() => {
@@ -885,15 +885,17 @@ export function CharacterCreator({
                   master={activeReference}
                   candidate={candidate}
                   beforeLabel="Identität"
+                  identityComparison
+                  requested={
+                    active
+                      ? {
+                          width: active.composition.targetWidth,
+                          height: active.composition.targetHeight,
+                        }
+                      : undefined
+                  }
                   previewPrefix="Character Creator"
                 />
-                <p>
-                  Identitätsreferenz links / Masterkandidat rechts ·
-                  tatsächliche Ausgabe {candidate.width} × {candidate.height} ·
-                  Ziel {active?.composition.targetWidth} ×{" "}
-                  {active?.composition.targetHeight}. Vergleich ist keine
-                  Identitätsfreigabe.
-                </p>
                 <AssetQuality
                   key={candidate.id}
                   source={candidate}
