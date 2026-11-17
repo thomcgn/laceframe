@@ -73,6 +73,11 @@ const { field, nav } = require("./smoke-ui.cjs");
       JSON.parse(
         await fs.readFile(path.join(project, "laceframe.json"), "utf8"),
       );
+    // The click initiates async IPC/persistence; snapshot only the completed approval.
+    await expect.poll(async () => (await manifest()).masters.length).toBe(1);
+    await expect(
+      page.getByAltText("Freigegebener Master V1", { exact: true }),
+    ).toBeVisible();
     const original = await manifest();
     await nav(page, "Expressions");
     expect(
