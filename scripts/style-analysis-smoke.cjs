@@ -364,7 +364,7 @@ const { nav } = require("./smoke-ui.cjs");
     await chooser(file1);
     await creator
       .getByRole("button", {
-        name: "Identitätsbild importieren …",
+        name: "Identitätsbilder hinzufügen …",
         exact: true,
       })
       .click();

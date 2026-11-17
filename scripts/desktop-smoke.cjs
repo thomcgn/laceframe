@@ -104,6 +104,7 @@ const { createHash } = require("node:crypto");
         "exportAsset",
         "exportPack",
         "generationStatus",
+        "importIdentityImages",
         "openChatGPT",
         "openProject",
         "preview",

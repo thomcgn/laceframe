@@ -320,35 +320,39 @@ export function CharacterCreator({
   function command(cmd: Command, notice?: string) {
     void perform(() => window.laceframe.command(cmd), onSnapshot, notice);
   }
-  function importIdentity(file?: File) {
+  function importIdentity(files?: File[], replaceId?: string) {
     void perform(
       async () => {
         if (!character || !targetValid)
           throw new Error("Zuerst eine Entwurfsfigur anlegen.");
-        if (file && file.size > 16 * 1024 * 1024)
-          throw new Error("Identitätsbilder bis 16 MiB.");
-        const staged = await unwrap(
-          file
-            ? window.laceframe.stageImage(
-                new Uint8Array(await file.arrayBuffer()),
-                file.name,
-                "identity",
-              )
-            : window.laceframe.chooseImage("identity"),
-        );
-        if (!staged) return { ok: true as const, value: snapshot };
-        try {
-          return await window.laceframe.command({
-            type: "importIdentityReference",
+        const slots = replaceId ? 1 : 3 - identities.length;
+        if (files && (!files.length || files.length > slots))
+          throw new Error(
+            `Noch ${slots} von 3 Plätzen verfügbar. Die gesamte Auswahl wurde abgelehnt.`,
+          );
+        const errors = files
+          ?.filter((f) => !f.size || f.size > 16 * 1024 * 1024)
+          .map((f) => `${f.name}: Identitätsbilder bis 16 MiB.`);
+        if (errors?.length) throw new Error(errors.join("\n"));
+        const value = await unwrap(
+          window.laceframe.importIdentityImages({
             characterId: character.id,
-            token: staged.token,
-          });
-        } finally {
-          await window.laceframe.discardImage(staged.token);
-        }
+            ...(replaceId ? { replaceId } : {}),
+            ...(files
+              ? {
+                  files: await Promise.all(
+                    files.map(async (file) => ({
+                      name: file.name,
+                      bytes: new Uint8Array(await file.arrayBuffer()),
+                    })),
+                  ),
+                }
+              : {}),
+          }),
+        );
+        return { ok: true as const, value };
       },
-      onSnapshot,
-      "Identitätsreferenz lokal gespeichert. Noch nicht an Codex gesendet.",
+      (value) => { if (value) onSnapshot(value); },
     );
   }
   function generate() {
@@ -591,9 +595,9 @@ export function CharacterCreator({
                   !busy &&
                   !running &&
                   targetValid &&
-                  e.dataTransfer.files.length === 1
+                  e.dataTransfer.files.length > 0
                 )
-                  importIdentity(e.dataTransfer.files[0]);
+                  importIdentity(Array.from(e.dataTransfer.files));
               }}
             >
               <h3 data-focus-target="creator-identity">
@@ -610,8 +614,9 @@ export function CharacterCreator({
                 }
                 onClick={() => importIdentity()}
               >
-                Identitätsbild importieren …
+                Identitätsbilder hinzufügen …
               </button>
+              <p role="status">{identities.length} von 3 Bildern</p>
               <div className="creator-references">
                 {identities.map((a, i) => (
                   <div key={a.id}>
@@ -632,6 +637,12 @@ export function CharacterCreator({
                       }}
                     >
                       Vergleichen
+                    </button>
+                    <button
+                      disabled={busy || running}
+                      onClick={() => importIdentity(undefined, a.id)}
+                    >
+                      Referenz austauschen …
                     </button>
                     <button
                       onClick={() => {
