@@ -1,3 +1,4 @@
+import type { IdentityImport } from "./identity-import";
 import type { PackKind, PackPreview, PackSelection } from "./packs";
 import type { CutoutDraft, CutoutImage } from "./smart-cutout";
 import type {
@@ -56,6 +57,7 @@ export interface LaceframeBridge {
   createProject(name: string): Promise<Result<Snapshot | null>>;
   openProject(): Promise<Result<Snapshot | null>>;
   command(command: Command): Promise<Result<Snapshot>>;
+  importIdentityImages(input: IdentityImport): Promise<Result<Snapshot | null>>;
   chooseImage(): Promise<Result<StagedImage | null>>;
   chooseImage(purpose: "identity"): Promise<Result<StagedIdentityImage | null>>;
   stageImage(bytes: Uint8Array, name: string): Promise<Result<StagedImage>>;

@@ -1,3 +1,7 @@
+import {
+  identityImportSchema,
+  type IdentityImport,
+} from "../shared/identity-import";
 import { protectExpressionPrompt } from "../shared/generation";
 import {
   parsePackJSON,
@@ -502,6 +506,110 @@ export class ProjectService {
       height: image.height,
       format: image.format,
     };
+  }
+  identitySlots(characterId: string, replaceId?: string) {
+    const p = this.snapshot().project;
+    if (!p.characters.some((c) => c.id === characterId))
+      throw new Error("Figur fehlt.");
+    const active = p.identityAssets.filter(
+      (a) => a.characterId === characterId && !a.removedAt,
+    );
+    if (replaceId && !active.some((a) => a.id === replaceId))
+      throw new Error("Aktive Identitätsreferenz fehlt.");
+    return replaceId ? 1 : 3 - active.length;
+  }
+  async importIdentityImages(input: IdentityImport): Promise<Snapshot> {
+    const request = identityImportSchema.parse(input),
+      slots = this.identitySlots(request.characterId, request.replaceId),
+      files = request.files;
+    if (!files?.length) throw new Error("Keine Identitätsbilder ausgewählt.");
+    if (files.length > slots)
+      throw new Error(
+        `Noch ${slots} von 3 Plätzen verfügbar. Die gesamte Auswahl wurde abgelehnt.`,
+      );
+    if (this.staged)
+      throw new Error("Zuerst den offenen Bildimport abschließen.");
+    const p = this.snapshot().project,
+      hashes = new Set(
+        p.identityAssets
+          .filter((a) => a.characterId === request.characterId && !a.removedAt)
+          .map((a) => a.sha256),
+      ),
+      prepared = [],
+      errors: string[] = [];
+    // Validate the complete group before any project write; no staging tokens are created.
+    for (const file of files) {
+      try {
+        const bytes = Buffer.from(file.bytes),
+          info = inspectIdentityImage(bytes),
+          sha256 = hashBytes(bytes);
+        await this.decode(bytes, info.width, info.height, info.format);
+        if (hashes.has(sha256))
+          throw new Error(
+            "Identitätsbild bereits vorhanden oder doppelt ausgewählt.",
+          );
+        hashes.add(sha256);
+        prepared.push({ bytes, ...info, sha256, name: file.name });
+      } catch (error) {
+        errors.push(
+          `${file.name}: ${error instanceof Error ? error.message : "Bild ungültig."}`,
+        );
+      }
+    }
+    if (errors.length) throw new Error(errors.join("\n"));
+    const created: string[] = [];
+    try {
+      await fs.mkdir(await safePath(this.directory, "assets/identities"), {
+        recursive: true,
+      });
+      for (const image of prepared) {
+        const file = `assets/identities/${image.sha256}.${image.format}`,
+          destination = await safePath(this.directory, file);
+        try {
+          const handle = await fs.open(destination, "wx", 0o444);
+          created.push(destination);
+          try {
+            await handle.writeFile(image.bytes);
+          } finally {
+            await handle.close();
+          }
+        } catch (error) {
+          if (
+            (error as NodeJS.ErrnoException).code !== "EEXIST" ||
+            !(await readLimited(destination, 16 * 1024 * 1024)).equals(
+              image.bytes,
+            )
+          )
+            throw new Error(
+              `${image.name}: Identitätsdatei kollidiert oder wurde verändert.`,
+              { cause: error },
+            );
+        }
+        p.identityAssets.push({
+          id: randomUUID(),
+          characterId: request.characterId,
+          file,
+          sha256: image.sha256,
+          width: image.width,
+          height: image.height,
+          format: image.format,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      // Retain old source bytes and historical provenance during an explicit replacement.
+      if (request.replaceId)
+        p.identityAssets.find((a) => a.id === request.replaceId)!.removedAt =
+          new Date().toISOString();
+      p.updatedAt = new Date().toISOString();
+      await this.save(p);
+    } catch (error) {
+      for (const file of created) {
+        if (process.platform === "win32") await fs.chmod(file, 0o600);
+        await fs.unlink(file);
+      }
+      throw error;
+    }
+    return this.snapshot();
   }
   private async save(project: Project) {
     const validated = projectSchema.parse({

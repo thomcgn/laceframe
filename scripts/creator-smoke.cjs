@@ -58,10 +58,10 @@ const { createHash } = require("node:crypto");
   };
   const chooser = (file) =>
     app.evaluate(({ dialog }, file) => {
-      dialog.showOpenDialog = async () => ({
-        canceled: false,
-        filePaths: [file],
-      });
+      dialog.showOpenDialog = async (...args) => {
+        dialog.showOpenDialog.lastOptions = args[1];
+        return { canceled: file === null, filePaths: file === null ? [] : Array.isArray(file) ? file : [file] };
+      };
     }, file);
   const drop = async (selector, bytes, name, type) =>
     page.evaluate(
@@ -190,10 +190,63 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Outfit ist unvollständig.", exact: true })
       .click();
     await expect(field(page, "Creator Outfit", { exact: true })).toBeFocused();
+    const webp = await page.evaluate(() => {
+      const c = document.createElement("canvas");
+      c.width = 72;
+      c.height = 96;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#b28060";
+      ctx.fillRect(0, 0, 72, 96);
+      return [
+        ...Uint8Array.from(
+          window.atob(c.toDataURL("image/webp").split(",")[1]),
+          (c) => c.charCodeAt(0),
+        ),
+      ];
+    });
+    const pngPath = path.join(root, "identity.png"), webpPath = path.join(root, "identity.webp"), brokenPath = path.join(root, "broken.png");
+    await fs.writeFile(pngPath, Buffer.from(other));
+    await fs.writeFile(webpPath, Buffer.from(webp));
+    await fs.writeFile(brokenPath, "broken");
+    const addIdentities = () => page.getByRole("button", { name: "Identitätsbilder hinzufügen …", exact: true });
+    const pristine = await fs.readFile(path.join(project, "laceframe.json"));
+    for (const selection of [null, [selfiePath, pngPath, webpPath, selfiePath], [selfiePath, selfiePath], [selfiePath, brokenPath]]) {
+      await chooser(selection);
+      await addIdentities().click();
+      if (selection) await expect(page.getByRole("alert").first()).toContainText(selection.length === 4 ? "3 von 3" : selection[1] === brokenPath ? "broken.png" : "doppelt");
+      await expect(addIdentities()).toBeEnabled();
+      expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(pristine);
+    }
+    await chooser([selfiePath, pngPath, webpPath]);
+    await addIdentities().click();
+    await expect(image(page, "Identität 3", { exact: true })).toBeVisible();
+    await expect(page.locator(".creator-identity")).toContainText("3 von 3 Bildern");
+    expect((await manifest()).identityAssets.map(a => a.format)).toEqual(["jpg", "png", "webp"]);
+    const options = await app.evaluate(({ dialog }) => dialog.showOpenDialog.lastOptions);
+    expect(options.properties).toContain("multiSelections");
+    expect(options.defaultPath).toBe(root);
+    await expect(addIdentities()).toBeDisabled();
+    const clearIdentities = async () => {
+      for (let remaining=2; remaining>=0; remaining--) {
+        page.once("dialog", d => d.accept());
+        await page.locator(".creator-identity").getByRole("button", {name:"Referenz entfernen", exact:true}).first().click();
+        await expect.poll(async()=> (await manifest()).identityAssets.length).toBe(remaining);
+        await expect(page.locator(".creator-identity")).toContainText(`${remaining} von 3 Bildern`);
+      }
+    };
+    await clearIdentities();
+    // Multi-file drop follows the identical atomic import path, without staging tokens.
+    await page.evaluate(files => {
+      const dataTransfer = new DataTransfer();
+      for (const f of files) dataTransfer.items.add(new File([new Uint8Array(f.bytes)], f.name, {type:f.type}));
+      document.querySelector(".creator-identity").dispatchEvent(new DragEvent("drop", {bubbles:true,dataTransfer}));
+    }, [{bytes:photo,name:"one.jpg",type:"image/jpeg"}, {bytes:other,name:"two.png",type:"image/png"}, {bytes:webp,name:"three.webp",type:"image/webp"}]);
+    await expect(image(page, "Identität 3", { exact: true })).toBeVisible();
+    await clearIdentities();
     await chooser(selfiePath);
     await page
       .getByRole("button", {
-        name: "Identitätsbild importieren …",
+        name: "Identitätsbilder hinzufügen …",
         exact: true,
       })
       .click();
@@ -210,27 +263,21 @@ const { createHash } = require("node:crypto");
       })),
     ).toEqual({ width: 96, height: 72 });
     expect((await manifest()).identityAssets[0].sha256).toBe(sourceHash);
+    await chooser([pngPath, webpPath]);
+    await addIdentities().click();
+    await expect(image(page, "Identität 3", {exact:true})).toBeVisible();
+    for (let i=0;i<2;i++) {
+      page.once("dialog", d=>d.accept());
+      await page.locator(".creator-identity").getByRole("button",{name:"Referenz entfernen",exact:true}).last().click();
+      await expect.poll(async()=> (await manifest()).identityAssets.length).toBe(2-i);
+    }
     await drop(".creator-identity", other, "identity.png", "image/png");
     await expect(image(page, "Identität 2", { exact: true })).toBeVisible();
-    const webp = await page.evaluate(() => {
-      const c = document.createElement("canvas");
-      c.width = 72;
-      c.height = 96;
-      const ctx = c.getContext("2d");
-      ctx.fillStyle = "#b28060";
-      ctx.fillRect(0, 0, 72, 96);
-      return [
-        ...Uint8Array.from(
-          window.atob(c.toDataURL("image/webp").split(",")[1]),
-          (c) => c.charCodeAt(0),
-        ),
-      ];
-    });
     await drop(".creator-identity", webp, "identity.webp", "image/webp");
     await expect(image(page, "Identität 3", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("button", {
-        name: "Identitätsbild importieren …",
+        name: "Identitätsbilder hinzufügen …",
         exact: true,
       }),
     ).toBeDisabled();
@@ -993,6 +1040,14 @@ const { createHash } = require("node:crypto");
     console.log(
       "PASS Master Rebuild: same character, retained references/outfit, zero turns on preparation, opaque RGBA gate and direct IPC denial, cutout rescue editor, rejection/failure/cancel/retry, restart pending review, explicit V2 activation with genuine generation provenance, unchanged V1 expressions/masks, active Studio version, history and 960/1280/1440/1920 backgrounds. Protocol fixture only.",
     );
+    await chooser(null);
+    const selectedCharacter = (await manifest()).selectedCharacterId;
+    const cancelled = await page.evaluate(characterId=>window.laceframe.importIdentityImages({characterId}), selectedCharacter);
+    expect(cancelled).toEqual({ok:true,value:null});
+    const remembered = await app.evaluate(({ dialog })=>dialog.showOpenDialog.lastOptions.defaultPath);
+    expect(remembered).toBe(root);
+    expect((await fs.readFile(path.join(project,"laceframe.json"),"utf8")).includes(root)).toBe(false);
+    console.log("PASS identity import: native three-file selection, one plus two, multi-drop, capacity/cancel/duplicate/corrupt atomic rejection, previews/counts, remembered defaultPath after real app restart. No live generation.");
     expect(errors).toEqual([]);
     console.log(
       "PASS Character Creator: JPEG chooser + PNG/WebP drops, three identity/one style input order, no-master generation, neutral/outfit prompt, single-job lock, timer/failure/cancel/retry, rejected/approved candidates, immutable Master V1, native Expression handoff, archived private sources, close/relaunch/reopen, 960px layout and secure typed IPC. UX-01: missing prerequisites/focus, retained master draft across mode/workspace/style revisions, automatic/supplement/expert conflict, sticky cancel across Characters/Art Direction/Library, exact candidate handoff, Library raw PNG+JSON export and same-master return, 960x720/1440x900 layout. Explicit protocol fixture only; no live AI calls.",

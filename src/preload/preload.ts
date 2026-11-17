@@ -27,6 +27,7 @@ const bridge: LaceframeBridge = {
   createProject: (name) => ipcRenderer.invoke("project:create", name),
   openProject: () => ipcRenderer.invoke("project:open"),
   command: (command) => ipcRenderer.invoke("project:command", command),
+  importIdentityImages: (input) => ipcRenderer.invoke("identity:import", input),
   chooseImage: (purpose?: "identity") =>
     ipcRenderer.invoke("image:choose", purpose),
   stageImage: (bytes: Uint8Array, name: string, purpose?: "identity") =>
