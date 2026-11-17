@@ -1,6 +1,6 @@
 # LF-00 — Risk-based quality checks
 
-Date: 2026-11-17. Implemented on `feat/lf-00-risk-based-ci`, based on merged LF-02 (`240757f`, PR #24). No worktree, main commit, private project or live ImageGen request. Existing smoke scripts and assertions remain unchanged. The user's untracked `.vscode/settings.json` is excluded from the PR.
+Date: 2026-11-17. Implemented on `feat/lf-00-risk-based-ci`, based on merged LF-02 (`240757f`, PR #24). No worktree, main commit, private project or live ImageGen request. Existing application assertions remain intact; one Asset Quality smoke now explicitly awaits canvas repaint after toggling its overlay (see CI findings). The user's untracked `.vscode/settings.json` is excluded from the PR.
 
 ## Commands and scope
 
@@ -72,7 +72,7 @@ The actual headless FAST command completed in **26.496 s**, exit 0, with 386 tes
 
 The routing suite exercises actual committed/staged/unstaged/untracked diffs and PR/push/manual event SHAs in temporary synthetic Git repositories, malformed Git errors, risk mixtures, HIGH escalation, trusted risk floors, cache invalidation, stable failure gates and script inventory. The real `npm run check:targeted` entrypoint also runs against an explicitly labelled synthetic orchestration fixture with an actual MEDIUM diff: exactly one fixture build and only the selected fixture smoke commands. This is not counted as an Electron application run.
 
-`npm run check:full` completed in **305.386 s**, exit **0**. Maximum individual descendant RSS: **507908 KiB**. Typecheck, lint, **387 tests/19 files** (327 existing + 60 LF-00), a fresh Linux package, all **eight ordinary** and **two native** smoke scripts passed in one aggregate run. No retries or application test/assertion changes were needed.
+`npm run check:full` completed in **305.386 s**, exit **0**. Maximum individual descendant RSS: **507908 KiB**. Typecheck, lint, **387 tests/19 files** (327 existing + 60 LF-00), a fresh Linux package, all **eight ordinary** and **two native** smoke scripts passed in one aggregate run. That aggregate local checkpoint required no retries; the subsequent hosted CI revealed a repaint synchronization issue described below.
 
 | FULL step | Wall seconds | Exit |
 | --- | ---: | ---: |
@@ -84,7 +84,9 @@ The routing suite exercises actual committed/staged/unstaged/untracked diffs and
 | Complete desktop command | 213.049 | 0 |
 | Complete native desktop command | 58.545 | 0 |
 
-Actual `npm run classify:changes` returned HIGH/all groups for this infrastructure change. A subsequent read-only `reusableBuild()` check returned true for the exact newly packaged bytes; the full runner itself built once and did not reuse the stale LF-01 baseline. Workflow syntax and `git diff --check` passed. Hosted CI has not run at this pre-PR checkpoint; its actual run/conclusion will be recorded in the PR description after submission. The post-change base includes merged LF-02's 27 additional tests and pack smoke, plus LF-00 tests. These are different workloads; do not interpret before/after durations as a controlled speedup benchmark. The savings come from omitting packaging/desktop for LOW and deduplicating affected integration groups, rather than weakening existing tests.
+Actual `npm run classify:changes` returned HIGH/all groups for this infrastructure change. A subsequent read-only `reusableBuild()` check returned true for the exact newly packaged bytes; the full runner itself built once and did not reuse the stale LF-01 baseline. Workflow syntax and `git diff --check` passed. Hosted CI was then executed for PR #25. [Initial run 44107050318](https://github.com/thomcgn/laceframe/actions/runs/44107050318) passed setup, classification, typecheck, lint, 387 unit tests and build, then failed the unchanged Asset Quality smoke: immediately after unchecking mask overlay, the test read the previous animation frame's exact tinted pixel `[174,106,78,255]` instead of `[190,70,30,255]`. `quality-gate` correctly failed.
+
+The smoke now polls for the **same exact original RGBA** and additionally the **exact tinted RGBA** before retaining its existing tint assertions. This synchronizes React/animation-frame rendering without arbitrary sleeps, broader color tolerances or product changes. The affected smoke and targeted lint passed locally; the updated PR gets a new full hosted regression. Final hosted conclusion/run link is recorded in the PR description to avoid triggering another complete regression just to update a report. The post-change base includes merged LF-02's 27 additional tests and pack smoke, plus LF-00 tests. These are different workloads; do not interpret before/after durations as a controlled speedup benchmark. The savings come from omitting packaging/desktop for LOW and deduplicating affected integration groups, rather than weakening existing tests.
 
 ## GitHub Actions
 
