@@ -36,6 +36,9 @@ export function useSmartCutout(
   const [result, setResult] = useState<{
     weights: Uint8Array;
     selection: Uint8Array;
+    protectedMask: Uint8Array;
+    forcedMask: Uint8Array;
+    limited: Uint8Array;
     conflicts: number;
     removed: number;
     durationMs: number;
