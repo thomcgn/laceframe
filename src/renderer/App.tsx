@@ -1,3 +1,4 @@
+import { ExpressionDesigner } from "./views/ExpressionDesigner";
 import { StyleLibrary } from "./components/StyleLibrary";
 import { AssetLibrary } from "./views/AssetLibrary";
 import type { StudioIntent, StudioMode, Workspace } from "../shared/studio";
@@ -9,176 +10,17 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type {
   Command,
-  Family,
   Snapshot,
   StagedImage,
-  Variant,
   VocalAction,
 } from "../shared/domain";
 import { MAX_IMAGE_BYTES } from "../shared/domain";
 import type { Result } from "../shared/bridge";
 
 type View = Workspace;
-const statusLabel = {
-  candidate: "Kandidat · ungeprüft",
-  approved: "Freigegeben",
-  rejected: "Abgelehnt",
-};
-const actionLabel = {
-  silent: "Still",
-  speaking: "Sprechend",
-  shouting: "Rufend",
-};
-function Actions({
-  value,
-  onChange,
-  label,
-}: {
-  value: VocalAction;
-  onChange: (v: VocalAction) => void;
-  label: string;
-}) {
-  return (
-    <label>
-      {label}
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value as VocalAction)}
-      >
-        {Object.entries(actionLabel).map(([key, name]) => (
-          <option key={key} value={key}>
-            {name}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-function FamilyForm({
-  family,
-  save,
-}: {
-  family?: Family;
-  save: (label: string, slug: string) => void;
-}) {
-  const [label, setLabel] = useState(family?.label ?? "");
-  const [slug, setSlug] = useState(family?.slug ?? "");
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        save(label, slug);
-      }}
-      className="inline-form"
-    >
-      <label>
-        Name
-        <input
-          aria-label={family ? "Familienname" : "Neue Familie"}
-          required
-          maxLength={120}
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-        />
-      </label>
-      <label>
-        Kennung
-        <input
-          required
-          maxLength={120}
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
-        />
-      </label>
-      <button type="submit">
-        {family ? "Familie speichern" : "Familie hinzufügen"}
-      </button>
-    </form>
-  );
-}
-function VariantEditor({
-  variant,
-  save,
-}: {
-  variant: Variant;
-  save: (v: Variant) => void;
-}) {
-  const [draft, setDraft] = useState(variant);
-  return (
-    <form
-      className="variant-editor"
-      onSubmit={(e) => {
-        e.preventDefault();
-        save(draft);
-      }}
-    >
-      <div className="inline-form">
-        <label>
-          Variantenname
-          <input
-            required
-            maxLength={120}
-            value={draft.label}
-            onChange={(e) => setDraft({ ...draft, label: e.target.value })}
-          />
-        </label>
-        <label>
-          Variantenkennung
-          <input
-            required
-            maxLength={120}
-            value={draft.slug}
-            onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
-          />
-        </label>
-      </div>
-      <label>
-        Bildanweisung · nur lokale Notiz
-        <textarea
-          aria-label="Bildanweisung · nur lokale Notiz"
-          rows={4}
-          maxLength={8000}
-          value={draft.prompt}
-          onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}
-        />
-      </label>
-      <div className="inline-form">
-        <label>
-          Intensität · optional (0–1)
-          <input
-            type="number"
-            min="0"
-            max="1"
-            step="0.05"
-            value={draft.intensity ?? ""}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                intensity:
-                  e.target.value === "" ? undefined : Number(e.target.value),
-              })
-            }
-          />
-        </label>
-        <Actions
-          label="Vorgeschlagene Stimmaktion"
-          value={draft.suggestedAction}
-          onChange={(suggestedAction) =>
-            setDraft({ ...draft, suggestedAction })
-          }
-        />
-        <button type="submit">Variante speichern</button>
-      </div>
-      <p className="muted">
-        Emotion und Stimmaktion bleiben getrennt. Eine Bildanweisung verändert
-        keine Pixel.
-      </p>
-    </form>
-  );
-}
 export function App() {
   const [snapshot, setSnapshot] = useState<Snapshot>();
+  const [projectSession, setProjectSession] = useState(0);
   const [view, setView] = useState<View>("Characters");
   const [expressionRunning, setExpressionRunning] = useState(false);
   const [creatorRunning, setCreatorRunning] = useState(false);
@@ -198,11 +40,8 @@ export function App() {
   const [error, setError] = useState("");
   const [projectName, setProjectName] = useState("Mein Portraitstudio");
   const [characterName, setCharacterName] = useState("");
-  const [familyId, setFamilyId] = useState("");
-  const [variantId, setVariantId] = useState("");
-  const [newVariant, setNewVariant] = useState("");
+  const [expressionIntent, setExpressionIntent] = useState<StudioIntent>();
   const [assetId, setAssetId] = useState("");
-  const [action, setAction] = useState<VocalAction>("silent");
   const [zoom, setZoom] = useState(100);
   const [staged, setStaged] = useState<{
     image: StagedImage;
@@ -248,11 +87,6 @@ export function App() {
   const p = snapshot?.project;
   const character = p?.characters.find((c) => c.id === p.selectedCharacterId);
   const master = p?.masters.find((m) => m.id === character?.masterId);
-  const family = p?.families.find((f) => f.id === familyId) ?? p?.families[0];
-  const variants = p?.variants.filter((v) => v.familyId === family?.id) ?? [];
-  const variant = variants.find((v) => v.id === variantId) ?? variants[0];
-  const assets = p?.assets.filter((a) => a.characterId === character?.id) ?? [];
-  const asset = assets.find((a) => a.id === assetId) ?? assets.at(-1);
   async function run<T>(
     work: () => Promise<Result<T>>,
     success: (value: T) => void,
@@ -284,6 +118,7 @@ export function App() {
   function changedProject(value: Snapshot | null) {
     if (!value) return;
     setSnapshot(value);
+    setProjectSession((old) => old + 1);
     setView("Characters");
     setVisited([]);
     setDraftDirty({});
@@ -292,27 +127,25 @@ export function App() {
     setStyleIntent(undefined);
     setStaged(undefined);
     setAssetId("");
-    setFamilyId("");
-    setVariantId("");
+    setExpressionIntent(undefined);
   }
   function stage(image: StagedImage | null) {
     if (image && character)
       setStaged({
         image,
         characterId: character.id,
-        variantId: view === "Characters" ? undefined : variant?.id,
-        action,
+        action: "silent",
       });
   }
   const choose = () => run(() => window.laceframe.chooseImage(), stage);
   async function drop(files: FileList) {
     if (busy || staged) return;
-    if (!character || (view !== "Characters" && (!master || !variant))) {
+    if (!character) {
       setError("Zuerst Figur, Master und Variante auswählen.");
       return;
     }
     if (view === "Characters" && master) {
-      setError("Master ist gesperrt. Kandidaten unter Library importieren.");
+      setError("Master ist gesperrt. Kandidaten im Studio importieren.");
       return;
     }
     if (files.length !== 1) {
@@ -430,8 +263,7 @@ export function App() {
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        if (p && (view === "Characters" || view === "Library"))
-          void drop(e.dataTransfer.files);
+        if (p && view === "Characters") void drop(e.dataTransfer.files);
       }}
     >
       <aside className="sidebar" inert={importing}>
@@ -447,6 +279,7 @@ export function App() {
             [
               "Characters",
               "Art Direction",
+              "Expressions",
               "Studio",
               "Library",
               "Motion",
@@ -455,7 +288,10 @@ export function App() {
             <button
               key={name}
               aria-current={view === name ? "page" : undefined}
-              onClick={() => setView(name)}
+              onClick={() => {
+                if (name === "Expressions") setExpressionIntent(undefined);
+                setView(name);
+              }}
             >
               <span className="nav-index">0{i + 1}</span>
               {name}
@@ -519,7 +355,7 @@ export function App() {
                   if (
                     createDirty &&
                     !window.confirm(
-                      "Ungespeicherte Studio- und Stilentwürfe verwerfen und Projekt wechseln?",
+                      "Ungespeicherte Studio-, Expressions- und Stilentwürfe verwerfen und Projekt wechseln?",
                     )
                   )
                     return;
@@ -544,7 +380,7 @@ export function App() {
                 onClick={() =>
                   (!createDirty ||
                     window.confirm(
-                      "Ungespeicherte Studio- und Stilentwürfe verwerfen und Projekt wechseln?",
+                      "Ungespeicherte Studio-, Expressions- und Stilentwürfe verwerfen und Projekt wechseln?",
                     )) &&
                   void run(() => window.laceframe.openProject(), changedProject)
                 }
@@ -665,6 +501,13 @@ export function App() {
                         onRunningChange={setExpressionRunning}
                         onCharacters={() => setView("Characters")}
                         onArtDirection={editStyle}
+                        onEditExpression={(context) => {
+                          setExpressionIntent((old) => ({
+                            ...context,
+                            serial: (old?.serial ?? 0) + 1,
+                          }));
+                          setView("Expressions");
+                        }}
                         onInspect={(id) => openLibrary(c.id, id)}
                       />
                     </div>
@@ -709,6 +552,39 @@ export function App() {
                   </div>
                 );
               })}
+          {p && (
+            <section hidden={view !== "Expressions"}>
+              <ExpressionDesigner
+                key={`${p.id}:${projectSession}`}
+                snapshot={snapshot!}
+                busy={busy || generationRunning}
+                perform={run}
+                onSnapshot={setSnapshot}
+                intent={expressionIntent}
+                onDirtyChange={(dirty) => dirtyFor(`designer:${p.id}`, dirty)}
+                onStudio={enterStudio}
+                onBack={() => {
+                  if (expressionIntent) {
+                    const apply = () => setView("Studio");
+                    if (p.selectedCharacterId === expressionIntent.characterId)
+                      apply();
+                    else
+                      void run(
+                        () =>
+                          window.laceframe.command({
+                            type: "selectCharacter",
+                            id: expressionIntent.characterId,
+                          }),
+                        (value) => {
+                          setSnapshot(value);
+                          apply();
+                        },
+                      );
+                  } else setView("Studio");
+                }}
+              />
+            </section>
+          )}
           {p && (
             <section
               className="art-direction-workspace"
@@ -1010,169 +886,6 @@ export function App() {
                   command={(cmd, notice) => void command(cmd, notice)}
                 />
               </div>
-              {view === "Library" && (
-                <details className="expression-tools library-workspace">
-                  <summary>Emotionsvorlagen & manueller Import</summary>
-                  <div className="expression-layout">
-                    <section className="panel">
-                      <p className="eyebrow">AUSDRUCKSBIBLIOTHEK</p>
-                      <h2>Familien & Varianten</h2>
-                      <label>
-                        Emotionsfamilie
-                        <select
-                          aria-label="Emotionsfamilie"
-                          value={family?.id ?? ""}
-                          onChange={(e) => {
-                            setFamilyId(e.target.value);
-                            setVariantId("");
-                          }}
-                        >
-                          {p.families.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {family && (
-                        <FamilyForm
-                          key={family.id + family.label + family.slug}
-                          family={family}
-                          save={(label, slug) =>
-                            void command({
-                              type: "editFamily",
-                              id: family.id,
-                              label,
-                              slug,
-                            })
-                          }
-                        />
-                      )}
-                      <details>
-                        <summary>Eigene Familie hinzufügen</summary>
-                        <FamilyForm
-                          save={(label, slug) =>
-                            void command({ type: "addFamily", label, slug })
-                          }
-                        />
-                      </details>
-                      <label>
-                        Variante
-                        <select
-                          aria-label="Variante"
-                          value={variant?.id ?? ""}
-                          onChange={(e) => {
-                            setVariantId(e.target.value);
-                            const v = variants.find(
-                              (v) => v.id === e.target.value,
-                            );
-                            if (v) setAction(v.suggestedAction);
-                          }}
-                        >
-                          <option value="" disabled>
-                            Variante auswählen
-                          </option>
-                          {variants.map((v) => (
-                            <option key={v.id} value={v.id}>
-                              {v.label} / {v.slug}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {variant && (
-                        <VariantEditor
-                          key={JSON.stringify(variant)}
-                          variant={variant}
-                          save={(v) =>
-                            void command({ type: "editVariant", variant: v })
-                          }
-                        />
-                      )}
-                      <form
-                        className="inline-form"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (family)
-                            void command({
-                              type: "addVariant",
-                              familyId: family.id,
-                              label: newVariant,
-                              slug: newVariant.trim(),
-                            });
-                        }}
-                      >
-                        <label>
-                          Neue Variante
-                          <input
-                            required
-                            maxLength={120}
-                            value={newVariant}
-                            onChange={(e) => setNewVariant(e.target.value)}
-                          />
-                        </label>
-                        <button disabled={!family} type="submit">
-                          Variante hinzufügen
-                        </button>
-                      </form>
-                    </section>
-                    <section className="panel">
-                      <p className="eyebrow">MANUELLER IMPORT</p>
-                      <h2>Ausdruckskandidat</h2>
-                      <p>
-                        PNG für{" "}
-                        <strong>{variant?.label ?? "eine Variante"}</strong>{" "}
-                        ablegen oder auswählen. Jeder Import benötigt eine
-                        eigene Freigabe.
-                      </p>
-                      <Actions
-                        label="Stimmaktion dieses Imports"
-                        value={action}
-                        onChange={setAction}
-                      />
-                      <button
-                        className="primary"
-                        disabled={!master || !variant}
-                        onClick={choose}
-                      >
-                        Kandidaten-PNG auswählen …
-                      </button>
-                      {!master && (
-                        <p className="warning">
-                          Zuerst unter Characters einen Master sperren.
-                        </p>
-                      )}
-                      <div className="asset-list">
-                        <h3>Importierte Ausdrücke ({assets.length})</h3>
-                        {!assets.length && (
-                          <p className="muted">
-                            Noch keine Kandidaten für diese Figur.
-                          </p>
-                        )}
-                        {assets.map((a) => (
-                          <button
-                            key={a.id}
-                            aria-pressed={asset?.id === a.id}
-                            onClick={() => setAssetId(a.id)}
-                          >
-                            <strong>
-                              {
-                                p.variants.find((v) => v.id === a.variantId)
-                                  ?.label
-                              }
-                            </strong>
-                            <span className={`badge ${a.status}`}>
-                              {statusLabel[a.status]}
-                            </span>
-                            <small>
-                              {actionLabel[a.action]} · {a.width} × {a.height}
-                            </small>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  </div>
-                </details>
-              )}
               {view === "Motion" && (
                 <section className="welcome">
                   <p className="eyebrow">ALS NÄCHSTES</p>
@@ -1185,7 +898,13 @@ export function App() {
                   </p>
                   <p>
                     Aktuell freigegeben:{" "}
-                    {assets.filter((a) => a.status === "approved").length}
+                    {
+                      p.assets.filter(
+                        (a) =>
+                          a.characterId === character?.id &&
+                          a.status === "approved",
+                      ).length
+                    }
                   </p>
                 </section>
               )}

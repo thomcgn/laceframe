@@ -1,0 +1,110 @@
+.designer-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 8px 0;
+  border: 0;
+}
+.designer-heading h2 {
+  margin: 0.3rem 0;
+}
+.designer-heading p {
+  margin: 0.4rem 0;
+}
+.designer-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.65fr) minmax(0, 1.7fr);
+  gap: 1rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.designer-layout .panel {
+  padding: 1rem;
+}
+.designer-navigation {
+  align-self: start;
+  display: grid;
+  gap: 0.8rem;
+  min-width: 0;
+}
+.designer-navigation form,
+.designer-rules form {
+  display: grid;
+  gap: 0.7rem;
+}
+.designer-navigation details {
+  border-top: 1px solid #394455;
+  padding-top: 0.5rem;
+}
+.designer-rules {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.designer-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+.expression-direction {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #f0e5d3;
+}
+.studio-expression-summary {
+  padding: 0.7rem 1rem;
+  border: 1px solid #394455;
+  border-radius: 8px;
+  margin: 0.6rem 0;
+}
+.studio-expression-summary p {
+  margin: 0.4rem 0;
+  overflow-wrap: anywhere;
+}
+.studio-expression-summary .inspector-options {
+  margin: 0.5rem 0;
+}
+@media (max-width: 1050px) {
+  .designer-layout {
+    grid-template-columns: minmax(180px, 0.55fr) minmax(0, 1.3fr);
+    gap: 0.6rem;
+  }
+  .designer-heading {
+    align-items: start;
+  }
+}
+@media (max-width: 740px) {
+  .designer-layout {
+    grid-template-columns: 1fr;
+  }
+  .designer-heading {
+    flex-wrap: wrap;
+  }
+}
+
+.designer-layout label {
+  margin: 0;
+}
+.designer-layout .panel p {
+  margin: 0.4rem 0;
+}
+.designer-rules h3 {
+  margin: 0.2rem 0;
+}
+.designer-navigation button {
+  padding: 8px 10px;
+}
+.studio-expression-summary .summary-direction {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+@media (max-width: 740px) {
+  .designer-fields {
+    grid-template-columns: 1fr;
+  }
+}

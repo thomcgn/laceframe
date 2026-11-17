@@ -236,18 +236,10 @@ const path = require("node:path");
       });
     }, project);
     await nav(page, "Studio");
-    {
-      const performance = page
-        .locator(".studio-editor:not([hidden]) details")
-        .filter({
-          has: page
-            .locator("summary")
-            .filter({ hasText: /^Expression Performance/ }),
-        });
-      await expect(performance).toBeVisible();
-      if ((await performance.getAttribute("open")) === null)
-        await performance.locator("summary").first().click();
-    }
+    await page
+      .locator(".studio-editor:visible")
+      .getByRole("button", { name: "Expression bearbeiten", exact: true })
+      .click();
     await field(page, "Persönlicher Ausdruck", { exact: true }).fill(
       "Direct unwavering gaze for first character.",
     );
@@ -256,6 +248,10 @@ const path = require("node:path");
         name: "Persönlichen Ausdruck speichern",
         exact: true,
       })
+      .click();
+    await page
+      .getByRole("button", { name: "Zurück zum Studio", exact: true })
+      .filter({ visible: true })
       .click();
     await field(page, "Promptmodus", { exact: true }).selectOption(
       "supplement",
@@ -615,18 +611,10 @@ const path = require("node:path");
     await field(page, "Create Anbieter", { exact: true }).selectOption(
       "codex-native",
     );
-    {
-      const performance = page
-        .locator(".studio-editor:not([hidden]) details")
-        .filter({
-          has: page
-            .locator("summary")
-            .filter({ hasText: /^Expression Performance/ }),
-        });
-      await expect(performance).toBeVisible();
-      if ((await performance.getAttribute("open")) === null)
-        await performance.locator("summary").first().click();
-    }
+    await page
+      .locator(".studio-editor:visible")
+      .getByRole("button", { name: "Expression bearbeiten", exact: true })
+      .click();
     await expect(
       field(page, "Persönlicher Ausdruck", { exact: true }),
     ).toHaveValue("");
@@ -639,6 +627,11 @@ const path = require("node:path");
         exact: true,
       })
       .click();
+    await page
+      .getByRole("button", { name: "Zurück zum Studio", exact: true })
+      .filter({ visible: true })
+      .click();
+
     await expect(generate).toBeEnabled();
     await generate.click();
     await expect(
@@ -663,21 +656,22 @@ const path = require("node:path");
     await field(page, "Studio Figur", { exact: true }).selectOption(
       two.masters[0].characterId,
     );
-    {
-      const performance = page
-        .locator(".studio-editor:not([hidden]) details")
-        .filter({
-          has: page
-            .locator("summary")
-            .filter({ hasText: /^Expression Performance/ }),
-        });
-      await expect(performance).toBeVisible();
-      if ((await performance.getAttribute("open")) === null)
-        await performance.locator("summary").first().click();
-    }
+    await expect(
+      page.locator(".studio-editor:visible .studio-expression-summary"),
+    ).toContainText("Synthetic Native");
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    await page
+      .locator(".studio-editor:visible")
+      .getByRole("button", { name: "Expression bearbeiten", exact: true })
+      .click();
     await expect(
       field(page, "Persönlicher Ausdruck", { exact: true }),
     ).toHaveValue("Direct unwavering gaze for first character.");
+    await page
+      .getByRole("button", { name: "Zurück zum Studio", exact: true })
+      .filter({ visible: true })
+      .click();
     // Latest historical prompt still needs explicit adoption after style revision.
     const adopt = page.getByRole("button", {
       name: "Neue Vorlage übernehmen",
@@ -1052,7 +1046,7 @@ const path = require("node:path");
     await expect(field(page, "Arbeits-Prompt", { exact: true })).toHaveValue(
       /STYLE LOCK — Shared Noir/,
     );
-    await text(page, "Inspector · Stimmaktion, Intensität und Herkunft", {
+    await text(page, "Inspector · technische Herkunft", {
       exact: true,
     }).click();
     await page

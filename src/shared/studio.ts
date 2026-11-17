@@ -3,6 +3,7 @@ import type { Project } from "./domain";
 export type Workspace =
   | "Characters"
   | "Art Direction"
+  | "Expressions"
   | "Studio"
   | "Library"
   | "Motion";
@@ -16,6 +17,8 @@ export type StudioIntent = {
   masterId?: string;
   styleId?: string;
   candidateId?: string;
+  familyId?: string;
+  variantId?: string;
 };
 export function updateStudioPrompt(
   state: ComposerState,
