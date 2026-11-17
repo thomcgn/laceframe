@@ -1,3 +1,4 @@
+const checkIdentityComparison = require("./identity-comparison-checks.cjs");
 const { PNG } = require("pngjs");
 const { field, image, nav } = require("./smoke-ui.cjs");
 // Packaged Character Creator with synthetic images and explicit Codex protocol double only.
@@ -86,11 +87,12 @@ const { createHash } = require("node:crypto");
     const makeImage = async (shade, jpg = false) =>
       app.evaluate(
         ({ nativeImage }, { shade, jpg }) => {
-          const b = Buffer.alloc(72 * 96 * 4, shade);
+          const width = jpg ? 4032 : 72, height = jpg ? 3024 : 96;
+          const b = Buffer.alloc(width * height * 4, shade);
           for (let i = 3; i < b.length; i += 4) b[i] = 255;
           const image = nativeImage.createFromBitmap(b, {
-            width: 72,
-            height: 96,
+            width,
+            height,
           });
           return [...(jpg ? image.toJPEG(95) : image.toPNG())];
         },
@@ -129,10 +131,10 @@ const { createHash } = require("node:crypto");
     const thread = "00000000-0000-4000-8000-000000000123",
       output = path.join(root, "generated_images", thread);
     await fs.mkdir(output, { recursive: true });
-    await fs.writeFile(
-      path.join(output, "result.png"),
-      Buffer.from(approvedResult),
-    );
+    const hi = new PNG({width:1254,height:1254});
+    for(let y=150;y<1150;y++)for(let x=400;x<850;x++)hi.data.set([170,120,90,255],(y*1254+x)*4);
+    hi.data.set([170,120,90,255],0);
+    await fs.writeFile(path.join(output,"result.png"),PNG.sync.write(hi));
     // Populate a real project style through the existing editor; no identity character yet.
     await nav(page, "Art Direction");
     await field(page, "Stilname", { exact: true }).fill(
@@ -253,15 +255,15 @@ const { createHash } = require("node:crypto");
     await expect(image(page, "Identität 1", { exact: true })).toBeVisible();
     expect((await manifest()).identityAssets[0].format).toBe("jpg");
     expect((await manifest()).identityAssets[0]).toMatchObject({
-      width: 96,
-      height: 72,
+      width: 3024,
+      height: 4032,
     });
     expect(
       await image(page, "Identität 1", { exact: true }).evaluate((img) => ({
         width: img.naturalWidth,
         height: img.naturalHeight,
       })),
-    ).toEqual({ width: 96, height: 72 });
+    ).toEqual({ width: 3024, height: 4032 });
     expect((await manifest()).identityAssets[0].sha256).toBe(sourceHash);
     await chooser([pngPath, webpPath]);
     await addIdentities().click();
@@ -518,6 +520,8 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Mastergenerierungszeit", { exact: true }),
     ).toContainText("Generiert in");
+    await checkIdentityComparison({page,app,project});
+    await fs.writeFile(path.join(output,"result.png"),Buffer.from(approvedResult));
     const rpc = (await turns()).at(-1);
     expect(
       rpc.params.input

@@ -275,6 +275,10 @@ function PortraitPane({
           }
         }}
       >
+        <span className="identity-image-label" aria-hidden="true">
+          {label}
+          {image ? ` · ${image.width} × ${image.height}` : ""}
+        </span>
         {src && image ? (
           <img
             alt={alt}
@@ -427,7 +431,7 @@ export function IdentityComparison({
           {!bounds
             ? "Sichtbaren Bereich prüfen …"
             : bounds.status === "bounded"
-              ? `Alpha-Bereich eingepasst · ${bounds.ignored} vereinzelte Randpixel ignoriert (nur Ansicht).`
+              ? `Alpha-Bereich eingepasst · ${bounds.ignored} Pixel in sehr kleinen, getrennten Alpha-Inseln ignoriert (nur Ansicht).`
               : bounds.status === "empty"
                 ? "Vollständig transparent · gesamte Leinwand angezeigt."
                 : bounds.status === "opaque"

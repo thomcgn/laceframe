@@ -95,7 +95,7 @@ function PixelComparison({
       const r = element.getBoundingClientRect();
       pixelZoomRef.current(
         scaleRef.current * 100 * Math.exp(-e.deltaY * 0.001),
-        { x: e.clientX - r.left, y: e.clientY - r.top },
+        { x: e.clientX - r.left - element.clientLeft, y: e.clientY - r.top - element.clientTop },
       );
     };
     const release = () => {

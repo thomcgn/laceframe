@@ -6,7 +6,7 @@ export type IdentityView = {
 export const fullRegion = (image: {
   width: number;
   height: number;
-}): Region => ({ x: 0, y: 0, ...image });
+}): Region => ({ x: 0, y: 0, width: image.width, height: image.height });
 export function fitScale(
   region: Region,
   viewport: { width: number; height: number },
