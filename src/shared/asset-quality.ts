@@ -93,6 +93,7 @@ export type QualityReport = {
   opaque: number;
   edgeTransparent: number;
   edgePixels: number;
+  exteriorTransparent: number;
   status: "transparent" | "suspicious" | "opaque" | "empty";
   warnings: string[];
   palette: { color: string; pixels: number }[];
@@ -103,3 +104,25 @@ export const exportAssetSchema = z
   .object({ id: uuid, raw: z.boolean(), provenance: z.boolean() })
   .strict();
 export type ExportAssetRequest = z.infer<typeof exportAssetSchema>;
+
+export const masterApprovalInputSchema = z
+  .object({
+    sourceSha256: sha,
+    identityConfirmed: z.literal(true),
+    silhouetteConfirmed: z.literal(true),
+    activationConfirmed: z.literal(true),
+    notes: z.string().trim().min(1).max(8000),
+  })
+  .strict();
+export const masterApprovalRecordSchema = masterApprovalInputSchema
+  .extend({
+    checkedAt: z.iso.datetime(),
+    algorithm: z.literal("alpha-review-v1"),
+    transparent: z.number().int().nonnegative(),
+    partial: z.number().int().nonnegative(),
+    opaque: z.number().int().nonnegative(),
+    edgeTransparent: z.number().int().nonnegative(),
+    exteriorTransparent: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MasterApprovalInput = z.infer<typeof masterApprovalInputSchema>;

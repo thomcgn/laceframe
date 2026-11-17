@@ -1,3 +1,4 @@
+import { seedHistoricalMaster } from "./historical-master";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs/promises";
 import os from "node:os";
@@ -14,7 +15,7 @@ import {
   MAX_IMAGE_BYTES,
   projectSchema,
 } from "../src/shared/domain";
-import { png } from "./fixtures";
+import { png, transparentPng, masterReview } from "./fixtures";
 
 let root: string, directory: string, service: ProjectService;
 beforeEach(async () => {
@@ -31,11 +32,7 @@ async function withMaster() {
   await service.command({ type: "addCharacter", name: "Ada Voss" });
   const characterId = service.snapshot().project.selectedCharacterId!;
   const image = await service.stage(png(), "portrait.png");
-  await service.command({
-    type: "confirmMaster",
-    characterId,
-    token: image.token,
-  });
+  await seedHistoricalMaster(service, image, characterId);
   return { characterId, master: service.snapshot().project.masters[0] };
 }
 async function candidate() {
@@ -130,7 +127,7 @@ describe("versioned project schema", () => {
 describe("immutable content-addressed imports", () => {
   it("leaves source bytes unchanged, preserves native dimensions and reloads master", async () => {
     const source = path.join(root, "source.png"),
-      bytes = png(17, 31);
+      bytes = transparentPng(17, 31);
     await fs.writeFile(source, bytes);
     await service.command({ type: "addCharacter", name: "Ada Voss" });
     const characterId = service.snapshot().project.selectedCharacterId!;
@@ -140,6 +137,7 @@ describe("immutable content-addressed imports", () => {
       type: "confirmMaster",
       characterId,
       token: staged.token,
+      review: masterReview(staged.sha256),
     });
     const master = service.snapshot().project.masters[0];
     expect(master).toMatchObject({

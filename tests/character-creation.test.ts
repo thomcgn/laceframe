@@ -23,7 +23,7 @@ import { GenerationController } from "../src/main/services/generation-controller
 import { CodexImageGenerationProvider } from "../src/main/services/providers/codexImageGeneration";
 import { supportsMultipleLocalImages } from "../src/main/services/codex/reference-capability";
 import { composePrompt } from "../src/shared/generation";
-import { png } from "./fixtures";
+import { png, transparentPng, masterReview } from "./fixtures";
 let root: string, dir: string, service: ProjectService;
 const thread = "00000000-0000-4000-8000-000000000123";
 beforeEach(async () => {
@@ -38,7 +38,7 @@ beforeEach(async () => {
   });
   await fs.writeFile(
     path.join(root, "generated_images", thread, "result.png"),
-    png(41, 53, 200),
+    transparentPng(41, 53, 200),
   );
 });
 afterEach(async () => {
@@ -342,6 +342,7 @@ describe("native createCharacterMaster operation, approval and expression handof
       type: "reviewMasterCandidate",
       id: second.id,
       status: "approved",
+      review: masterReview(second.sha256),
     });
     p = service.snapshot().project;
     const m = p.masters[0];

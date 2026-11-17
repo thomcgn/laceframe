@@ -1,3 +1,4 @@
+import { seedHistoricalMaster } from "./historical-master";
 import {
   rasterizePolygon,
   POLYGON_VERSION,
@@ -252,11 +253,7 @@ beforeEach(async () => {
   await service.command({ type: "addCharacter", name: "Synthetic" });
   const p = service.snapshot().project;
   const staged = await service.stage(encodePixels(portrait()), "portrait.png");
-  await service.command({
-    type: "confirmMaster",
-    characterId: p.selectedCharacterId!,
-    token: staged.token,
-  });
+  await seedHistoricalMaster(service, staged, p.selectedCharacterId!);
   masterId = service.snapshot().project.masters[0].id;
 });
 afterEach(async () => {

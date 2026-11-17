@@ -1,3 +1,4 @@
+const { seedHistoricalMaster } = require("./historical-master-fixture.cjs");
 const { selectMaskTool } = require("./smoke-ui.cjs");
 const { field, image, nav } = require("./smoke-ui.cjs");
 // Synthetic local pixels only. No provider, image turn, remote request or private project.
@@ -71,28 +72,17 @@ const { createHash } = require("node:crypto");
     pixels.data.set([190, 70, 30, 255], (16 * 32 + 12) * 4);
     const bytes = PNG.sync.write(pixels),
       originalHash = createHash("sha256").update(bytes).digest("hex");
-    await page.evaluate(
-      (bytes) => {
-        const d = new DataTransfer();
-        d.items.add(
-          new File([new Uint8Array(bytes)], "synthetic-black-coat.png", {
-            type: "image/png",
-          }),
-        );
-        document
-          .querySelector(".app")
-          .dispatchEvent(
-            new DragEvent("drop", { bubbles: true, dataTransfer: d }),
-          );
-      },
-      [...bytes],
-    );
+    await app.close();
+    await seedHistoricalMaster(project, bytes);
+    await launch();
+    await chooser(project);
     await page
-      .getByRole("button", {
-        name: "Freigegebenen Master sperren",
-        exact: true,
-      })
+      .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();
+    await expect(
+      page.getByAltText("Freigegebener Master V1", { exact: true }),
+    ).toBeVisible();
+
     await expect(
       page.locator('[data-quality-status="opaque"]').first(),
     ).toBeVisible();
@@ -239,6 +229,7 @@ const { createHash } = require("node:crypto");
         { exact: true },
       )
       .check();
+    page.once("dialog", d => d.accept());
     await q
       .getByRole("button", { name: "Qualitätsversion freigeben", exact: true })
       .click();

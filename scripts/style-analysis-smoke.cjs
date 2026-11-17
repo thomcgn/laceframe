@@ -105,6 +105,13 @@ const { nav } = require("./smoke-ui.cjs");
           type: "confirmMaster",
           characterId: c,
           token: s.value.token,
+          review: {
+            sourceSha256: s.value.sha256,
+            identityConfirmed: true,
+            silhouetteConfirmed: true,
+            activationConfirmed: true,
+            notes: "Synthetic silhouette and identity review",
+          },
         });
         if (!m.ok) throw new Error(m.error);
       },

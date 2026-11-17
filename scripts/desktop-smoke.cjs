@@ -1,3 +1,4 @@
+const { reviewImport } = require("./historical-master-fixture.cjs");
 const { field, image, text, nav } = require("./smoke-ui.cjs");
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises");
@@ -117,10 +118,20 @@ const { createHash } = require("node:crypto");
     });
     const bytes = await app.evaluate(({ nativeImage }) => [
       ...nativeImage
-        .createFromBitmap(Buffer.alloc(24 * 32 * 4, 160), {
-          width: 24,
-          height: 32,
-        })
+        .createFromBitmap(
+          (() => {
+            const b = Buffer.alloc(24 * 32 * 4, 160);
+            for (let y = 0; y < 32; y++)
+              for (let x = 0; x < 24; x++)
+                if (!x || !y || x === 23 || y === 31)
+                  b[(y * 24 + x) * 4 + 3] = 0;
+            return b;
+          })(),
+          {
+            width: 24,
+            height: 32,
+          },
+        )
         .toPNG(),
     ]);
     const source = path.join(root, "synthetic-portrait.png");
@@ -164,6 +175,7 @@ const { createHash } = require("node:crypto");
         await fs.readFile(path.join(project, "laceframe.json"), "utf8"),
       ).masters,
     ).toHaveLength(0);
+    await reviewImport(page);
     await page
       .getByRole("button", {
         name: "Freigegebenen Master sperren",
@@ -270,7 +282,7 @@ const { createHash } = require("node:crypto");
       const canvas = document.createElement("canvas");
       canvas.width = 8;
       canvas.height = 10;
-      canvas.getContext("2d").fillRect(0, 0, 8, 10);
+      canvas.getContext("2d").fillRect(1, 1, 6, 8);
       const blob = await new Promise((resolve) =>
         canvas.toBlob(resolve, "image/webp"),
       );
@@ -285,6 +297,7 @@ const { createHash } = require("node:crypto");
         );
     });
     await expect(page.getByRole("dialog")).toBeVisible();
+    await reviewImport(page);
     await page
       .getByRole("button", {
         name: "Freigegebenen Master sperren",
@@ -405,7 +418,7 @@ const { createHash } = require("node:crypto");
             const c = document.createElement("canvas");
             c.width = 8;
             c.height = 10;
-            c.getContext("2d").fillRect(0, 0, 8, 10);
+            c.getContext("2d").fillRect(1, 1, 6, 8);
             blob = await new Promise((r) => c.toBlob(r, "image/webp"));
           }
           const transfer = new DataTransfer();

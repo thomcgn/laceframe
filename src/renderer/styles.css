@@ -1204,3 +1204,14 @@ button.text-link { border:0; background:transparent; padding:2px 0; color:var(--
 .precision-editor .editor-sidebar .color-selection-settings {display:grid;gap:8px;}
 .precision-editor .editor-sidebar .applied-polygons {display:grid;gap:5px;}
 .precision-editor .editor-sidebar p {margin:5px 0;}
+
+/* Display-only master review backgrounds; never written into image bytes. */
+.compare-backdrop-light.checker { background: #f0e5d3; }
+.compare-backdrop-dark.checker { background: #141820; }
+.master-approval { display: grid; gap: .5rem; min-width: 0; }
+.master-approval small { display: block; }
+.master-history article { border-top: 1px solid #42505f; padding: .75rem 0; }
+.master-approval label:has(input[type="checkbox"]) { display: flex; align-items: flex-start; gap: .65rem; }
+.master-approval input[type="checkbox"] { width: auto; flex: 0 0 auto; margin-top: .25rem; }
+.button-row:has(> .master-approval) { align-items: flex-start; }
+.button-row > .master-approval { flex: 1 0 100%; }

@@ -1,3 +1,4 @@
+const { PNG } = require("pngjs");
 const { field, image, nav } = require("./smoke-ui.cjs");
 // Packaged Character Creator with synthetic images and explicit Codex protocol double only.
 const { _electron: electron, expect } = require("@playwright/test");
@@ -99,6 +100,12 @@ const { createHash } = require("node:crypto");
       other = await makeImage(140),
       style = await makeImage(190),
       result = await makeImage(110);
+    const transparentResult = PNG.sync.read(Buffer.from(result));
+    for (let y = 0; y < 96; y++)
+      for (let x = 0; x < 72; x++)
+        if (!x || !y || x === 71 || y === 95)
+          transparentResult.data[(y * 72 + x) * 4 + 3] = 0;
+    const approvedResult = [...PNG.sync.write(transparentResult)];
     // Synthetic phone JPEG with EXIF orientation 6; source bytes are never rotated/re-encoded.
     const exif = Buffer.from(
       "45786966000049492a0008000000010012010300010000000600000000000000",
@@ -122,7 +129,10 @@ const { createHash } = require("node:crypto");
     const thread = "00000000-0000-4000-8000-000000000123",
       output = path.join(root, "generated_images", thread);
     await fs.mkdir(output, { recursive: true });
-    await fs.writeFile(path.join(output, "result.png"), Buffer.from(result));
+    await fs.writeFile(
+      path.join(output, "result.png"),
+      Buffer.from(approvedResult),
+    );
     // Populate a real project style through the existing editor; no identity character yet.
     await nav(page, "Art Direction");
     await field(page, "Stilname", { exact: true }).fill(
@@ -542,7 +552,12 @@ const { createHash } = require("node:crypto");
     await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
       originalOutfit,
     );
-    page.once("dialog", (d) => d.accept());
+    await field(page, "Master Identität bestätigt", { exact: true }).check();
+    await field(page, "Master Silhouette geprüft", { exact: true }).check();
+    await field(page, "Master Aktivierung bestätigen", { exact: true }).check();
+    await field(page, "Master Prüfnotiz", { exact: true }).fill(
+      "Synthetic silhouette and identity reviewed",
+    );
     await page
       .getByRole("button", {
         name: "Als Master V1 freigeben & sperren",
@@ -694,6 +709,290 @@ const { createHash } = require("node:crypto");
         exact: true,
       }),
     ).toBeDisabled();
+    // Master Rebuild: only deterministic local protocol jobs, never a real Codex image request.
+    await nav(page, "Characters");
+    const rebuildBefore = await manifest(),
+      v1 = rebuildBefore.masters.at(-1),
+      oldExpressions = rebuildBefore.assets,
+      oldMasks = rebuildBefore.masks,
+      identityBefore = rebuildBefore.identityAssets;
+    const turnCount = async () =>
+      (await fs.readFile(path.join(root, "trace.jsonl"), "utf8"))
+        .split("\n")
+        .filter((l) => l.includes('"method":"turn/start"')).length;
+    const turnsBefore = await turnCount();
+    await page
+      .getByRole("button", { name: "Master neu aufbauen", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Master neu aufbauen", exact: true }),
+    ).toBeVisible();
+    await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
+      originalOutfit,
+    );
+    expect(await turnCount()).toBe(turnsBefore);
+    expect((await manifest()).characters[0].masterId).toBe(v1.id);
+    const gen = () =>
+      page.getByRole("button", {
+        name: "Neutralen Masterkandidaten generieren",
+        exact: true,
+      });
+    const job = () =>
+      page.getByRole("status", {
+        name: "Character Creator Status",
+        exact: true,
+      });
+    const approveButton = () =>
+      page.getByRole("button", {
+        name: "Als Master V2 freigeben & aktivieren",
+        exact: true,
+      });
+    const assertOld = async () => {
+      const p = await manifest();
+      expect(p.characters[0].masterId).toBe(v1.id);
+      expect(p.assets).toEqual(oldExpressions);
+      expect(p.masks).toEqual(oldMasks);
+      expect(p.identityAssets).toEqual(identityBefore);
+    };
+    await field(page, "Creator Promptmodus", { exact: true }).selectOption(
+      "supplement",
+    );
+    await field(page, "Creator Ergänzende Anweisung", { exact: true }).fill(
+      "Use a solid black background",
+    );
+    await expect(gen()).toBeDisabled();
+    await expect(page.locator(".create-action-bar")).toContainText(
+      "widerspricht",
+    );
+    await field(page, "Creator Ergänzende Anweisung", { exact: true }).fill(
+      "Restrained illustrated contours",
+    );
+    await field(page, "Creator Promptmodus", { exact: true }).selectOption(
+      "automatic",
+    );
+    await fs.writeFile(path.join(output, "result.png"), Buffer.from(result)); // real opaque PNG fixture
+    await fs.writeFile(path.join(root, "scenario"), "delayed");
+    await gen().click();
+    await expect(job()).toContainText("läuft");
+    await assertOld();
+    await expect(gen()).toBeDisabled();
+    const parallel = await page.evaluate(async () => {
+      const r = await window.laceframe.generationStatus();
+      if (!r.ok) throw new Error(r.error);
+      const a = r.value.snapshot.project.masterAttempts.at(-1);
+      return window.laceframe.startGeneration({
+        ...a,
+        operation: "create-character-master",
+      });
+    });
+    expect(parallel.ok).toBe(false);
+    await expect(job()).toContainText("abgeschlossen");
+    await assertOld();
+    const opaque = (await manifest()).masterCandidates.at(-1);
+    await expect(
+      page.getByRole("status", {
+        name: "Master Transparenzprüfung",
+        exact: true,
+      }),
+    ).toContainText("keinen echten transparenten Hintergrund");
+    await expect(approveButton()).toBeDisabled();
+    const denied = await page.evaluate(
+      (c) =>
+        window.laceframe.command({
+          type: "reviewMasterCandidate",
+          id: c.id,
+          status: "approved",
+          review: {
+            sourceSha256: c.sha256,
+            identityConfirmed: true,
+            silhouetteConfirmed: true,
+            activationConfirmed: true,
+            notes: "Direct IPC must still fail transparency",
+          },
+        }),
+      opaque,
+    );
+    expect(denied.ok).toBe(false);
+    expect(denied.error).toContain("transparenten Hintergrund");
+    await fs.mkdir("artifacts", { recursive: true });
+    await page.locator(".master-approval:visible").scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: "artifacts/master-rebuild-opaque.png",
+      fullPage: true,
+    });
+    await page
+      .locator(".master-approval:visible")
+      .getByRole("button", { name: "Hintergrund freistellen", exact: true })
+      .click();
+    const editor = page.getByRole("dialog", {
+      name: "Freistellungsmaske",
+      exact: true,
+    });
+    await expect(editor).toBeVisible();
+    await expect(
+      editor.getByRole("status", {
+        name: "Freistellung Berechnung",
+        exact: true,
+      }),
+    ).toContainText("Vorschau bereit");
+    await editor
+      .getByRole("button", { name: "Editor schließen", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Masterkandidat ablehnen", exact: true })
+      .click();
+    await assertOld();
+    await fs.writeFile(path.join(root, "scenario"), "image-failed");
+    await gen().click();
+    await expect(job()).toContainText("fehlgeschlagen");
+    await assertOld();
+    await expect(gen()).toBeEnabled();
+    await fs.writeFile(path.join(root, "scenario"), "hang");
+    await gen().click();
+    await expect(job()).toContainText("läuft");
+    await page
+      .getByRole("button", { name: "Mastergenerierung abbrechen", exact: true })
+      .click();
+    await expect(job()).toContainText("abgebrochen");
+    await assertOld();
+    await expect(gen()).toBeEnabled();
+    await fs.writeFile(
+      path.join(output, "result.png"),
+      Buffer.from(approvedResult),
+    );
+    await fs.writeFile(path.join(root, "scenario"), "delayed");
+    await gen().click();
+    await expect(job()).toContainText("läuft");
+    await expect(job()).toContainText("abgeschlossen");
+    await assertOld();
+    const pending = (await manifest()).masterCandidates.at(-1),
+      attempt = (await manifest()).masterAttempts.at(-1);
+    expect(attempt.mode).toBe("rebuild");
+    expect(attempt.baseMasterId).toBe(v1.id);
+    expect(attempt.promptRevision.prompt).toContain("NOT an edit/cutout");
+    expect(attempt.promptRevision.prompt).toContain(
+      "genuinely transparent background",
+    );
+    // Reopen a pending rebuild in the existing Creator; active V1 must persist until human approval.
+    await app.close();
+    await launch();
+    await chooser(project);
+    await page
+      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .click();
+    await expect(
+      image(page, "Freigegebener Master V1", { exact: true }),
+    ).toBeVisible();
+    await assertOld();
+    await nav(page, "Library");
+    await field(page, "Library Asset", { exact: true }).selectOption(
+      pending.id,
+    );
+    await expect(
+      page.getByRole("status", {
+        name: "Master Transparenzprüfung",
+        exact: true,
+      }),
+    ).toContainText("Transparenz vorhanden");
+    await page
+      .getByRole("button", {
+        name: "Im Studio prüfen und bearbeiten",
+        exact: true,
+      })
+      .click();
+    await expect(approveButton()).toBeDisabled();
+    await field(page, "Master Identität bestätigt", { exact: true }).check();
+    await field(page, "Master Silhouette geprüft", { exact: true }).check();
+    await field(page, "Master Aktivierung bestätigen", { exact: true }).check();
+    await field(page, "Master Prüfnotiz", { exact: true }).fill(
+      "Synthetic rebuild identity, silhouette, outfit and alpha approved",
+    );
+    await expect(approveButton()).toBeEnabled();
+    for (const [width, height] of [
+      [960, 720],
+      [1280, 800],
+      [1440, 900],
+      [1920, 1080],
+    ]) {
+      await app.evaluate(
+        ({ BrowserWindow }, { width, height }) =>
+          BrowserWindow.getAllWindows()
+            .find((w) => w.isVisible())
+            .setContentSize(width, height),
+        { width, height },
+      );
+      await page.locator(".master-approval:visible").scrollIntoViewIfNeeded();
+      const rejectBounds = await page
+        .getByRole("button", { name: "Masterkandidat ablehnen", exact: true })
+        .boundingBox();
+      expect(rejectBounds.height).toBeLessThan(64);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+        ),
+      ).toBe(true);
+      for (const background of ["light", "dark", "checker"])
+        await field(page, "Vergleich Prüfhintergrund", {
+          exact: true,
+        }).selectOption(background);
+      await page.screenshot({
+        path: `artifacts/master-rebuild-${width}.png`,
+        fullPage: true,
+      });
+    }
+    await approveButton().click();
+    await expect(page.locator(".notice")).toContainText(
+      "Neuer Master aktiviert",
+    );
+    const activated = await manifest(),
+      v2 = activated.masters.at(-1);
+    expect(v2.version).toBe(2);
+    expect(v2.previousMasterId).toBe(v1.id);
+    expect(v2.sourceCandidateId).toBe(pending.id);
+    expect(v2.qualitySourceId).toBeUndefined();
+    expect(v2.masterReview.sourceSha256).toBe(v2.sha256);
+    expect(activated.characters).toHaveLength(rebuildBefore.characters.length);
+    expect(activated.assets).toEqual(oldExpressions);
+    expect(activated.masks).toEqual(oldMasks);
+    expect(activated.identityAssets).toEqual(identityBefore);
+    await page
+      .getByRole("button", {
+        name: "Expressions mit diesem Master erstellen",
+        exact: true,
+      })
+      .click();
+    await expect(
+      field(page, "Create Masterversion", { exact: true }),
+    ).toHaveValue(v2.id);
+    await nav(page, "Characters");
+    await expect(
+      image(page, "Freigegebener Master V2", { exact: true }),
+    ).toBeVisible();
+    await page.locator(".master-history summary").click();
+    await expect(page.locator(".master-history")).toContainText(
+      "Master V1 · historisch archiviert",
+    );
+    await expect(page.locator(".master-history")).toContainText(
+      "Master V2 · aktuell aktiv",
+    );
+    await expect(page.locator(".master-history")).toContainText(
+      "Vollständige Rebuild-Generation",
+    );
+    await page.screenshot({
+      path: "artifacts/master-rebuild-history.png",
+      fullPage: true,
+    });
+    expect(
+      (
+        await page.evaluate(
+          (id) => window.laceframe.relightEligibility(id),
+          v2.id,
+        )
+      ).value.allowed,
+    ).toBe(false);
+    console.log(
+      "PASS Master Rebuild: same character, retained references/outfit, zero turns on preparation, opaque RGBA gate and direct IPC denial, cutout rescue editor, rejection/failure/cancel/retry, restart pending review, explicit V2 activation with genuine generation provenance, unchanged V1 expressions/masks, active Studio version, history and 960/1280/1440/1920 backgrounds. Protocol fixture only.",
+    );
     expect(errors).toEqual([]);
     console.log(
       "PASS Character Creator: JPEG chooser + PNG/WebP drops, three identity/one style input order, no-master generation, neutral/outfit prompt, single-job lock, timer/failure/cancel/retry, rejected/approved candidates, immutable Master V1, native Expression handoff, archived private sources, close/relaunch/reopen, 960px layout and secure typed IPC. UX-01: missing prerequisites/focus, retained master draft across mode/workspace/style revisions, automatic/supplement/expert conflict, sticky cancel across Characters/Art Direction/Library, exact candidate handoff, Library raw PNG+JSON export and same-master return, 960x720/1440x900 layout. Explicit protocol fixture only; no live AI calls.",

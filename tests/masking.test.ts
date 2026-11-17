@@ -1,3 +1,4 @@
+import { seedHistoricalMaster } from "./historical-master";
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs/promises";
 import os from "node:os";
@@ -184,11 +185,11 @@ beforeEach(async () => {
   await service.create(dir, "Synthetic mask project");
   await service.command({ type: "addCharacter", name: "Identity A" });
   const staged = await service.stage(png(2, 3, 10), "master.png");
-  await service.command({
-    type: "confirmMaster",
-    characterId: service.snapshot().project.selectedCharacterId,
-    token: staged.token,
-  });
+  await seedHistoricalMaster(
+    service,
+    staged,
+    service.snapshot().project.selectedCharacterId,
+  );
 });
 afterEach(async () => {
   await fs.rm(dir, { recursive: true, force: true });
@@ -355,11 +356,7 @@ describe("immutable mask/review/provenance project boundary", () => {
     await service.command({ type: "addCharacter", name: "Identity B" });
     const p = service.snapshot().project,
       staged = await service.stage(png(2, 3, 70), "second.png");
-    await service.command({
-      type: "confirmMaster",
-      characterId: p.selectedCharacterId,
-      token: staged.token,
-    });
+    await seedHistoricalMaster(service, staged, p.selectedCharacterId);
     await expect(
       service.command({
         type: "saveMask",

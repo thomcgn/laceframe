@@ -25,6 +25,7 @@ export function analyzePixels(p: Pixels, format = "png"): QualityReport {
     opaque: 0,
     edgeTransparent: 0,
     edgePixels: 0,
+    exteriorTransparent: 0,
     status: "opaque",
     warnings: [],
     palette: [],
@@ -68,6 +69,37 @@ export function analyzePixels(p: Pixels, format = "png"): QualityReport {
           .join(""),
       pixels,
     }));
+  // Flood only alpha-zero pixels connected to any image edge (4-neighbour).
+  // This is geometric evidence, never automatic silhouette recognition.
+  if (r.transparent) {
+    const seen = new Uint8Array(p.width * p.height),
+      queue = new Uint32Array(p.width * p.height);
+    let head = 0,
+      tail = 0;
+    const add = (i: number) => {
+      if (!seen[i] && p.data[i * 4 + 3] === 0) {
+        seen[i] = 1;
+        queue[tail++] = i;
+      }
+    };
+    for (let x = 0; x < p.width; x++) {
+      add(x);
+      add((p.height - 1) * p.width + x);
+    }
+    for (let y = 0; y < p.height; y++) {
+      add(y * p.width);
+      add(y * p.width + p.width - 1);
+    }
+    while (head < tail) {
+      const i = queue[head++],
+        x = i % p.width;
+      if (x) add(i - 1);
+      if (x + 1 < p.width) add(i + 1);
+      if (i >= p.width) add(i - p.width);
+      if (i + p.width < seen.length) add(i + p.width);
+    }
+    r.exteriorTransparent = tail;
+  }
   r.status =
     r.transparent + r.partial === 0
       ? "opaque"

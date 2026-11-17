@@ -1,3 +1,4 @@
+const { reviewImport } = require("./historical-master-fixture.cjs");
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -41,6 +42,10 @@ const { field, nav } = require("./smoke-ui.cjs");
     ).toBeVisible();
     const png = new PNG({ width: 16, height: 16 });
     png.data.fill(180);
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++)
+        if (!x || !y || x === 15 || y === 15)
+          png.data[(y * 16 + x) * 4 + 3] = 0;
     await page.evaluate(
       (bytes) => {
         const dataTransfer = new DataTransfer();
@@ -57,6 +62,7 @@ const { field, nav } = require("./smoke-ui.cjs");
       },
       [...PNG.sync.write(png)],
     );
+    await reviewImport(page);
     await page
       .getByRole("button", {
         name: "Freigegebenen Master sperren",

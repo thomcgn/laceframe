@@ -13,7 +13,7 @@ import { MaskEditor } from "./MaskEditor";
 import { MasterCandidateCompare } from "./MasterCandidateCompare";
 import { ImagePreview } from "./ImagePreview";
 type Asset = { id: string; width: number; height: number; characterId: string };
-function Evidence({ id, label }: { id: string; label: string }) {
+export function Evidence({ id, label }: { id: string; label: string }) {
   const [report, setReport] = useState<QualityReport>(),
     [error, setError] = useState("");
   useEffect(() => {
@@ -82,11 +82,15 @@ export function AssetQuality({
   project,
   onSnapshot,
   disabled = false,
+  cutoutRequested = 0,
+  onCutoutOpened,
 }: {
   source: Asset;
   project: Project;
   onSnapshot: (s: Snapshot) => void;
   disabled?: boolean;
+  cutoutRequested?: number;
+  onCutoutOpened?: () => void;
 }) {
   const [relighting, setRelighting] = useState<{
     source: Asset;
@@ -110,6 +114,13 @@ export function AssetQuality({
     recipeId?: string;
     name?: string;
   }>();
+  useEffect(() => {
+    if (cutoutRequested) {
+      setExpanded(true);
+      setEditor({ source });
+      onCutoutOpened?.();
+    }
+  }, [cutoutRequested]);
   const derivatives = project.qualityAssets.filter((q) => {
     let id = q.sourceId;
     const seen = new Set<string>();
@@ -282,6 +293,7 @@ export function AssetQuality({
       />
       <details
         className="asset-quality"
+        open={expanded}
         data-testid="asset-quality"
         onToggle={(e) => setExpanded(e.currentTarget.open)}
       >
@@ -443,29 +455,35 @@ export function AssetQuality({
                     <div className="button-row">
                       <button
                         disabled={busy || !confirmed || !notes.trim()}
-                        onClick={() =>
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              "Qualitätsversion ausdrücklich freigeben? Ein neuer Master wird als aktuelle Version aktiviert; bisherige Master und Expressions bleiben unverändert erhalten.",
+                            )
+                          )
+                            return;
                           void command({
                             type: "reviewQuality",
                             id: derivative.id,
                             status: "approved",
                             notes,
                             confirmStyleAndSilhouette: true,
-                          }).catch(() => {})
-                        }
+                          }).catch(() => {});
+                        }}
                       >
                         Qualitätsversion freigeben
                       </button>
                       <button
                         disabled={busy || !notes.trim()}
-                        onClick={() =>
+                        onClick={() => {
                           void command({
                             type: "reviewQuality",
                             id: derivative.id,
                             status: "rejected",
                             notes,
                             confirmStyleAndSilhouette: true,
-                          }).catch(() => {})
-                        }
+                          }).catch(() => {});
+                        }}
                       >
                         Qualitätsversion ablehnen
                       </button>

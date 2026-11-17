@@ -1,3 +1,4 @@
+const { seedHistoricalMaster } = require("./historical-master-fixture.cjs");
 const { selectMaskTool, zoomMask } = require("./smoke-ui.cjs");
 // Real pixel pipeline/worker/editor. Synthetic 1254px fixture only; no generation.
 const { _electron: electron, expect } = require("@playwright/test");
@@ -134,30 +135,8 @@ const fs = require("node:fs/promises"),
       }
     p.data.set([77, 44, 22, 128], (600 * 1254 + 600) * 4);
     const original = PNG.sync.write(p);
-    await page.evaluate(
-      async (bytes) => {
-        const s = await window.laceframe.stageImage(
-          new Uint8Array(bytes),
-          "synthetic.png",
-        );
-        if (!s.ok) throw new Error(s.error);
-        const q = await window.laceframe.command({
-          type: "addCharacter",
-          name: "temporary draft",
-        });
-        if (!q.ok) throw new Error(q.error);
-        const id = q.value.project.characters[0].id;
-        await window.laceframe.command({ type: "selectCharacter", id });
-        const r = await window.laceframe.command({
-          type: "confirmMaster",
-          characterId: id,
-          token: s.value.token,
-        });
-        if (!r.ok) throw new Error(r.error);
-      },
-      [...original],
-    );
     await app.close();
+    await seedHistoricalMaster(project, original);
     await launch();
     await chooser(project);
     await page
@@ -203,6 +182,8 @@ const fs = require("node:fs/promises"),
           window.__eventsListening = true;
           for (const t of [
             "pointerdown",
+            "pointermove",
+            "gotpointercapture",
             "pointerup",
             "pointercancel",
             "lostpointercapture",
@@ -218,6 +199,9 @@ const fs = require("node:fs/promises"),
                   related: e.relatedTarget?.className,
                   buttons: e.buttons,
                   id: e.pointerId,
+                  x: e.clientX,
+                  y: e.clientY,
+                  focused: document.hasFocus(),
                 });
                 if (window.__editorEvents.length > 128)
                   window.__editorEvents.shift();
@@ -231,6 +215,16 @@ const fs = require("node:fs/promises"),
       });
       const pt = await canvasPoint(x, y);
       await page.mouse.move(pt.x, pt.y);
+      // Flush the preceding control click and its scheduled paints before opening
+      // a new native capture. No retry or recreated capture during the stroke.
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            window.requestAnimationFrame(() =>
+              window.requestAnimationFrame(resolve),
+            ),
+          ),
+      );
       await page.mouse.down();
       await page.mouse.move(pt.x + 8, pt.y, { steps: 16 });
       await expect.poll(async () => (await rgba(x, y))[3]).toBe(alpha);

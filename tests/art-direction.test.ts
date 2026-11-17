@@ -1,3 +1,4 @@
+import { seedHistoricalMaster } from "./historical-master";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs/promises";
 import os from "node:os";
@@ -34,19 +35,11 @@ describe("Art Direction and personal expression identity", () => {
     await service.command({ type: "addCharacter", name: "Ada" });
     const ada = service.snapshot().project.selectedCharacterId!;
     const adaImage = await service.stage(png(17, 31), "ada.png");
-    await service.command({
-      type: "confirmMaster",
-      characterId: ada,
-      token: adaImage.token,
-    });
+    await seedHistoricalMaster(service, adaImage, ada);
     await service.command({ type: "addCharacter", name: "Peter" });
     const peter = service.snapshot().project.selectedCharacterId!;
     const peterImage = await service.stage(png(18, 30), "peter.png");
-    await service.command({
-      type: "confirmMaster",
-      characterId: peter,
-      token: peterImage.token,
-    });
+    await seedHistoricalMaster(service, peterImage, peter);
     await service.command({
       type: "addArtDirection",
       name: "Illustrated Noir",
@@ -149,11 +142,7 @@ describe("Art Direction and personal expression identity", () => {
     await service.command({ type: "addCharacter", name: "Ada" });
     const id = service.snapshot().project.selectedCharacterId!;
     const photo = await service.stage(png(17, 31), "master.png");
-    await service.command({
-      type: "confirmMaster",
-      characterId: id,
-      token: photo.token,
-    });
+    await seedHistoricalMaster(service, photo, id);
     const hash = service.snapshot().project.masters[0].sha256;
     await service.command({
       type: "addArtDirection",
@@ -170,11 +159,7 @@ async function readyCharacter(name = "Ada") {
   await service.command({ type: "addCharacter", name });
   const characterId = service.snapshot().project.selectedCharacterId!;
   const image = await service.stage(png(23, 31), "synthetic.png");
-  await service.command({
-    type: "confirmMaster",
-    characterId,
-    token: image.token,
-  });
+  await seedHistoricalMaster(service, image, characterId);
   const p = service.snapshot().project,
     master = p.masters.find((m) => m.characterId === characterId)!,
     variant = p.variants[0];

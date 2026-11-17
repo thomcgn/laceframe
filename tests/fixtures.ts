@@ -1,3 +1,4 @@
+import { PNG } from "pngjs";
 import { deflateSync } from "node:zlib";
 // Synthetic PNG generated in memory: no user portraits or binary fixtures in git.
 export function png(width = 2, height = 3, shade = 100): Buffer {
@@ -35,4 +36,22 @@ export function png(width = 2, height = 3, shade = 100): Buffer {
     chunk("IDAT", deflateSync(pixels)),
     chunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+export function transparentPng(width = 41, height = 53, shade = 100) {
+  const p = PNG.sync.read(png(width, height, shade));
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++)
+      if (!x || !y || x === width - 1 || y === height - 1)
+        p.data[(y * width + x) * 4 + 3] = 0;
+  return PNG.sync.write(p);
+}
+export function masterReview(sha256: string) {
+  return {
+    sourceSha256: sha256,
+    identityConfirmed: true as const,
+    silhouetteConfirmed: true as const,
+    activationConfirmed: true as const,
+    notes: "Synthetic manual identity and silhouette review",
+  };
 }
