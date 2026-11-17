@@ -1,0 +1,135 @@
+name: Quality
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      risk: ${{ steps.classify.outputs.risk }}
+      profile: ${{ steps.classify.outputs.profile }}
+      groups: ${{ steps.classify.outputs.groups }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify actual Git changes using the base revision's policy
+        id: classify
+        env:
+          POLICY_BASE: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$POLICY_BASE" =~ ^[a-f0-9]{40,64}$ ]]; then
+            echo "Invalid policy base; refusing a reduced profile" >&2
+            exit 1
+          fi
+          if [[ "$POLICY_BASE" =~ ^0+$ ]]; then
+            printf 'risk=HIGH\nprofile=full\ngroups=creator,expressions,art-direction,cutout,relighting,native,persistence\n' >> "$GITHUB_OUTPUT"
+            echo "Initial push: full bootstrap regression required"
+          else
+            git cat-file -e "$POLICY_BASE^{commit}"
+            if git cat-file -e "$POLICY_BASE:scripts/quality-classifier.cjs" 2>/dev/null; then
+              git show "$POLICY_BASE:scripts/quality-classifier.cjs" > "$RUNNER_TEMP/trusted-quality-classifier.cjs"
+              node "$RUNNER_TEMP/trusted-quality-classifier.cjs" --json
+            else
+              printf 'risk=HIGH\nprofile=full\ngroups=creator,expressions,art-direction,cutout,relighting,native,persistence\n' >> "$GITHUB_OUTPUT"
+              echo "Base has no classifier yet: full bootstrap regression required"
+            fi
+          fi
+
+  checks:
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      validated: ${{ steps.run.outputs.validated }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Desktop dependencies (only when required)
+        if: needs.changes.outputs.risk != 'LOW'
+        run: |
+          set -euo pipefail
+          npx --no-install playwright install-deps chromium
+          sudo apt-get install -y --no-install-recommends openbox dbus-x11
+          # The disposable runner allows Chromium's user-namespace sandbox.
+          # No --no-sandbox argument or renderer security relaxation is used.
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Execute all required checks, once per profile
+        id: run
+        env:
+          REQUIRED_RISK: ${{ needs.changes.outputs.risk }}
+          QUALITY_RISK_FLOOR: ${{ needs.changes.outputs.risk }}
+        run: |
+          set -euo pipefail
+          case "$REQUIRED_RISK" in
+            LOW)
+              npm run check:fast
+              requested=fast
+              ;;
+            MEDIUM)
+              npm run check:fast
+              requested=targeted
+              ;;
+            HIGH)
+              requested=full
+              ;;
+            *) echo "Unknown risk; refusing a reduced profile" >&2; exit 1 ;;
+          esac
+          if [[ "$requested" != fast ]]; then
+            export QUALITY_PROFILE="$requested"
+            xvfb-run -a -s '-screen 0 1920x1080x24 -nolisten tcp' dbus-run-session -- bash -euo pipefail -c '
+              openbox > /tmp/laceframe-openbox.log 2>&1 &
+              manager=$!
+              trap '\''kill "$manager" 2>/dev/null || true'\'' EXIT
+              node scripts/quality-runner.cjs "$QUALITY_PROFILE"
+            '
+          fi
+          export QUALITY_REQUESTED="$requested"
+          node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(`artifacts/quality/${process.env.QUALITY_REQUESTED}.json`,"utf8")); if(r.status!=="passed") throw new Error("No completed required checks"); fs.appendFileSync(process.env.GITHUB_OUTPUT,`validated=${r.profile}\n`);'
+      - name: Upload synthetic diagnostics and actual profile evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
+  quality-gate:
+    name: quality-gate
+    if: always()
+    needs: [changes, checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Reject failed, cancelled, skipped or missing required checks
+        env:
+          QUALITY_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node scripts/quality-gate.cjs

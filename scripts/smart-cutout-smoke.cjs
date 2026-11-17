@@ -89,6 +89,8 @@ const fs = require("node:fs/promises"),
     await clickPixel(x, y);
     await ready();
   };
+  // Canvas repaints follow UI state/worker completion on a later animation frame.
+  // Pixel assertions below await their exact values; no tolerances or fixed sleeps.
   const rgba = async (x, y) =>
     dialog()
       .locator("canvas")
@@ -151,7 +153,7 @@ const fs = require("node:fs/promises"),
       .getByRole("button", { name: "Hintergrund freistellen", exact: true })
       .click();
     await ready();
-    expect(await rgba(625, 950)).toEqual([0, 0, 0, 255]);
+    await expect.poll(() => rgba(625, 950)).toEqual([0, 0, 0, 255]);
     const before = await fs.readFile(path.join(project, "laceframe.json"));
     // UX-02: live stroke assertions intentionally happen BEFORE pointerup.
     const canvasPoint = async (x, y) => {
@@ -312,12 +314,12 @@ const fs = require("node:fs/promises"),
     await dialog()
       .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
-    expect((await rgba(100, 100))[3]).toBe(255);
+    await expect.poll(async () => (await rgba(100, 100))[3]).toBe(255);
     await dialog()
       .getByRole("button", { name: "Wiederholen", exact: true })
       .click();
     await ready();
-    expect((await rgba(100, 100))[3]).toBe(0);
+    await expect.poll(async () => (await rgba(100, 100))[3]).toBe(0);
     await selectMaskTool(dialog(), "protect");
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("40");
     let hp = await canvasPoint(625, 600);
@@ -726,7 +728,7 @@ const fs = require("node:fs/promises"),
     await toolSelect("pick");
     await clickPixel(100, 100);
     await ready();
-    expect((await rgba(625, 960))[3]).toBe(0); // Jacket touches same-color background.
+    await expect.poll(async () => (await rgba(625, 960))[3]).toBe(0); // Jacket touches same-color background.
     await toolSelect("polygon");
     for (const [x, y] of [
       [410, 170],
@@ -762,18 +764,18 @@ const fs = require("node:fs/promises"),
     await dialog()
       .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
-    expect((await rgba(625, 960))[3]).toBe(255);
-    expect((await rgba(100, 100))[3]).toBe(0);
+    await expect.poll(async () => (await rgba(625, 960))[3]).toBe(255);
+    await expect.poll(async () => (await rgba(100, 100))[3]).toBe(0);
     await dialog()
       .getByRole("button", { name: "Rückgängig", exact: true })
       .click();
     await ready();
-    expect((await rgba(625, 960))[3]).toBe(0);
+    await expect.poll(async () => (await rgba(625, 960))[3]).toBe(0);
     await dialog()
       .getByRole("button", { name: "Wiederholen", exact: true })
       .click();
     await ready();
-    expect((await rgba(625, 960))[3]).toBe(255);
+    await expect.poll(async () => (await rgba(625, 960))[3]).toBe(255);
     // Force then protect the same region; human operation, not semantic detection.
     for (const operation of ["force", "protect"]) {
       await dialog()
@@ -795,7 +797,9 @@ const fs = require("node:fs/promises"),
       await dialog()
         .getByLabel("Entfernten Bereich anzeigen", { exact: true })
         .uncheck();
-      expect((await rgba(600, 600))[3]).toBe(operation === "force" ? 0 : 128);
+      await expect
+        .poll(async () => (await rgba(600, 600))[3])
+        .toBe(operation === "force" ? 0 : 128);
     }
     await dialog()
       .getByRole("button", { name: "Rückgängig", exact: true })
@@ -818,7 +822,7 @@ const fs = require("node:fs/promises"),
     await selectMaskTool(dialog(), "protect");
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("200");
     await brush("protect", 625, 960);
-    expect(await rgba(625, 960)).toEqual([40, 100, 70, 255]);
+    await expect.poll(() => rgba(625, 960)).toEqual([40, 100, 70, 255]);
     await selectMaskTool(dialog(), "protect");
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("90");
     await brush("protect", 625, 230);
@@ -834,10 +838,10 @@ const fs = require("node:fs/promises"),
     await dialog()
       .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
-    expect((await rgba(100, 100))[3]).toBe(0);
-    expect(await rgba(625, 960)).toEqual([0, 0, 0, 255]);
-    expect(await rgba(625, 230)).toEqual([9, 5, 4, 255]);
-    expect(await rgba(520, 430)).toEqual([0, 0, 0, 255]);
+    await expect.poll(async () => (await rgba(100, 100))[3]).toBe(0);
+    await expect.poll(() => rgba(625, 960)).toEqual([0, 0, 0, 255]);
+    await expect.poll(() => rgba(625, 230)).toEqual([9, 5, 4, 255]);
+    await expect.poll(() => rgba(520, 430)).toEqual([0, 0, 0, 255]);
     await selectMaskTool(dialog(), "protect");
     await dialog().getByLabel("Pinselgröße", { exact: true }).fill("12");
     await brush("force", 600, 650);
@@ -847,7 +851,7 @@ const fs = require("node:fs/promises"),
     await dialog()
       .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
-    expect((await rgba(600, 650))[3]).toBe(0);
+    await expect.poll(async () => (await rgba(600, 650))[3]).toBe(0);
     // Force on the protected coat is a visible conflict; protection wins.
     await brush("force", 625, 960);
     await expect(
@@ -862,7 +866,7 @@ const fs = require("node:fs/promises"),
     await dialog()
       .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
-    expect((await rgba(625, 960))[3]).toBe(255);
+    await expect.poll(async () => (await rgba(625, 960))[3]).toBe(255);
     await dialog()
       .getByRole("button", { name: "Rückgängig", exact: true })
       .click();
@@ -905,11 +909,11 @@ const fs = require("node:fs/promises"),
     await dialog()
       .getByLabel("Freistellung Bildansicht", { exact: true })
       .selectOption("original");
-    expect((await rgba(100, 100))[3]).toBe(255);
+    await expect.poll(async () => (await rgba(100, 100))[3]).toBe(255);
     await dialog()
       .getByLabel("Freistellung Bildansicht", { exact: true })
       .selectOption("alpha");
-    expect(await rgba(100, 100)).toEqual([0, 0, 0, 255]);
+    await expect.poll(() => rgba(100, 100)).toEqual([0, 0, 0, 255]);
     await dialog()
       .getByLabel("Freistellung Bildansicht", { exact: true })
       .selectOption("result");
@@ -1004,7 +1008,7 @@ const fs = require("node:fs/promises"),
     await dialog()
       .getByLabel("Entfernten Bereich anzeigen", { exact: true })
       .uncheck();
-    expect((await rgba(600, 650))[3]).toBe(255);
+    await expect.poll(async () => (await rgba(600, 650))[3]).toBe(255);
     // Cancel invalidates save; explicit retry restores a usable current preview.
     await selectMaskTool(dialog(), "pick");
     await dialog()

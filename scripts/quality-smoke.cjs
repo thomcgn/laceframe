@@ -121,14 +121,17 @@ const { createHash } = require("node:crypto");
     await expect(
       editor.getByLabel("Maskenüberlagerung", { exact: true }),
     ).not.toBeChecked();
-    expect(await previewPixel(12, 16)).toEqual([190, 70, 30, 255]);
+    await expect.poll(() => previewPixel(12, 16)).toEqual([190, 70, 30, 255]);
     await editor.getByLabel("Maskenüberlagerung", { exact: true }).check();
+    // React schedules the canvas paint separately from the checkbox update.
+    // Wait for the exact tint; reading immediately races requestAnimationFrame on CI.
+    await expect.poll(() => previewPixel(12, 16)).toEqual([174, 106, 78, 255]);
     const tinted = await previewPixel(12, 16);
     expect(tinted[3]).toBe(255);
     expect(tinted[0]).toBeGreaterThan(tinted[1]);
     expect(tinted).not.toEqual(await previewPixel(16, 16));
     await editor.getByLabel("Maskenüberlagerung", { exact: true }).uncheck();
-    expect(await previewPixel(12, 16)).toEqual([190, 70, 30, 255]);
+    await expect.poll(() => previewPixel(12, 16)).toEqual([190, 70, 30, 255]);
     if (
       (await editor.locator(".editor-advanced").getAttribute("open")) === null
     )
