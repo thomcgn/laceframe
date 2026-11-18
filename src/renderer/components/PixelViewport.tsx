@@ -1,3 +1,4 @@
+import { anchoredPan, fitScale } from "./editor-geometry";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 /** Camera only: native canvas pixels and export calculations are never changed. */
 export function PixelViewport({
@@ -25,6 +26,7 @@ export function PixelViewport({
     pan: typeof pan;
   } | null>(null);
   const moved = useRef(false);
+  const held = useRef(false);
   useEffect(() => {
     const node = ref.current!;
     const update = () =>
@@ -34,17 +36,25 @@ export function PixelViewport({
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  const fit = Math.min(size.width / width, size.height / height);
+  const fit = fitScale(size, { width, height });
   const scale = zoom ?? localZoom ?? fit;
-  const setZoom = (value: number) => {
+  const setZoom = (
+    value: number,
+    point = { x: size.width / 2, y: size.height / 2 },
+  ) => {
     const next = Math.max(0.01, Math.min(32, value));
+    setPan(anchoredPan(size, { width, height }, pan, scale, next, point));
     if (onZoom) onZoom(next);
     else setLocalZoom(next);
   };
   const wheel = useRef<(event: WheelEvent) => void>(() => {});
   wheel.current = (event) => {
     event.preventDefault();
-    setZoom(scale * Math.exp(-event.deltaY * 0.001));
+    const rect = ref.current!.getBoundingClientRect();
+    setZoom(scale * Math.exp(-event.deltaY * 0.001), {
+      x: event.clientX - rect.left - ref.current!.clientLeft,
+      y: event.clientY - rect.top - ref.current!.clientTop,
+    });
   };
   useEffect(() => {
     const element = ref.current!;
@@ -69,6 +79,16 @@ export function PixelViewport({
           Einpassen
         </button>
         <button onClick={() => setZoom(1)}>1:1</button>
+        <button onClick={() => setZoom(2)}>200%</button>
+        <button onClick={() => setZoom(4)}>400%</button>
+        <input
+          aria-label="Zoomregler"
+          type="range"
+          min="1"
+          max="800"
+          value={Math.max(1, Math.min(800, scale * 100))}
+          onChange={(e) => setZoom(Number(e.target.value) / 100)}
+        />
         <button
           aria-label="Bild verkleinern"
           onClick={() => setZoom(scale / 1.25)}
@@ -96,8 +116,23 @@ export function PixelViewport({
         ref={ref}
         tabIndex={0}
         aria-label="Bildfläche · Alt ziehen zum Verschieben"
+        onBlur={() => {
+          held.current = false;
+          drag.current = null;
+        }}
+        onKeyUp={(e) => {
+          if (e.code === "Space") {
+            held.current = false;
+            e.preventDefault();
+          }
+        }}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
+          if (e.code === "Space") {
+            held.current = true;
+            e.preventDefault();
+            return;
+          }
           if (
             [
               "+",
@@ -127,7 +162,7 @@ export function PixelViewport({
         }}
         onPointerDown={(e) => {
           moved.current = false;
-          if (!(hand || e.altKey || e.button === 1)) return;
+          if (!(hand || held.current || e.altKey || e.button === 1)) return;
           e.preventDefault();
           e.currentTarget.setPointerCapture(e.pointerId);
           drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, pan };
@@ -148,7 +183,7 @@ export function PixelViewport({
           drag.current = null;
         }}
         onClickCapture={(e) => {
-          if (moved.current || hand || e.altKey) {
+          if (moved.current || hand || held.current || e.altKey) {
             e.stopPropagation();
             e.preventDefault();
           }
