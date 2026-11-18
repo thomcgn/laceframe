@@ -1,3 +1,8 @@
+import { CodexStyleAnalysisProvider } from "./services/providers/codexStyleAnalysis";
+import {
+  styleDraftImportSchema,
+  draftReferencesSchema,
+} from "../shared/style-semantics";
 import { AppPreferences } from "./app-preferences";
 import { setLanguage } from "../shared/locales";
 import { tr } from "../shared/locales/index";
@@ -50,6 +55,15 @@ const generation = new GenerationController(
   service,
   new CodexImageGenerationProvider(),
 );
+const styleAnalysis = new CodexStyleAnalysisProvider();
+let styleProjectId: string | undefined;
+function resetStyleAnalysis() {
+  styleProjectId = undefined;
+  styleAnalysis.status = {
+    state: "idle",
+    message: "styleCreator.semanticIdle",
+  };
+}
 let queue: Promise<unknown> = Promise.resolve();
 function handle<T>(
   channel: string,
@@ -68,11 +82,13 @@ function handle<T>(
           )
             throw new Error(tr("errors.m00a41fab00"));
           if (
-            generation.running &&
+            (generation.running || styleAnalysis.running) &&
             ![
               "app:preferences",
               "app:set-language",
               "generation:status",
+              "style:status",
+              "style:cancel",
               "generation:cancel",
               "generation:providers",
               "image:preview",
@@ -117,6 +133,78 @@ function registerIPC(preferences: AppPreferences) {
     app.getPath("userData"),
     (options) => dialog.showOpenDialog(window, options),
   );
+  handle("style:import-images", async (input) => {
+    const request = styleDraftImportSchema.parse(input);
+    service.snapshot();
+    if (!request.files) {
+      const files = await imageDialogs.choose({
+        title: tr("styleCreator.import"),
+        properties: ["openFile", "multiSelections"],
+        filters: [
+          {
+            name: tr("styleCreator.reference", { index: "" }),
+            extensions: ["png", "jpg", "jpeg", "webp"],
+          },
+        ],
+      });
+      if (!files) return null;
+      if (files.length > 6) throw new Error(tr("styleCreator.tooMany"));
+      request.files = await Promise.all(
+        files.map(async (file) => ({
+          name: path.basename(file),
+          bytes: new Uint8Array(await readLimited(file, 8 * 1024 * 1024)),
+        })),
+      );
+    }
+    return service.stageStyleImages(request);
+  });
+  handle("style:discard-image", (input) => {
+    service.discardStyleImage(z.uuid().parse(input));
+    return null;
+  });
+  handle("style:draft-source", (input) =>
+    service.styleDraftSource(z.uuid().parse(input)),
+  );
+  handle("style:import-semantic", (input) => {
+    const value = z
+      .object({
+        json: z.string().max(128 * 1024),
+        references: draftReferencesSchema,
+      })
+      .strict()
+      .parse(input);
+    return service.importStyleSemantic(value.json, value.references);
+  });
+  handle("style:check", (input) => {
+    z.undefined().parse(input);
+    return styleAnalysis.check();
+  });
+  handle("style:start", (input) => {
+    const references = draftReferencesSchema.parse(input);
+    const images = service.styleReferenceBytes(references);
+    styleProjectId = service.snapshot().project.id;
+    return styleAnalysis.start(images);
+  });
+  handle("style:status", (input) => {
+    z.undefined().parse(input);
+    const status = styleAnalysis.status;
+    if (
+      status.state === "completed" &&
+      status.jobId &&
+      status.result &&
+      styleProjectId === service.snapshot().project.id
+    )
+      service.rememberStyleSemantic(
+        status.jobId,
+        status.result,
+        styleProjectId,
+      );
+    return status;
+  });
+  handle("style:cancel", (input) => {
+    z.undefined().parse(input);
+    return styleAnalysis.cancel();
+  });
   handle("identity:import", async (input) => {
     const request = identityImportSchema.parse(input);
     const slots = service.identitySlots(request.characterId, request.replaceId);
@@ -273,6 +361,7 @@ function registerIPC(preferences: AppPreferences) {
   handle("project:close", (input) => {
     z.undefined().parse(input);
     generation.resetProject();
+    resetStyleAnalysis();
     service.close();
     return null;
   });
@@ -282,9 +371,10 @@ function registerIPC(preferences: AppPreferences) {
       title: tr("errors.m874581407c"),
       properties: ["openDirectory", "createDirectory"],
     });
-    return selected.canceled
-      ? null
-      : service.create(selected.filePaths[0], name);
+    if (selected.canceled) return null;
+    const snapshot = await service.create(selected.filePaths[0], name);
+    resetStyleAnalysis();
+    return snapshot;
   });
   handle("project:open", async (input) => {
     z.undefined().parse(input);
@@ -292,7 +382,10 @@ function registerIPC(preferences: AppPreferences) {
       title: tr("errors.m5f40032eda"),
       properties: ["openDirectory"],
     });
-    return selected.canceled ? null : service.open(selected.filePaths[0]);
+    if (selected.canceled) return null;
+    const snapshot = await service.open(selected.filePaths[0]);
+    resetStyleAnalysis();
+    return snapshot;
   });
   handle("project:command", (input) =>
     service.command(commandSchema.parse(input)),
@@ -425,7 +518,10 @@ else {
     if (!shuttingDown) {
       event.preventDefault();
       shuttingDown = true;
-      void generation.close().finally(() => app.quit());
+      void Promise.allSettled([
+        generation.close(),
+        styleAnalysis.dispose(),
+      ]).finally(() => app.quit());
     }
   });
   app.on("window-all-closed", () => {

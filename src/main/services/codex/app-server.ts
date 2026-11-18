@@ -24,7 +24,7 @@ const envelope = z.object({
   error: z.unknown().optional(),
 });
 export type SpawnServer = (cwd: string) => ChildProcessWithoutNullStreams;
-export const spawnServer: SpawnServer = (cwd) => {
+const launchServer = (cwd: string, images: boolean) => {
   const env = { ...process.env };
   for (const key of [
     "OPENAI_API_KEY",
@@ -46,6 +46,7 @@ export const spawnServer: SpawnServer = (cwd) => {
       'forced_login_method="chatgpt"',
       "-c",
       "features.shell_tool=false",
+      ...(images ? [] : ["-c", "features.image_generation=false"]),
       "-c",
       "features.unified_exec=false",
       "-c",
@@ -62,6 +63,8 @@ export const spawnServer: SpawnServer = (cwd) => {
     { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
   );
 };
+export const spawnServer: SpawnServer = cwd => launchServer(cwd, true);
+export const spawnAnalysisServer: SpawnServer = cwd => launchServer(cwd, false);
 /** Only the documented stdio protocol; no HTTP, credentials or raw diagnostics leave this client. */
 export class AppServerClient extends EventEmitter {
   private child: ChildProcessWithoutNullStreams;

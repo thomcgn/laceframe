@@ -1,3 +1,9 @@
+import type {
+  StyleDraftImage,
+  StyleDraftReference,
+  SemanticStatus,
+  SemanticRecord,
+} from "./style-semantics";
 import type { RegionSelection } from "./color-region";
 import type { ColorDraft, MasterPalette } from "./color-consistency";
 import type { IdentityImport } from "./identity-import";
@@ -23,6 +29,24 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  importStyleImages(input: {
+    files?: { name: string; bytes: Uint8Array }[];
+    replaceToken?: string;
+  }): Promise<Result<StyleDraftImage[] | null>>;
+  discardStyleImage(token: string): Promise<Result<null>>;
+  styleDraftSource(
+    token: string,
+  ): Promise<Result<RelightPixels & { sha256: string }>>;
+  checkStyleAnalysis(): Promise<Result<SemanticStatus>>;
+  startStyleAnalysis(
+    references: StyleDraftReference[],
+  ): Promise<Result<SemanticStatus>>;
+  styleAnalysisStatus(): Promise<Result<SemanticStatus>>;
+  cancelStyleAnalysis(): Promise<Result<SemanticStatus>>;
+  importStyleSemantic(input: {
+    json: string;
+    references: StyleDraftReference[];
+  }): Promise<Result<{ receipt: string; record: SemanticRecord }>>;
   preferences(): Promise<Result<{ language: string }>>;
   setLanguage(language: string): Promise<Result<{ language: string }>>;
   closeProject(): Promise<Result<null>>;

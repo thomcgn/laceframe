@@ -43,7 +43,7 @@ export function supportsMultipleLocalImages(input: unknown) {
   );
 }
 /** Read-only CLI schema export; no account secrets, image turn, HTTP or fallback. */
-export async function probeReferenceCapability() {
+async function probeProtocolCapability(predicate: (input: unknown) => boolean) {
   const dir = await fs.mkdtemp(
     path.join(os.tmpdir(), "laceframe-codex-schema-"),
   );
@@ -66,12 +66,31 @@ export async function probeReferenceCapability() {
     const info = await fs.lstat(file);
     if (!info.isFile() || info.isSymbolicLink() || info.size > 2 * 1024 * 1024)
       return false;
-    return supportsMultipleLocalImages(
-      JSON.parse(await fs.readFile(file, "utf8")),
-    );
+    return predicate(JSON.parse(await fs.readFile(file, "utf8")));
   } catch {
     return false;
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
 }
+
+export function supportsSemanticImages(input: unknown) {
+  const parsed = schema.safeParse(input);
+  if (!parsed.success || !input || typeof input !== "object") return false;
+  const properties = (input as { properties: Record<string, unknown> })
+    .properties;
+  return (
+    Object.hasOwn(properties, "outputSchema") &&
+    (parsed.data.properties.input.maxItems ?? 6) >= 6 &&
+    parsed.data.definitions.UserInput.oneOf.some(
+      (v) =>
+        v.properties.type.enum.includes("localImage") &&
+        v.properties.path?.type === "string" &&
+        v.required.includes("path"),
+    )
+  );
+}
+export const probeReferenceCapability = () =>
+  probeProtocolCapability(supportsMultipleLocalImages);
+export const probeSemanticCapability = () =>
+  probeProtocolCapability(supportsSemanticImages);
