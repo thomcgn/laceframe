@@ -438,4 +438,3 @@ fn snap_uniform_cuts(
     cuts = sanitize_cuts(cuts, limit);
     cuts
 }
-
