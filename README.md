@@ -24,12 +24,13 @@ Vorhanden sind unter anderem Mehrfachimport von Identitätsbildern, versionierte
 - [ROADMAP](docs/ROADMAP.md): verbindlicher Produktstand, Prioritäten und Abnahmekriterien.
 - [ARCHITECTURE](docs/ARCHITECTURE.md): Datenmodell, Sicherheit, Herkunft, Formate und Grenzen.
 - [WORKFLOWS](docs/WORKFLOWS.md): aktuelle Bedienwege und ausdrücklich geplante Abläufe.
-- [TESTING](docs/TESTING.md): FAST, TARGETED, FULL und GitHub Quality Gate.
+- [TESTING](docs/TESTING.md): gezielte Entwicklungstests, optionale Smokes und manuelle FULL-Regression.
 - [AGENTS](AGENTS.md): Regeln für Arbeiten am Repository.
 
 ```sh
-npm run classify:changes
-npm run check:fast
+npx vitest run tests/<betroffene-datei>.test.ts
+# Optionaler breiterer Check:
+npm run check:dev
 ```
 
-Desktop-Tests und Paketierung gemäß Risiko ergänzen; vollständige Regression über das vorgeschriebene CI-Profil. Testresultate gehören zum jeweiligen PR. Historische Aufträge, Prüfberichte und Screenshots sind über Git und gemergte PRs rekonstruierbar; es gibt kein Dokumentationsarchiv im Repository.
+Normale Entwicklung direkt auf `develop`, kleine lokale Commits und gezielte Tests; kein täglicher PR-Zwang. Push und Integration nach `main` nur auf ausdrücklichen Auftrag. Desktop-Smokes gezielt mit `npm run check:smoke -- <workflow>` auswählen. CI ausschließlich manuell (`workflow_dispatch`, Profil `dev` oder `full`); vollständige Regression vor Alpha. Testresultate im Abschlussbericht und gegebenenfalls im optionalen PR dokumentieren. Historische Aufträge, Prüfberichte und Screenshots sind über Git und gemergte PRs rekonstruierbar; es gibt kein Dokumentationsarchiv im Repository.
