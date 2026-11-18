@@ -234,9 +234,6 @@ const { field, nav } = require("./smoke-ui.cjs");
     await expect(
       field(page, "Persönlicher Ausdruck", { exact: true }),
     ).toHaveValue("Unsaved personal draft");
-    const management = page.locator(".project-management");
-    if ((await management.getAttribute("open")) === null)
-      await management.locator("summary").click();
     page.once("dialog", (dialog) => dialog.dismiss());
     await page
       .getByRole("button", { name: "Projekt öffnen …", exact: true })
@@ -244,7 +241,7 @@ const { field, nav } = require("./smoke-ui.cjs");
     await expect(
       field(page, "Persönlicher Ausdruck", { exact: true }),
     ).toHaveValue("Unsaved personal draft");
-    await management.locator("summary").click();
+
 
     await page
       .getByRole("button", { name: "Zurück zum Studio", exact: true })

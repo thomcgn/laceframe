@@ -13,6 +13,7 @@ export function MasterApproval({
   onCutout,
   label,
   onDirtyChange,
+  visible = true,
 }: {
   source: { id: string; sha256: string };
   disabled?: boolean;
@@ -21,6 +22,7 @@ export function MasterApproval({
   onCutout: () => void;
   label: string;
   onDirtyChange?: (dirty: boolean) => void;
+  visible?: boolean;
 }) {
   const [report, setReport] = useState<QualityReport>();
   const [error, setError] = useState("");
@@ -55,6 +57,7 @@ export function MasterApproval({
     onDirtyChange?.(Boolean(identity || silhouette || activation || notes));
   }, [identity, silhouette, activation, notes, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+  if (!visible) return null;
   return (
     <section className="master-approval" aria-label="Masterfreigabe">
       <p role="status" aria-label="Master Transparenzprüfung">

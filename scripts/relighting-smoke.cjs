@@ -160,7 +160,7 @@ const { createHash } = require("node:crypto");
       page.getByRole("heading", { name: "Relight Character", exact: true }),
     ).toBeVisible();
     let quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await quality.locator("summary").first().click();
+    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Live Relighting öffnen", exact: true })
       .click();
@@ -334,7 +334,7 @@ const { createHash } = require("node:crypto");
     ).toBeVisible();
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
-      await quality.locator("summary").first().click();
+      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     // Reopen saved light recipe, reset, create and edit a manual semantic region.
     await quality
       .getByRole("button", { name: "Lichtrevision bearbeiten", exact: true })
@@ -441,7 +441,7 @@ const { createHash } = require("node:crypto");
       saved,
     );
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await quality.locator("summary").first().click();
+    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Lichtrevision bearbeiten", exact: true })
       .click();
@@ -463,7 +463,7 @@ const { createHash } = require("node:crypto");
       .selectOption("quality");
     await page.getByLabel("Library Asset", { exact: true }).selectOption(q.id);
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await quality.locator("summary").first().click();
+    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Lichtrevision bearbeiten", exact: true })
       .click();
@@ -587,7 +587,7 @@ const { createHash } = require("node:crypto");
     ).toBeVisible();
     const largeBefore = await fs.readFile(path.join(project, "laceframe.json"));
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await quality.locator("summary").first().click();
+    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Live Relighting öffnen", exact: true })
       .click();

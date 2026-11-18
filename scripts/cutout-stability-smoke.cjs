@@ -93,7 +93,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
       .locator('[data-testid="asset-quality"]:visible')
       .first();
     if ((await quality.getAttribute("open")) === null)
-      await quality.locator("summary").first().click();
+      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Hintergrund freistellen", exact: true })
       .click();
@@ -147,7 +147,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
       page.getByAltText("Freigegebener Master V1", { exact: true }),
     ).toBeVisible();
     let quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await quality.locator("summary").first().click();
+    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await expect(
       quality.getByRole("status", { name: "Relighting Freigabe", exact: true }),
     ).toContainText("erst nach der Freistellung");
@@ -421,7 +421,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
     ).toBeVisible();
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
-      await quality.locator("summary").first().click();
+      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await expect(
       quality.getByRole("button", {
         name: "Live Relighting öffnen",
@@ -448,7 +448,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
       .selectOption(approved.id);
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
-      await quality.locator("summary").first().click();
+      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await open();
     await ready();
     await editor()
@@ -524,7 +524,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
       .selectOption(legacyId);
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
-      await quality.locator("summary").first().click();
+      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await expect(
       quality.getByRole("button", {
         name: "Live Relighting öffnen",
@@ -596,7 +596,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
     ).toBeVisible();
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
-      await quality.locator("summary").first().click();
+      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await open();
     await ready();
     const partialResult = await rgba(16, 12);

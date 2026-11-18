@@ -1,3 +1,4 @@
+import { PortraitPreview } from "../components/PortraitPreview";
 import { StudioSteps, useStudioSteps } from "../components/StudioSteps";
 import { ImagePreview } from "../components/ImagePreview";
 import { GenerationRequirements } from "../components/GenerationRequirements";
@@ -634,13 +635,10 @@ export function CreateView({
     failed: "Generierung fehlgeschlagen",
     cancelled: "Generierung abgebrochen",
   };
-  const [promptOpen, setPromptOpen] = useState(true);
-  useEffect(() => {
-    if (composer.pendingBase !== undefined) setPromptOpen(true);
-  }, [composer.pendingBase]);
   return (
     <div
       className="create-view"
+      data-step={step}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
@@ -649,6 +647,7 @@ export function CreateView({
     >
       {slot &&
         (visible || running) &&
+        (step === "Erzeugen" || running) &&
         createPortal(
           <div className="create-action-bar">
             <div className="job-status">
@@ -753,449 +752,414 @@ export function CreateView({
           <button onClick={onCharacters}>Zu Characters</button>
         </div>
       )}
-      <div className="studio-settings" hidden={step !== "Auswählen"}>
-        <div
-          className={`create-header${p.artDirections.length ? " has-style" : ""}`}
-        >
-          {!contextControlled && (
-            <>
-              <label>
-                Figur
-                <select
-                  aria-label="Create Figur"
-                  value={character?.id ?? ""}
-                  onChange={(e) => {
-                    if (
-                      !matches &&
-                      formSignature !==
-                        (savedSignature.current ?? initialSignature.current) &&
-                      !window.confirm(
-                        "Ungespeicherten Prompt verwerfen und Figur wechseln?",
-                      )
-                    )
-                      return;
-                    command(
-                      { type: "selectCharacter", id: e.target.value },
-                      "Figur ausgewählt.",
-                    );
-                  }}
-                >
-                  <option value="" disabled>
-                    Figur wählen
-                  </option>
-                  {p.characters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </>
-          )}
-          <label>
-            Master
-            <select
-              aria-label="Create Masterversion"
-              value={master?.id ?? ""}
-              onChange={(e) => editOptions(() => setMasterId(e.target.value))}
-            >
-              <option disabled value="">
-                Master wählen
-              </option>
-              {masters.map((m) => (
-                <option key={m.id} value={m.id}>
-                  V{m.version} · {m.width} × {m.height} · gesperrt
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Emotion
-            <select
-              aria-label="Create Familie"
-              value={family?.id ?? ""}
-              onChange={(e) =>
-                editOptions(() => {
-                  setFamilyId(e.target.value);
-                  const selected = p.variants.find(
-                    (v) => v.familyId === e.target.value,
-                  );
-                  setAction(selected?.suggestedAction ?? "silent");
-                  setIntensity(selected?.intensity);
-                  setVariantId(
-                    p.variants.find((v) => v.familyId === e.target.value)?.id ??
-                      "",
-                  );
-                })
-              }
-            >
-              {p.families.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Variante
-            <select
-              aria-label="Create Variante"
-              value={variant?.id ?? ""}
-              onChange={(e) =>
-                editOptions(() => {
-                  setVariantId(e.target.value);
-                  const v = variants.find((v) => v.id === e.target.value);
-                  if (v) {
-                    setAction(v.suggestedAction);
-                    setIntensity(v.intensity);
-                  }
-                })
-              }
-            >
-              <option disabled value="">
-                Variante wählen
-              </option>
-              {variants.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.label} / {v.slug}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Anbieter
-            <select
-              aria-label="Create Anbieter"
-              value={providerId}
-              onChange={(e) => {
-                if (!discardReview()) return;
-                setProviderId(
-                  e.target.value as "manual-import" | "codex-native",
-                );
-                setActiveId("");
-              }}
-            >
-              <option value="manual-import">Manueller Import</option>
-              <option value="codex-native">Codex · ImageGen</option>
-            </select>
-          </label>
-        </div>
-        <section
-          className="studio-expression-summary"
-          aria-label="Expression Zusammenfassung"
-        >
+      {(step === "Auswählen" || step === "Erzeugen") && (
+        <section className="studio-reference" aria-label="Masterreferenz">
+          <PortraitPreview
+            image={master}
+            caption={`${character?.name ?? "Figur"} · Master V${master?.version ?? "—"}`}
+          />
           <p>
-            <strong>{character?.name ?? "Figur wählen"}</strong> · Master V
-            {master?.version ?? "—"} ·{" "}
-            {artDirection?.name ?? "Eigener Masterstil"} ·{" "}
-            {family?.label ?? "Emotion wählen"} /{" "}
-            {variant?.label ?? "Variante wählen"}
+            Identität schützen · Haare, Outfit und Accessoires bleiben am Master
+            gebunden.
           </p>
-          <div className="inspector-options">
-            <label>
-              Stimmaktion
-              <select
-                aria-label="Create Stimmaktion"
-                value={action}
-                onChange={(e) =>
-                  editOptions(() => setAction(e.target.value as VocalAction))
-                }
-              >
-                <option value="silent">Still</option>
-                <option value="speaking">Sprechend</option>
-                <option value="shouting">Rufend</option>
-              </select>
-            </label>
-            <label>
-              Intensität · optional
-              <input
-                aria-label="Create Intensität"
-                type="number"
-                min="0"
-                max="1"
-                step=".05"
-                value={intensity ?? ""}
-                onChange={(e) =>
-                  editOptions(() =>
-                    setIntensity(
-                      e.target.value === ""
-                        ? undefined
-                        : Number(e.target.value),
-                    ),
-                  )
-                }
-              />
-            </label>
-          </div>
-          <p className="summary-direction">
-            <strong>
-              {personalPerformance
-                ? "Persönliche Performance"
-                : "Globale Ausdrucksanweisung"}
-              :
-            </strong>{" "}
-            {personalPerformance?.direction ||
-              variant?.prompt ||
-              "Familienname und Variante"}
-          </p>
-          <p className="muted summary-direction">
-            Zusätzliche kreative Anweisung:{" "}
-            {promptMode === "automatic"
-              ? "keine (Automatisch)"
-              : instructions || "keine"}
-          </p>
-          {promptMode === "expert" && (
-            <p className="muted">
-              Expert Override aktiv: Der manuelle Prompt kann von dieser
-              strukturierten Zusammenfassung abweichen. Im Prompt Builder
-              prüfen.
+          {step === "Auswählen" && (
+            <button
+              className="primary"
+              disabled={!master || !variant}
+              onClick={() => flow.setStep("Erzeugen")}
+            >
+              Weiter zu Erzeugen
+            </button>
+          )}
+          {step === "Erzeugen" && (
+            <p className="generation-brief">
+              {family?.label} · {variant?.label} ·{" "}
+              {action === "silent"
+                ? "Still"
+                : action === "speaking"
+                  ? "Sprechend"
+                  : "Rufend"}{" "}
+              · {artDirection?.name ?? "Eigener Masterstil"}
             </p>
           )}
-          <button
-            disabled={!character || !variant}
-            onClick={() => {
-              if (character && variant)
-                onEditExpression({
-                  characterId: character.id,
-                  mode: "expression",
-                  masterId: master?.id,
-                  familyId: family?.id,
-                  variantId: variant.id,
-                });
-            }}
-          >
-            Expression bearbeiten
-          </button>
         </section>
-        <details className="studio-lock-summary">
-          <summary>Identität schützen · Outfit & Bildaufbau</summary>
-          <h3>Identität schützen</h3>
-          <p>
-            {character?.name ?? "Figur wählen"} · Master V
-            {master?.version ?? "—"} · {master?.width ?? "—"}×
-            {master?.height ?? "—"}. Identität, Haare, Kleidung und Accessoires
-            bleiben am gewählten Master gebunden.
-          </p>
-          <h3>Outfit & Composition</h3>
-          <p>
-            Unveränderlich aus dem gewählten Master. Gesichtsausdruck und
-            Stimmaktion werden getrennt eingestellt. Echte Alpha-Transparenz ist
-            verpflichtend.
-          </p>
-        </details>
-        <h3>Art Direction / Style Lock</h3>
-        <button
-          className="text-link"
-          onClick={() => onArtDirection(artDirection?.id)}
-        >
-          Art Direction bearbeiten
-        </button>
-        <div className="reference-roles">
-          <span>
-            Aktiver Stil:{" "}
-            {artDirection
-              ? `${artDirection.name} · R${artDirection.revision}`
-              : "Eigener Masterstil"}
-          </span>
-          <span>Identität: eigener Master V{master?.version ?? "—"}</span>
-          <span>
-            Stilbilder: {styleReferences.length} · ausschließlich Darstellung
-          </span>
-          <span>
-            Ausdruck:{" "}
-            {personalPerformance
-              ? "persönliches Profil"
-              : "gemeinsame Variante"}
-          </span>
-          {character && (
-            <label>
-              Darstellungsstil dieser Figur
-              <select
-                aria-label="Charakter Stilzuordnung"
-                value={
-                  character.styleSelection?.mode === "master"
-                    ? "master"
-                    : character.styleSelection?.mode === "profile"
-                      ? `profile:${character.styleSelection.profileId}`
-                      : "project"
-                }
-                onChange={(e) =>
-                  command(
-                    {
-                      type: "setCharacterStyle",
-                      characterId: character.id,
-                      selection:
-                        e.target.value === "project"
-                          ? { mode: "project" }
-                          : e.target.value === "master"
-                            ? { mode: "master" }
-                            : {
-                                mode: "profile",
-                                profileId: e.target.value.slice(8),
-                              },
-                    },
-                    "Stilzuordnung gespeichert.",
-                  )
-                }
-              >
-                <option value="project">Projektstandard</option>
-                <option value="master">
-                  Eigener Masterstil · keine Stilreferenzen
-                </option>
-                {p.artDirections.map((a) => (
-                  <option key={a.id} value={`profile:${a.id}`}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {providerId === "codex-native" && (
-            <small>
-              {styleReferences.length
-                ? codex.multipleReferences
-                  ? "Codex erhält: Bild 1 = Identitäts-Master, danach die Stilbilder der gewählten Revision. Keine Übernahme von Gesicht oder Outfit."
-                  : "Mehrfachreferenzen nicht bestätigt. Auftrag blockiert; Textprofil ohne Stilbilder oder eigenen Masterstil wählen."
-                : "Codex erhält nur den Identitäts-Master."}
-            </small>
-          )}
-        </div>
-        <p>
-          Outfit: aus Master V{master?.version ?? "—"};{" "}
-          {p.outfits
-            .filter((o) => o.characterId === character?.id)
-            .map((o) => `${o.name}: ${o.notes}`)
-            .join(" · ") || "keine zusätzlichen Outfitnotizen"}
-          .
-        </p>
-      </div>
-      <div hidden={step !== "Erzeugen" || !expert}>
-        <details className="reference-inputs">
-          <summary>
-            Tatsächlich verwendete Bildreferenzen ·{" "}
-            {master ? 1 + styleReferences.length : 0}
-          </summary>
-          {master && (
-            <ImagePreview
-              id={master.id}
-              caption="Bild 1 · Identity Master"
-              zoom="fit"
-            />
-          )}
-          {styleReferences.map((r, i) => (
-            <ImagePreview
-              key={r.id}
-              id={r.id}
-              caption={`Bild ${i + 2} · Stilreferenz, keine Identität`}
-              zoom="fit"
-            />
-          ))}
-        </details>
-      </div>
-      <div hidden={step !== "Bearbeiten"}>
-        {master && (
-          <div className="mask-controls">
-            <label>
-              Bearbeitungsmodus
-              <select
-                aria-label="Bearbeitungsmodus"
-                value={editMode}
-                onChange={(e) =>
-                  editOptions(() =>
-                    setEditMode(e.target.value as typeof editMode),
-                  )
-                }
-              >
-                <option value="none">Ohne Maske</option>
-                <option value="soft">Soft Lock · nicht verfügbar</option>
-                <option value="hard">Originalpixel erhalten · lokal</option>
-              </select>
-            </label>
-            {editMode === "soft" && (
-              <p className="warning">
-                Keine dokumentierte Inpainting-Maskeneingabe im unterstützten
-                Codex-Protokoll. Soft Lock nicht verfügbar; kein Auftrag wird
-                gesendet.
-              </p>
-            )}
-            {editMode === "hard" && (
+      )}
+      {step === "Auswählen" && (
+        <div className="studio-settings">
+          <div
+            className={`create-header${p.artDirections.length ? " has-style" : ""}`}
+          >
+            {!contextControlled && (
               <>
-                {(master.format !== "png" ||
-                  master.width * master.height > MAX_MASK_PIXELS) && (
-                  <p className="warning">
-                    Hard Lock für diesen Master nicht verfügbar: benötigt PNG
-                    bis 8 Bit pro Kanal und 16 Megapixel. Ohne Maske
-                    weiterarbeiten; das Original wird nicht konvertiert.
-                  </p>
-                )}
                 <label>
-                  Maskenrevision
+                  Figur
                   <select
-                    aria-label="Maskenrevision"
-                    value={mask?.id ?? ""}
-                    onChange={(e) =>
-                      editOptions(() => setMaskId(e.target.value))
-                    }
+                    aria-label="Create Figur"
+                    value={character?.id ?? ""}
+                    onChange={(e) => {
+                      if (
+                        !matches &&
+                        formSignature !==
+                          (savedSignature.current ??
+                            initialSignature.current) &&
+                        !window.confirm(
+                          "Ungespeicherten Prompt verwerfen und Figur wechseln?",
+                        )
+                      )
+                        return;
+                      command(
+                        { type: "selectCharacter", id: e.target.value },
+                        "Figur ausgewählt.",
+                      );
+                    }}
                   >
-                    <option value="">Maske wählen</option>
-                    {masks.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} · R{m.revision} · {m.sha256.slice(0, 8)}
+                    <option value="" disabled>
+                      Figur wählen
+                    </option>
+                    {p.characters.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
                       </option>
                     ))}
                   </select>
                 </label>
-                <button
-                  disabled={master.width * master.height > MAX_MASK_PIXELS}
-                  onClick={() => setMaskEditor(true)}
-                >
-                  {mask ? "Maske bearbeiten" : "Maske erstellen"}
-                </button>
-                {mask && (
-                  <button
-                    onClick={() => {
-                      setMaskId("");
-                      setMaskEditor(true);
-                    }}
-                  >
-                    Neue Maske
-                  </button>
-                )}
-                <small>
-                  KI liefert Rohbild ohne Inpainting-Maske. Hard Lock berechnet
-                  danach Originalpixel lokal; identische Abmessungen und
-                  bestätigte Registrierung erforderlich. PNG bis 8 Bit / 16 MP.
-                </small>
               </>
             )}
+            <label>
+              Master
+              <select
+                aria-label="Create Masterversion"
+                value={master?.id ?? ""}
+                onChange={(e) => editOptions(() => setMasterId(e.target.value))}
+              >
+                <option disabled value="">
+                  Master wählen
+                </option>
+                {masters.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    V{m.version} · {m.width} × {m.height} · gesperrt
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Emotion
+              <select
+                aria-label="Create Familie"
+                value={family?.id ?? ""}
+                onChange={(e) =>
+                  editOptions(() => {
+                    setFamilyId(e.target.value);
+                    const selected = p.variants.find(
+                      (v) => v.familyId === e.target.value,
+                    );
+                    setAction(selected?.suggestedAction ?? "silent");
+                    setIntensity(selected?.intensity);
+                    setVariantId(
+                      p.variants.find((v) => v.familyId === e.target.value)
+                        ?.id ?? "",
+                    );
+                  })
+                }
+              >
+                {p.families.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Variante
+              <select
+                aria-label="Create Variante"
+                value={variant?.id ?? ""}
+                onChange={(e) =>
+                  editOptions(() => {
+                    setVariantId(e.target.value);
+                    const v = variants.find((v) => v.id === e.target.value);
+                    if (v) {
+                      setAction(v.suggestedAction);
+                      setIntensity(v.intensity);
+                    }
+                  })
+                }
+              >
+                <option disabled value="">
+                  Variante wählen
+                </option>
+                {variants.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label} / {v.slug}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Anbieter
+              <select
+                aria-label="Create Anbieter"
+                value={providerId}
+                onChange={(e) => {
+                  if (!discardReview()) return;
+                  setProviderId(
+                    e.target.value as "manual-import" | "codex-native",
+                  );
+                  setActiveId("");
+                }}
+              >
+                <option value="manual-import">Manueller Import</option>
+                <option value="codex-native">Codex · ImageGen</option>
+              </select>
+            </label>
           </div>
-        )}
-        {maskEditor && master && (
-          <MaskEditor
-            key={`${master.id}/${mask?.id ?? "new"}`}
-            master={master}
-            mask={mask}
-            onClose={() => setMaskEditor(false)}
-            onSave={async (weights, name) => {
-              const saved = await unwrap(
-                window.laceframe.command({
-                  type: "saveMask",
-                  masterId: master.id,
-                  previousId: mask?.id,
-                  name,
-                  weights: new Uint8Array(weights),
-                }),
-              );
-              onSnapshot(saved);
-              setMaskId(saved.project.masks.at(-1)!.id);
-              setActiveId("");
-            }}
-          />
-        )}
-      </div>
+          <section
+            className="studio-expression-summary"
+            aria-label="Expression Zusammenfassung"
+          >
+            <div className="inspector-options">
+              <label>
+                Stimmaktion
+                <select
+                  aria-label="Create Stimmaktion"
+                  value={action}
+                  onChange={(e) =>
+                    editOptions(() => setAction(e.target.value as VocalAction))
+                  }
+                >
+                  <option value="silent">Still</option>
+                  <option value="speaking">Sprechend</option>
+                  <option value="shouting">Rufend</option>
+                </select>
+              </label>
+              <label>
+                Intensität · optional
+                <input
+                  aria-label="Create Intensität"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step=".05"
+                  value={intensity ?? ""}
+                  onChange={(e) =>
+                    editOptions(() =>
+                      setIntensity(
+                        e.target.value === ""
+                          ? undefined
+                          : Number(e.target.value),
+                      ),
+                    )
+                  }
+                />
+              </label>
+            </div>
+            {expert && (
+              <p className="summary-direction">
+                {personalPerformance?.direction || variant?.prompt}
+              </p>
+            )}
+            <button
+              disabled={!character || !variant}
+              onClick={() => {
+                if (character && variant)
+                  onEditExpression({
+                    characterId: character.id,
+                    mode: "expression",
+                    masterId: master?.id,
+                    familyId: family?.id,
+                    variantId: variant.id,
+                  });
+              }}
+            >
+              Expression bearbeiten
+            </button>
+          </section>
+          <section className="studio-style-choice">
+            <h3>Stil verwenden</h3>
+            {character && (
+              <label>
+                Darstellungsstil dieser Figur
+                <select
+                  aria-label="Charakter Stilzuordnung"
+                  value={
+                    character.styleSelection?.mode === "master"
+                      ? "master"
+                      : character.styleSelection?.mode === "profile"
+                        ? `profile:${character.styleSelection.profileId}`
+                        : "project"
+                  }
+                  onChange={(e) =>
+                    command(
+                      {
+                        type: "setCharacterStyle",
+                        characterId: character.id,
+                        selection:
+                          e.target.value === "project"
+                            ? { mode: "project" }
+                            : e.target.value === "master"
+                              ? { mode: "master" }
+                              : {
+                                  mode: "profile",
+                                  profileId: e.target.value.slice(8),
+                                },
+                      },
+                      "Stilzuordnung gespeichert.",
+                    )
+                  }
+                >
+                  <option value="project">Projektstandard</option>
+                  <option value="master">
+                    Eigener Masterstil · keine Stilreferenzen
+                  </option>
+                  {p.artDirections.map((a) => (
+                    <option key={a.id} value={`profile:${a.id}`}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button onClick={() => onArtDirection(artDirection?.id)}>
+              Art Direction bearbeiten
+            </button>
+          </section>
+        </div>
+      )}
+      {step === "Erzeugen" && expert && (
+        <div>
+          <section className="reference-inputs">
+            <h3>
+              Tatsächlich verwendete Bildreferenzen ·{" "}
+              {master ? 1 + styleReferences.length : 0}
+            </h3>
+            {master && (
+              <ImagePreview
+                id={master.id}
+                caption="Bild 1 · Identity Master"
+                zoom="fit"
+              />
+            )}
+            {styleReferences.map((r, i) => (
+              <ImagePreview
+                key={r.id}
+                id={r.id}
+                caption={`Bild ${i + 2} · Stilreferenz, keine Identität`}
+                zoom="fit"
+              />
+            ))}
+          </section>
+        </div>
+      )}
+      {step === "Bearbeiten" && (
+        <div className="studio-mask-tools">
+          {master && (
+            <div className="mask-controls">
+              <label>
+                Bearbeitungsmodus
+                <select
+                  aria-label="Bearbeitungsmodus"
+                  value={editMode}
+                  onChange={(e) =>
+                    editOptions(() =>
+                      setEditMode(e.target.value as typeof editMode),
+                    )
+                  }
+                >
+                  <option value="none">Ohne Maske</option>
+                  <option value="soft">Soft Lock · nicht verfügbar</option>
+                  <option value="hard">Originalpixel erhalten · lokal</option>
+                </select>
+              </label>
+              {editMode === "soft" && (
+                <p className="warning">
+                  Keine dokumentierte Inpainting-Maskeneingabe im unterstützten
+                  Codex-Protokoll. Soft Lock nicht verfügbar; kein Auftrag wird
+                  gesendet.
+                </p>
+              )}
+              {editMode === "hard" && (
+                <>
+                  {(master.format !== "png" ||
+                    master.width * master.height > MAX_MASK_PIXELS) && (
+                    <p className="warning">
+                      Hard Lock für diesen Master nicht verfügbar: benötigt PNG
+                      bis 8 Bit pro Kanal und 16 Megapixel. Ohne Maske
+                      weiterarbeiten; das Original wird nicht konvertiert.
+                    </p>
+                  )}
+                  <label>
+                    Maskenrevision
+                    <select
+                      aria-label="Maskenrevision"
+                      value={mask?.id ?? ""}
+                      onChange={(e) =>
+                        editOptions(() => setMaskId(e.target.value))
+                      }
+                    >
+                      <option value="">Maske wählen</option>
+                      {masks.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                          {expert
+                            ? ` · R${m.revision} · ${m.sha256.slice(0, 8)}`
+                            : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    disabled={master.width * master.height > MAX_MASK_PIXELS}
+                    onClick={() => setMaskEditor(true)}
+                  >
+                    {mask ? "Maske bearbeiten" : "Maske erstellen"}
+                  </button>
+                  {mask && (
+                    <button
+                      onClick={() => {
+                        setMaskId("");
+                        setMaskEditor(true);
+                      }}
+                    >
+                      Neue Maske
+                    </button>
+                  )}
+                  <small>
+                    KI liefert Rohbild ohne Inpainting-Maske. Hard Lock
+                    berechnet danach Originalpixel lokal; identische Abmessungen
+                    und bestätigte Registrierung erforderlich. PNG bis 8 Bit /
+                    16 MP.
+                  </small>
+                </>
+              )}
+            </div>
+          )}
+          {maskEditor && master && (
+            <MaskEditor
+              key={`${master.id}/${mask?.id ?? "new"}`}
+              master={master}
+              mask={mask}
+              onClose={() => setMaskEditor(false)}
+              onSave={async (weights, name) => {
+                const saved = await unwrap(
+                  window.laceframe.command({
+                    type: "saveMask",
+                    masterId: master.id,
+                    previousId: mask?.id,
+                    name,
+                    weights: new Uint8Array(weights),
+                  }),
+                );
+                onSnapshot(saved);
+                setMaskId(saved.project.masks.at(-1)!.id);
+                setActiveId("");
+              }}
+            />
+          )}
+        </div>
+      )}
       <section
         className={`create-result ${dragging ? "drag-active" : ""}`}
-        hidden={step === "Auswählen"}
+        data-step={step}
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1220,11 +1184,13 @@ export function CreateView({
           requestImport(e.dataTransfer.files[0]);
         }}
       >
-        <div className="comparison-heading">
-          <h2>Master / Entwurf</h2>
-          <span className={`badge ${asset?.status ?? ""}`}>{status}</span>
-        </div>
-        {active?.mask && (
+        {step !== "Auswählen" && (
+          <div className="comparison-heading">
+            <h2>Master / Entwurf</h2>
+            <span className={`badge ${asset?.status ?? ""}`}>{status}</span>
+          </div>
+        )}
+        {step !== "Auswählen" && active?.mask && (
           <div className="mask-controls">
             <label>
               Ergebnisansicht
@@ -1296,36 +1262,43 @@ export function CreateView({
             )}
           </div>
         )}
-        <MasterCandidateCompare
-          master={reviewMaster}
-          candidate={asset}
-          mask={maskOverlay ? activeMask : undefined}
-        />
-        <div hidden={step !== "Bearbeiten" && step !== "Freigeben"}>
-          {asset && (
-            <AssetQuality
-              key={asset.id}
-              source={asset}
-              workspaceStep={step}
-              onDirtyChange={setQualityDirty}
-              project={p}
-              onSnapshot={onSnapshot}
-              disabled={busy || running}
-            />
-          )}
-        </div>
+        {(step === "Bearbeiten" || step === "Freigeben") && (
+          <MasterCandidateCompare
+            master={reviewMaster}
+            candidate={asset}
+            mask={maskOverlay ? activeMask : undefined}
+          />
+        )}
+        {step === "Erzeugen" && asset && (
+          <PortraitPreview
+            image={asset}
+            caption="Neuer Expressionentwurf · ungeprüft"
+          />
+        )}
+        {asset && (
+          <AssetQuality
+            key={asset.id}
+            source={asset}
+            workspaceStep={step}
+            expert={expert}
+            onDirtyChange={setQualityDirty}
+            project={p}
+            onSnapshot={onSnapshot}
+            disabled={busy || running}
+          />
+        )}
         {!master && (
           <button onClick={onCharacters}>
             Freigegebenen Master importieren
           </button>
         )}
-        {!asset && (
+        {!asset && step !== "Auswählen" && (
           <p className="drop-hint">
             PNG/WebP hier ablegen · bis 32 MiB · oder mit Masterreferenz
             generieren
           </p>
         )}
-        {asset && !matches && (
+        {asset && step !== "Auswählen" && !matches && (
           <p className="warning">
             Dieses Bild gehört zur gespeicherten Revision. Promptänderungen
             verändern seine Herkunft nicht.
@@ -1382,13 +1355,14 @@ export function CreateView({
           </p>
         )}
         {asset && step === "Freigeben" && (
-          <Evidence id={asset.id} label="Expressionentwurf vor Freigabe" />
+          <Evidence
+            compact={!expert}
+            id={asset.id}
+            label="Expressionentwurf vor Freigabe"
+          />
         )}
-        {asset && (
-          <div
-            className="comparison-review button-row"
-            hidden={step !== "Freigeben"}
-          >
+        {asset && step === "Freigeben" && (
+          <div className="comparison-review button-row">
             <button onClick={() => onInspect(asset.id)}>
               In Library prüfen
             </button>
@@ -1422,210 +1396,210 @@ export function CreateView({
           </div>
         )}
       </section>
-      <div className="create-drawers" hidden={!expert || step === "Auswählen"}>
-        <details
-          className="panel prompt-drawer"
-          hidden={step !== "Erzeugen"}
-          open={promptOpen}
-          onToggle={(e) => setPromptOpen(e.currentTarget.open)}
-        >
-          <summary>
-            Prompt Builder{composer.edited ? " · eigene Bearbeitung" : ""}
-            {composer.pendingBase !== undefined
-              ? " · Auswahländerung bestätigen"
-              : ""}
-          </summary>
-          <PromptComposer
-            sources={[
-              {
-                layer: "System",
-                source:
-                  "Canvas, Alpha, unveränderlicher Master, sichere Herkunft und manuelle Freigabe (Main/Provider).",
-              },
-              {
-                layer: "Style",
-                source: artDirection
-                  ? `${artDirection.name} · R${artDirection.revision}`
-                  : "Eigener Masterstil",
-              },
-              {
-                layer: "Character Identity",
-                source: master
-                  ? `${character?.name} · Master V${master.version} · ${master.id}`
-                  : "Kein Master",
-              },
-              {
-                layer: "Outfit",
-                source:
-                  "Unverändert aus dem ausgewählten Identity-Master; kein Outfittransfer aus Style Packs.",
-              },
-              {
-                layer: "Expression Performance",
-                source: personalPerformance
-                  ? "Persönliche Performance dieser Figur"
-                  : `Globale Vorlage: ${family?.label} / ${variant?.label}`,
-              },
-              {
-                layer: "Composition",
-                source:
-                  "Registrierter Master-Canvas und gespeicherte Stil-/Kompositionsregeln; kein automatischer Zuschnitt.",
-              },
-              {
-                layer: "Creative Supplements",
-                source:
-                  promptMode === "expert"
-                    ? "Expliziter Expert Override; technische Regeln bleiben erhalten."
-                    : instructions || "Keine Ergänzung",
-              },
-            ]}
-            state={composer}
-            onChange={setComposer}
-            mode={promptMode}
-            onModeChange={changePromptMode}
-            extraInstructions={instructions}
-            onExtraChange={setInstructions}
-          />
-          <div className="button-row prompt-actions">
-            <button
-              disabled={!valid || Boolean(matches)}
-              onClick={() => savePrompt()}
-            >
-              Generierungsanweisung speichern
-            </button>
-            <button disabled={!valid} onClick={() => savePrompt(false)}>
-              Prompt kopieren
-            </button>
-            <button disabled={!valid} onClick={() => savePrompt(true)}>
-              Prompt kopieren & ChatGPT öffnen
-            </button>
-          </div>
-          <p className="muted">
-            Browser-Weg: Prompt und tatsächliches Masterbild selbst beifügen.
-            Native Codex-Generierung übermittelt beides erst nach dem
-            Generieren-Klick und nutzt dein Codex-Kontingent.
-          </p>
-        </details>
-        <details className="panel create-inspector">
-          <summary>Technische Details · Herkunft</summary>
-          {active?.mask && (
-            <p className="mono">
-              Maske {active.mask.id} · Revision {active.mask.revision} · SHA-256{" "}
-              {active.mask.sha256}
-            </p>
-          )}
-          {asset?.composite && (
-            <p className="mono">
-              Composite V{asset.composite.version} · {asset.composite.rule} ·
-              Rohbild {asset.composite.rawId} / {asset.composite.rawSha256} ·
-              Registrierung manuell bestätigt
-            </p>
-          )}
-          <p className="mono">
-            Master-ID: {master?.id ?? "—"}
-            <br />
-            SHA-256: {master?.sha256 ?? "—"}
-            <br />
-            Anbieter: {providerId} · Masken: nicht unterstützt
-          </p>
-          <div className="button-row">
-            <button onClick={checkCodex}>Codex-Verfügbarkeit prüfen</button>
-            {master && (
-              <button
-                onClick={() =>
-                  void perform(
-                    () => window.laceframe.revealMaster(master.id),
-                    () => {},
-                    "Referenz im Dateimanager angezeigt. Das Bild manuell im Browser beifügen.",
-                  )
-                }
-              >
-                Referenz im Ordner zeigen
-              </button>
-            )}
-          </div>
-          {timing && (
-            <p className="mono">
-              Start: {timing.startedAt}
-              <br />
-              Ende: {timing.endedAt ?? "nicht gesichert"}
-              <br />
-              Dauer: {timing.durationMs} ms · {timing.status}
-            </p>
-          )}
-        </details>
-        <details className="panel attempt-history">
-          <summary>Versuchsverlauf · {attempts.length}</summary>
-          {!attempts.length && <p>Noch kein Versuch gespeichert.</p>}
-          {active && (
-            <div className="historical-attempt">
-              <h3>Historischer Versuch · unveränderlich</h3>
-              <p>
-                Die Auswahl ändert deinen Arbeitsentwurf nicht. Stilrevision R
-                {active.artDirectionRevision ?? "—"} · Master-ID{" "}
-                {active.masterId}
-              </p>
-              <details>
-                <summary>Historischen Prompt ansehen</summary>
-                <pre
-                  className="prompt-base"
-                  aria-label="Historischer Expression-Prompt"
+      {expert && step !== "Auswählen" && (
+        <div className="create-drawers">
+          {step === "Erzeugen" && (
+            <section className="panel prompt-drawer">
+              <h3>
+                Prompt Builder{composer.edited ? " · eigene Bearbeitung" : ""}
+                {composer.pendingBase !== undefined
+                  ? " · Auswahländerung bestätigen"
+                  : ""}
+              </h3>
+              <PromptComposer
+                sources={[
+                  {
+                    layer: "System",
+                    source:
+                      "Canvas, Alpha, unveränderlicher Master, sichere Herkunft und manuelle Freigabe (Main/Provider).",
+                  },
+                  {
+                    layer: "Style",
+                    source: artDirection
+                      ? `${artDirection.name} · R${artDirection.revision}`
+                      : "Eigener Masterstil",
+                  },
+                  {
+                    layer: "Character Identity",
+                    source: master
+                      ? `${character?.name} · Master V${master.version} · ${master.id}`
+                      : "Kein Master",
+                  },
+                  {
+                    layer: "Outfit",
+                    source:
+                      "Unverändert aus dem ausgewählten Identity-Master; kein Outfittransfer aus Style Packs.",
+                  },
+                  {
+                    layer: "Expression Performance",
+                    source: personalPerformance
+                      ? "Persönliche Performance dieser Figur"
+                      : `Globale Vorlage: ${family?.label} / ${variant?.label}`,
+                  },
+                  {
+                    layer: "Composition",
+                    source:
+                      "Registrierter Master-Canvas und gespeicherte Stil-/Kompositionsregeln; kein automatischer Zuschnitt.",
+                  },
+                  {
+                    layer: "Creative Supplements",
+                    source:
+                      promptMode === "expert"
+                        ? "Expliziter Expert Override; technische Regeln bleiben erhalten."
+                        : instructions || "Keine Ergänzung",
+                  },
+                ]}
+                state={composer}
+                onChange={setComposer}
+                mode={promptMode}
+                onModeChange={changePromptMode}
+                extraInstructions={instructions}
+                onExtraChange={setInstructions}
+              />
+              <div className="button-row prompt-actions">
+                <button
+                  disabled={!valid || Boolean(matches)}
+                  onClick={() => savePrompt()}
                 >
-                  {active.promptRevision.prompt}
-                </pre>
-              </details>
-              <button
-                onClick={() => {
-                  if (
-                    (qualityDirty ||
-                      formSignature !==
-                        (savedSignature.current ?? initialSignature.current)) &&
-                    !window.confirm(
-                      "Arbeitsentwurf einschließlich ungespeicherter Prüfnotizen durch diese gespeicherte Revision ersetzen?",
-                    )
-                  )
-                    return;
-                  adoptAttempt(active.id);
-                }}
-              >
-                Als neuen Entwurf übernehmen
-              </button>
-            </div>
+                  Generierungsanweisung speichern
+                </button>
+                <button disabled={!valid} onClick={() => savePrompt(false)}>
+                  Prompt kopieren
+                </button>
+                <button disabled={!valid} onClick={() => savePrompt(true)}>
+                  Prompt kopieren & ChatGPT öffnen
+                </button>
+              </div>
+              <p className="muted">
+                Browser-Weg: Prompt und tatsächliches Masterbild selbst
+                beifügen. Native Codex-Generierung übermittelt beides erst nach
+                dem Generieren-Klick und nutzt dein Codex-Kontingent.
+              </p>
+            </section>
           )}
+          <section className="panel create-inspector">
+            <h3>Technische Details · Herkunft</h3>
+            {active?.mask && (
+              <p className="mono">
+                Maske {active.mask.id} · Revision {active.mask.revision} ·
+                SHA-256 {active.mask.sha256}
+              </p>
+            )}
+            {asset?.composite && (
+              <p className="mono">
+                Composite V{asset.composite.version} · {asset.composite.rule} ·
+                Rohbild {asset.composite.rawId} / {asset.composite.rawSha256} ·
+                Registrierung manuell bestätigt
+              </p>
+            )}
+            <p className="mono">
+              Master-ID: {master?.id ?? "—"}
+              <br />
+              SHA-256: {master?.sha256 ?? "—"}
+              <br />
+              Anbieter: {providerId} · Masken: nicht unterstützt
+            </p>
+            <div className="button-row">
+              <button onClick={checkCodex}>Codex-Verfügbarkeit prüfen</button>
+              {master && (
+                <button
+                  onClick={() =>
+                    void perform(
+                      () => window.laceframe.revealMaster(master.id),
+                      () => {},
+                      "Referenz im Dateimanager angezeigt. Das Bild manuell im Browser beifügen.",
+                    )
+                  }
+                >
+                  Referenz im Ordner zeigen
+                </button>
+              )}
+            </div>
+            {timing && (
+              <p className="mono">
+                Start: {timing.startedAt}
+                <br />
+                Ende: {timing.endedAt ?? "nicht gesichert"}
+                <br />
+                Dauer: {timing.durationMs} ms · {timing.status}
+              </p>
+            )}
+          </section>
+          <section className="panel attempt-history">
+            <h3>Versuchsverlauf · {attempts.length}</h3>
+            {!attempts.length && <p>Noch kein Versuch gespeichert.</p>}
+            {active && (
+              <div className="historical-attempt">
+                <h3>Historischer Versuch · unveränderlich</h3>
+                <p>
+                  Die Auswahl ändert deinen Arbeitsentwurf nicht. Stilrevision R
+                  {active.artDirectionRevision ?? "—"} · Master-ID{" "}
+                  {active.masterId}
+                </p>
+                <section>
+                  <h3>Historischen Prompt ansehen</h3>
+                  <pre
+                    className="prompt-base"
+                    aria-label="Historischer Expression-Prompt"
+                  >
+                    {active.promptRevision.prompt}
+                  </pre>
+                </section>
+                <button
+                  onClick={() => {
+                    if (
+                      (qualityDirty ||
+                        formSignature !==
+                          (savedSignature.current ??
+                            initialSignature.current)) &&
+                      !window.confirm(
+                        "Arbeitsentwurf einschließlich ungespeicherter Prüfnotizen durch diese gespeicherte Revision ersetzen?",
+                      )
+                    )
+                      return;
+                    adoptAttempt(active.id);
+                  }}
+                >
+                  Als neuen Entwurf übernehmen
+                </button>
+              </div>
+            )}
 
-          {[...attempts].reverse().map((a) => {
-            const image = p.assets.find((image) => image.attemptId === a.id);
-            return (
-              <button
-                key={a.id}
-                aria-pressed={activeId === a.id}
-                onClick={() => loadAttempt(a.id)}
-              >
-                <strong>
-                  {p.variants.find((v) => v.id === a.variantId)?.label ??
-                    "Variante"}
-                </strong>
-                <span className={`badge ${image?.status ?? ""}`}>
-                  {image
-                    ? {
-                        candidate: "Kandidat",
-                        approved: "Freigegeben",
-                        rejected: "Abgelehnt",
-                      }[image.status]
-                    : a.providerId === "codex-native"
-                      ? "Kein bestätigtes Bild"
-                      : "Bildimport ausstehend"}
-                </span>
-                <small>
-                  {new Date(a.createdAt).toLocaleString("de-DE")} · {a.action}
-                  {a.execution
-                    ? ` · ${executionLabel(a.execution, running && codex.attemptId === a.id)}`
-                    : ""}
-                </small>
-              </button>
-            );
-          })}
-        </details>
-      </div>
+            {[...attempts].reverse().map((a) => {
+              const image = p.assets.find((image) => image.attemptId === a.id);
+              return (
+                <button
+                  key={a.id}
+                  aria-pressed={activeId === a.id}
+                  onClick={() => loadAttempt(a.id)}
+                >
+                  <strong>
+                    {p.variants.find((v) => v.id === a.variantId)?.label ??
+                      "Variante"}
+                  </strong>
+                  <span className={`badge ${image?.status ?? ""}`}>
+                    {image
+                      ? {
+                          candidate: "Kandidat",
+                          approved: "Freigegeben",
+                          rejected: "Abgelehnt",
+                        }[image.status]
+                      : a.providerId === "codex-native"
+                        ? "Kein bestätigtes Bild"
+                        : "Bildimport ausstehend"}
+                  </span>
+                  <small>
+                    {new Date(a.createdAt).toLocaleString("de-DE")} · {a.action}
+                    {a.execution
+                      ? ` · ${executionLabel(a.execution, running && codex.attemptId === a.id)}`
+                      : ""}
+                  </small>
+                </button>
+              );
+            })}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

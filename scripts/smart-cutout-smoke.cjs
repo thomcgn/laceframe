@@ -148,7 +148,7 @@ const fs = require("node:fs/promises"),
       page.getByRole("heading", { name: "Protected portrait", exact: true }),
     ).toBeVisible();
     let quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await quality.locator("summary").first().click();
+    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Hintergrund freistellen", exact: true })
       .click();
@@ -984,7 +984,7 @@ const fs = require("node:fs/promises"),
       page.getByRole("heading", { name: "Protected portrait", exact: true }),
     ).toBeVisible();
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await quality.locator("summary").first().click();
+    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Hintergrund freistellen", exact: true })
       .click();
@@ -1059,7 +1059,7 @@ const fs = require("node:fs/promises"),
     await expect.poll(async () => (await manifest()).masters.length).toBe(2);
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
-      await quality.locator("summary").first().click();
+      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await chooser(exports);
     await quality
       .getByRole("button", {

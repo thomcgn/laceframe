@@ -242,7 +242,7 @@ const { createHash } = require("node:crypto");
       expect(result.ok).toBe(true);
     }
     await setDialog(project);
-    await page.locator(".project-management summary").click();
+    await expect(page.getByRole("button", {name: "Projekt öffnen …", exact:true})).toBeVisible();
     await page
       .getByRole("button", { name: "Projekt öffnen …", exact: true })
       .click();

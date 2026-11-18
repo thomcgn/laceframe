@@ -133,6 +133,7 @@ const path = require("node:path");
     await field(page, "Create Anbieter", { exact: true }).selectOption(
       "codex-native",
     );
+    await studioStep(page, "Erzeugen");
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Codex bereit");
@@ -297,6 +298,7 @@ const path = require("node:path");
       name: "Mit Masterreferenz generieren",
       exact: true,
     });
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
     await generate.click();
     await expect(generate).toBeDisabled();
@@ -309,13 +311,15 @@ const path = require("node:path");
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Generierung abgeschlossen", { timeout: 15000 });
-    await expect(image(page, "Create · Ergebnisvorschau")).toBeVisible();
+    await expect(image(page, "Neuer Expressionentwurf · ungeprüft")).toBeVisible();
     await expect(generate).toBeEnabled();
     await expect(
       field(page, "Generierungszeit", { exact: true }),
     ).toContainText(/Generiert in 00:00:0[1-9]/);
+    await studioStep(page, "Bearbeiten");
     // Actual registered canvas, native dimensions, keyboard/mouse/touch and shared zoom/pan.
-    const slider = page.getByRole("slider", {
+    const comparison = page.locator(".studio-editor:visible .create-result > .master-compare");
+    const slider = comparison.getByRole("slider", {
       name: "Before/After-Vergleich",
       exact: true,
     });
@@ -329,11 +333,11 @@ const path = require("node:path");
     await expect(slider).toHaveAttribute("aria-valuenow", "0");
     await page.keyboard.press("End");
     await expect(slider).toHaveAttribute("aria-valuenow", "100");
-    await page
+    await comparison
       .getByRole("button", { name: "Ansicht zurücksetzen", exact: true })
       .click();
     await slider.scrollIntoViewIfNeeded();
-    let canvas = await page.locator(".compare-stage:visible").boundingBox();
+    let canvas = await comparison.locator(".compare-stage").boundingBox();
     let handle = await slider.locator("span").boundingBox();
     await page.mouse.move(
       handle.x + handle.width / 2,
@@ -366,9 +370,9 @@ const path = require("node:path");
     await expect(slider).toHaveAttribute("aria-valuenow", /2[45]/);
     await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
     await cdp.detach();
-    await field(page, "Create Zoom", { exact: true }).selectOption("100");
+    await comparison.getByLabel("Create Zoom", { exact: true }).selectOption("100");
     const rects = () =>
-      page.locator(".compare-stage:visible img").evaluateAll((images) =>
+      comparison.locator(".compare-stage img").evaluateAll((images) =>
         images.map((img) => {
           const r = img.getBoundingClientRect();
           return { x: r.x, y: r.y, width: r.width, height: r.height };
@@ -382,7 +386,7 @@ const path = require("node:path");
       height: 400,
     });
     expect(registered[1]).toMatchObject({ width: 400, height: 600 });
-    const viewport = page.locator(".compare-viewport:visible");
+    const viewport = comparison.locator(".compare-viewport");
     await viewport.focus();
     await page.keyboard.press("ArrowRight");
     const panned = await rects();
@@ -396,16 +400,16 @@ const path = require("node:path");
     registered = await rects();
     expect(registered[0].x).toBe(panned[0].x + 30);
     expect(registered[1].y).toBe(registered[0].y);
-    await field(page, "Vergleichsmodus", { exact: true }).selectOption(
+    await comparison.getByLabel("Vergleichsmodus", { exact: true }).selectOption(
       "overlay",
     );
-    await field(page, "Overlay-Deckkraft", { exact: true }).fill("25");
-    await expect(image(page, "Create · Ergebnisvorschau")).toHaveCSS(
+    await comparison.getByLabel("Overlay-Deckkraft", { exact: true }).fill("25");
+    await expect(comparison.getByAltText("Create · Ergebnisvorschau")).toHaveCSS(
       "opacity",
       "0.25",
     );
-    await expect(text(page, /Abweichende Abmessungen: Master/)).toBeVisible();
-    await page
+    await expect(comparison.getByText(/Abweichende Abmessungen: Master/)).toBeVisible();
+    await comparison
       .getByRole("button", { name: "Ansicht zurücksetzen", exact: true })
       .click();
     await app.evaluate(({ BrowserWindow }) =>
@@ -419,9 +423,8 @@ const path = require("node:path");
       )
       .toBe(true);
     await fs.mkdir("artifacts", { recursive: true });
-    await page
-      .locator(".studio-editor:not([hidden]) .prompt-drawer > summary")
-      .click();
+    await studioExpert(page);
+    await expect(page.locator(".studio-editor:visible .prompt-drawer")).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: "artifacts/create-quality-960.png",
@@ -489,6 +492,7 @@ const path = require("node:path");
     ).toHaveLength(3);
     expect(p.attempts[0].styleReferences).toHaveLength(2);
     await fs.writeFile(path.join(root, "scenario"), "image-failed");
+    await studioStep(page, "Erzeugen");
     await generate.click();
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
@@ -508,6 +512,7 @@ const path = require("node:path");
     ).toContainText("Fehlgeschlagen in");
     await expect(generate).toBeEnabled();
     await fs.writeFile(path.join(root, "scenario"), "hang");
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
     await generate.click();
     await expect(
@@ -590,20 +595,24 @@ const path = require("node:path");
     const workingText = await field(page, "Arbeits-Prompt", {
       exact: true,
     }).inputValue();
+    await studioStep(page, "Auswählen");
     const workingMaster = await field(page, "Create Masterversion", {
       exact: true,
     }).inputValue();
+    await studioExpert(page);
     const history = page.locator(
       ".studio-editor:not([hidden]) .attempt-history",
     );
-    await history.locator("summary").first().click();
+    await expect(history.getByRole("heading", {name:/Versuchsverlauf/})).toBeVisible();
     await history.locator(":scope > button").last().click();
     await expect(field(page, "Arbeits-Prompt", { exact: true })).toHaveValue(
       workingText,
     );
+    await studioStep(page, "Auswählen");
     await expect(
       field(page, "Create Masterversion", { exact: true }),
     ).toHaveValue(workingMaster);
+    await studioExpert(page);
     await history
       .getByText("Historischen Prompt ansehen", { exact: true })
       .click();
@@ -666,6 +675,7 @@ const path = require("node:path");
       .filter({ visible: true })
       .click();
 
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
     await generate.click();
     await expect(
@@ -691,7 +701,7 @@ const path = require("node:path");
       two.masters[0].characterId,
     );
     await expect(
-      page.locator(".studio-editor:visible .studio-expression-summary"),
+      page.locator(".studio-editor:visible .studio-reference"),
     ).toContainText("Synthetic Native");
     await page.evaluate(() => window.scrollTo(0, 0));
 
@@ -717,14 +727,12 @@ const path = require("node:path");
     await field(page, "Charakter Stilzuordnung", { exact: true }).selectOption(
       "master",
     );
-    await expect(
-      text(page, "Codex erhält nur den Identitäts-Master.", {
-        exact: true,
-      }),
-    ).toBeVisible();
+    await expect(field(page, "Charakter Stilzuordnung", {exact: true})).toHaveValue("master");
+    await studioExpert(page);
     await expect(
       field(page, "Arbeits-Prompt", { exact: true }),
     ).not.toHaveValue(/STYLE LOCK —/);
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
     await generate.click();
     await expect(
@@ -752,7 +760,9 @@ const path = require("node:path");
       await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
         "hard",
       );
+      await studioStep(page, "Erzeugen");
       await expect(generate).toBeDisabled();
+      await studioStep(page, "Bearbeiten");
       await page
         .getByRole("button", { name: "Maske erstellen", exact: true })
         .click();
@@ -909,6 +919,7 @@ const path = require("node:path");
       await page
         .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
         .click();
+      await studioStep(page, "Erzeugen");
       await expect(generate).toBeEnabled();
       await generate.click();
       await expect(
@@ -917,6 +928,7 @@ const path = require("node:path");
       await expect(
         page.getByRole("status", { name: "Codex Status" }),
       ).toContainText("Generierung abgeschlossen");
+      await studioStep(page, "Bearbeiten");
       await expect(
         text(page, /Hard Lock blockiert: unterschiedliche Abmessungen/),
       ).toBeVisible();
@@ -954,6 +966,7 @@ const path = require("node:path");
         path.join(output, "result.png"),
         PNG.sync.write(fixture),
       );
+      await studioStep(page, "Erzeugen");
       await expect(generate).toBeEnabled();
       await generate.click();
       await expect(
@@ -962,6 +975,7 @@ const path = require("node:path");
       await expect(
         page.getByRole("status", { name: "Codex Status" }),
       ).toContainText("Generierung abgeschlossen");
+      await studioStep(page, "Bearbeiten");
       page.once("dialog", (dialog) => dialog.accept());
       await page
         .getByRole("button", {
@@ -1072,8 +1086,9 @@ const path = require("node:path");
       await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
         "soft",
       );
-      await expect(generate).toBeDisabled();
       await expect(text(page, /Soft Lock nicht verfügbar/)).toBeVisible();
+      await studioStep(page, "Erzeugen");
+      await expect(generate).toBeDisabled();
       await studioStep(page, "Bearbeiten");
       await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
         "none",
@@ -1097,13 +1112,12 @@ const path = require("node:path");
     );
     // The mask-mode template was explicitly adopted above and is pristine;
     // switching style now updates it automatically rather than asking twice.
+    await studioExpert(page);
     await expect(field(page, "Arbeits-Prompt", { exact: true })).toHaveValue(
       /STYLE LOCK — Shared Noir/,
     );
     await studioExpert(page);
-    await text(page, "Technische Details · Herkunft", {
-      exact: true,
-    }).click();
+    await expect(page.getByRole("heading", {name: "Technische Details · Herkunft", exact: true})).toBeVisible();
     await studioExpert(page);
     await page
       .getByRole("button", { name: "Codex-Verfügbarkeit prüfen", exact: true })
@@ -1118,6 +1132,7 @@ const path = require("node:path");
     await field(page, "Charakter Stilzuordnung", { exact: true }).selectOption(
       "master",
     );
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
     expect(
       (await fs.readFile(path.join(root, "trace.jsonl"), "utf8"))

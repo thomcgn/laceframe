@@ -15,7 +15,15 @@ import { MaskEditor } from "./MaskEditor";
 import { MasterCandidateCompare } from "./MasterCandidateCompare";
 import { ImagePreview } from "./ImagePreview";
 type Asset = { id: string; width: number; height: number; characterId: string };
-export function Evidence({ id, label }: { id: string; label: string }) {
+export function Evidence({
+  id,
+  label,
+  compact = false,
+}: {
+  id: string;
+  label: string;
+  compact?: boolean;
+}) {
   const [report, setReport] = useState<QualityReport>(),
     [error, setError] = useState("");
   useEffect(() => {
@@ -55,26 +63,33 @@ export function Evidence({ id, label }: { id: string; label: string }) {
       <strong>
         {label} · {names[report.status]}
       </strong>
-      <small>
-        {report.width} × {report.height} · {report.format.toUpperCase()} ·
-        Alpha-Null: {report.transparent} · Teilalpha: {report.partial} ·
-        Deckend: {report.opaque} · Transparenter Rand: {report.edgeTransparent}/
-        {report.edgePixels}
-      </small>
-      <div className="quality-palette" aria-label={`${label} dominante Farben`}>
-        {report.palette.map((p) => (
-          <span
-            key={p.color}
-            title={`${p.color} · ${p.pixels} Pixel (5-Bit-Farbgruppe)`}
-            style={{ background: p.color }}
-          />
-        ))}
-      </div>
-      <small>
-        Dominante 5-Bit-Farbgruppen sichtbarer Pixel. Nachbarwechsel:{" "}
-        {report.neighborChanges}/{report.neighborPairs}. Vergleichshilfe für
-        Detaildichte, kein Stilscore.
-      </small>
+      {!compact && (
+        <>
+          <small>
+            {report.width} × {report.height} · {report.format.toUpperCase()} ·
+            Alpha-Null: {report.transparent} · Teilalpha: {report.partial} ·
+            Deckend: {report.opaque} · Transparenter Rand:{" "}
+            {report.edgeTransparent}/{report.edgePixels}
+          </small>
+          <div
+            className="quality-palette"
+            aria-label={`${label} dominante Farben`}
+          >
+            {report.palette.map((p) => (
+              <span
+                key={p.color}
+                title={`${p.color} · ${p.pixels} Pixel (5-Bit-Farbgruppe)`}
+                style={{ background: p.color }}
+              />
+            ))}
+          </div>
+          <small>
+            Dominante 5-Bit-Farbgruppen sichtbarer Pixel. Nachbarwechsel:{" "}
+            {report.neighborChanges}/{report.neighborPairs}. Vergleichshilfe für
+            Detaildichte, kein Stilscore.
+          </small>
+        </>
+      )}
       <small>{report.warnings.join(" ")}</small>
     </div>
   );
@@ -88,8 +103,10 @@ export function AssetQuality({
   onCutoutOpened,
   workspaceStep,
   onDirtyChange,
+  expert = false,
 }: {
   source: Asset;
+  expert?: boolean;
   workspaceStep?: StudioStep;
   onDirtyChange?: (dirty: boolean) => void;
   project: Project;
@@ -109,8 +126,9 @@ export function AssetQuality({
     [notes, setNotes] = useState(""),
     [confirmed, setConfirmed] = useState(false);
   const [includeProvenance, setIncludeProvenance] = useState(true);
-  const [expanded, setExpanded] = useState(Boolean(workspaceStep)),
-    [styleExpanded, setStyleExpanded] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const showExpert = expert || advanced;
+  const expanded = true;
   const [profile, setProfile] = useState<ResolutionProfile>(
     RESOLUTION_PROFILES[0],
   );
@@ -122,7 +140,6 @@ export function AssetQuality({
   }>();
   useEffect(() => {
     if (cutoutRequested) {
-      setExpanded(true);
       setEditor({ source });
       onCutoutOpened?.();
     }
@@ -291,9 +308,72 @@ export function AssetQuality({
       setWorking(false);
     }
   }
+  // The owner remains mounted to retain selected derivative and review drafts.
+  // Irrelevant steps render no tools or forms, rather than hiding a form tree.
+  if (
+    workspaceStep &&
+    workspaceStep !== "Bearbeiten" &&
+    workspaceStep !== "Freigeben"
+  )
+    return null;
   return (
-    <div className="quality-container">
+    <div className="quality-container" data-testid="asset-quality">
+      <div
+        className="button-row quality-tools"
+        role="toolbar"
+        aria-label="Bildwerkzeuge"
+        hidden={workspaceStep === "Freigeben"}
+      >
+        <button
+          disabled={busy || !eligibility?.allowed}
+          onClick={() => setRelighting({ source: active })}
+        >
+          Live Relighting öffnen
+        </button>
+        {lightingRecipe && (
+          <button
+            disabled={busy || !recipeEligibility?.allowed}
+            onClick={() => {
+              const parent = [
+                ...project.masters,
+                ...project.assets,
+                ...project.masterCandidates,
+                ...project.qualityAssets,
+              ].find((a) => a.id === lightingRecipe.sourceId)!;
+              setRelighting({
+                source: parent,
+                recipeId: lightingRecipe.id,
+              });
+            }}
+          >
+            Lichtrevision bearbeiten
+          </button>
+        )}
+        <button disabled={busy} onClick={() => void beginCutout()}>
+          Hintergrund freistellen
+        </button>
+        {(!workspaceStep || showExpert) && (
+          <>
+            <button disabled={busy} onClick={() => void exportImage(false)}>
+              Transparentes PNG exportieren
+            </button>
+            <button disabled={busy} onClick={() => void exportImage(true)}>
+              Ausdrücklich Rohbild exportieren
+            </button>
+          </>
+        )}
+      </div>
+      <div hidden={workspaceStep === "Freigeben"}>
+        <ColorConsistency
+          sourceId={active.id}
+          project={project}
+          onSnapshot={onSnapshot}
+          disabled={busy}
+        />
+      </div>
+
       <Evidence
+        compact={!showExpert}
         id={active.id}
         label={
           derivative
@@ -303,95 +383,65 @@ export function AssetQuality({
               : "Bildprüfung"
         }
       />
-      <details
-        className="asset-quality"
-        open={expanded}
-        data-testid="asset-quality"
-        onToggle={(e) => setExpanded(e.currentTarget.open)}
-      >
-        <summary hidden={Boolean(workspaceStep)}>
-          Assetqualität · Transparenz, Freistellung, Stil & Export
-        </summary>
+      <section className="asset-quality">
+        <h3>
+          {workspaceStep === "Freigeben"
+            ? "Qualitätsversion prüfen"
+            : "Bild bearbeiten"}
+        </h3>
+        {!workspaceStep && (
+          <label className="quality-expert-toggle">
+            <input
+              type="checkbox"
+              checked={advanced}
+              onChange={(e) => setAdvanced(e.target.checked)}
+            />
+            Expertenoptionen
+          </label>
+        )}
         {expanded && (
           <>
-            <div hidden={workspaceStep === "Freigeben"}>
-              <ColorConsistency
-                sourceId={active.id}
-                project={project}
-                onSnapshot={onSnapshot}
-                disabled={busy}
-              />
-              <StyleComparison project={project} sourceId={active.id} />
-            </div>
             {error && (
               <p role="alert" className="error">
                 {error}
               </p>
             )}
             {notice && <p role="status">{notice}</p>}
-            <p>
-              Quelle:{" "}
-              {derivative
-                ? derivative.operation === "cutout"
-                  ? "Freigestellter Kandidat"
-                  : derivative.operation === "relighting"
-                    ? `2D-Lichtkandidat · R${derivative.relighting?.revision}`
-                    : derivative.operation === "color-correction"
-                      ? `Farbkandidat · R${derivative.colorCorrection?.revision}`
-                      : "Separate Auflösungsvariante"
-                : sourceQuality
-                  ? "Freigegebene abgeleitete Version"
-                  : "Unverändertes Rohbild"}
-              . Rohfreigabe allein ist kein Nachweis für ein produktionsfertiges
-              Transparenzasset.
-            </p>
-            {sourceQuality && (
+            {showExpert && (
+              <>
+                <p>
+                  Quelle:{" "}
+                  {derivative
+                    ? derivative.operation === "cutout"
+                      ? "Freigestellter Kandidat"
+                      : derivative.operation === "relighting"
+                        ? `2D-Lichtkandidat · R${derivative.relighting?.revision}`
+                        : derivative.operation === "color-correction"
+                          ? `Farbkandidat · R${derivative.colorCorrection?.revision}`
+                          : "Separate Auflösungsvariante"
+                    : sourceQuality
+                      ? "Freigegebene abgeleitete Version"
+                      : "Unverändertes Rohbild"}
+                  . Rohfreigabe allein ist kein Nachweis für ein
+                  produktionsfertiges Transparenzasset.
+                </p>
+              </>
+            )}
+            {showExpert && sourceQuality && (
               <p className="mono">
                 Abgeleitet aus {sourceQuality.sourceId} · SHA-256{" "}
                 {sourceQuality.sourceSha256}. Das Rohoriginal bleibt erhalten.
               </p>
             )}
-            <p>
-              {derivative
-                ? `Prüfstatus: ${derivative.status} · ${derivative.notes ?? "Freigabe steht aus"}`
-                : "Eine bestehende Freigabe belegt keine Transparenz. Deckende Assets bleiben als Rohbilder nutzbar."}
-            </p>
-            <div className="button-row" hidden={workspaceStep === "Freigeben"}>
-              <button
-                disabled={busy || !eligibility?.allowed}
-                onClick={() => setRelighting({ source: active })}
-              >
-                Live Relighting öffnen
-              </button>
-              {lightingRecipe && (
-                <button
-                  disabled={busy || !recipeEligibility?.allowed}
-                  onClick={() => {
-                    const parent = [
-                      ...project.masters,
-                      ...project.assets,
-                      ...project.masterCandidates,
-                      ...project.qualityAssets,
-                    ].find((a) => a.id === lightingRecipe.sourceId)!;
-                    setRelighting({
-                      source: parent,
-                      recipeId: lightingRecipe.id,
-                    });
-                  }}
-                >
-                  Lichtrevision bearbeiten
-                </button>
-              )}
-              <button disabled={busy} onClick={() => void beginCutout()}>
-                Hintergrund freistellen
-              </button>
-              <button disabled={busy} onClick={() => void exportImage(false)}>
-                Transparentes PNG exportieren
-              </button>
-              <button disabled={busy} onClick={() => void exportImage(true)}>
-                Ausdrücklich Rohbild exportieren
-              </button>
-            </div>
+            {showExpert && (
+              <>
+                <p>
+                  {derivative
+                    ? `Prüfstatus: ${derivative.status} · ${derivative.notes ?? "Freigabe steht aus"}`
+                    : "Eine bestehende Freigabe belegt keine Transparenz. Deckende Assets bleiben als Rohbilder nutzbar."}
+                </p>
+              </>
+            )}
             <p role="status" aria-label="Relighting Freigabe">
               {eligibility?.reason ??
                 "Freistellungs-Herkunft und Alpha werden geprüft …"}
@@ -404,15 +454,19 @@ export function AssetQuality({
                   {recipeEligibility.reason}
                 </p>
               )}
-            <label>
-              <input
-                type="checkbox"
-                checked={includeProvenance}
-                disabled={busy}
-                onChange={(e) => setIncludeProvenance(e.target.checked)}
-              />
-              Provenienz-JSON exportieren (Prompt, Herkunft, Prüfnotizen)
-            </label>
+            {(!workspaceStep || showExpert) && (
+              <>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={includeProvenance}
+                    disabled={busy}
+                    onChange={(e) => setIncludeProvenance(e.target.checked)}
+                  />
+                  Provenienz-JSON exportieren (Prompt, Herkunft, Prüfnotizen)
+                </label>
+              </>
+            )}
             {(derivatives.length > 0 || derivative) && (
               <>
                 <label>
@@ -517,130 +571,140 @@ export function AssetQuality({
                 )}
               </>
             )}
-            <details>
-              <summary>Auflösungsprofil · separate Variante</summary>
-              <div className="inline-form">
-                <label>
-                  Vorlage
-                  <select
-                    aria-label="Auflösungsvorlage"
-                    onChange={(e) =>
-                      setProfile({
-                        ...RESOLUTION_PROFILES[Number(e.target.value)],
-                      })
-                    }
-                  >
-                    {RESOLUTION_PROFILES.map((p, i) => (
-                      <option key={p.name} value={i}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Profilname
-                  <input
-                    value={profile.name}
-                    onChange={(e) =>
-                      setProfile({ ...profile, name: e.target.value })
-                    }
-                  />
-                </label>
-                {(["width", "height"] as const).map((k) => (
-                  <label key={k}>
-                    {k === "width" ? "Breite" : "Höhe"}
-                    <input
-                      aria-label={`Profil ${k}`}
-                      type="number"
-                      min={1}
-                      max={4096}
-                      value={profile[k]}
+            {showExpert && (
+              <section className="quality-expert">
+                <StyleComparison project={project} sourceId={active.id} />
+                <h3>Auflösungsprofil · separate Variante</h3>
+                <div className="inline-form">
+                  <label>
+                    Vorlage
+                    <select
+                      aria-label="Auflösungsvorlage"
                       onChange={(e) =>
-                        setProfile({ ...profile, [k]: Number(e.target.value) })
+                        setProfile({
+                          ...RESOLUTION_PROFILES[Number(e.target.value)],
+                        })
+                      }
+                    >
+                      {RESOLUTION_PROFILES.map((p, i) => (
+                        <option key={p.name} value={i}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Profilname
+                    <input
+                      value={profile.name}
+                      onChange={(e) =>
+                        setProfile({ ...profile, name: e.target.value })
                       }
                     />
                   </label>
-                ))}
-                <label>
-                  Skalierung
-                  <select
-                    value={profile.sampling}
-                    onChange={(e) =>
-                      setProfile({
-                        ...profile,
-                        sampling: e.target
-                          .value as ResolutionProfile["sampling"],
-                      })
-                    }
-                  >
-                    <option value="nearest">Nearest Neighbor · Pixelart</option>
-                    <option value="bilinear">Bilinear · alpha-korrekt</option>
-                  </select>
-                </label>
-                <label>
-                  Seitenverhältnis
-                  <select
-                    value={profile.fit}
-                    onChange={(e) =>
-                      setProfile({
-                        ...profile,
-                        fit: e.target.value as ResolutionProfile["fit"],
-                      })
-                    }
-                  >
-                    <option value="contain">
-                      Einpassen + transparentes Padding
-                    </option>
-                    <option value="cover">
-                      Füllen + zentrierter Zuschnitt
-                    </option>
-                  </select>
-                </label>
-              </div>
-              <p>
-                {active.width === profile.width &&
-                active.height === profile.height
-                  ? "Auflösung entspricht Profil"
-                  : "Auflösung weicht ab"}{" "}
-                · Ist {active.width}×{active.height} / Ziel {profile.width}×
-                {profile.height}. Nearest Neighbor erzeugt keinen Pixelart-Stil
-                aus Fotorealismus. Keine Verzerrung; Quelle bleibt erhalten.
-              </p>
-              <button
-                disabled={busy}
-                onClick={() => {
-                  if (
-                    profile.fit === "cover" &&
-                    !window.confirm(
-                      "Zentrierten Zuschnitt ausdrücklich anwenden? Die Quelle bleibt erhalten.",
+                  {(["width", "height"] as const).map((k) => (
+                    <label key={k}>
+                      {k === "width" ? "Breite" : "Höhe"}
+                      <input
+                        aria-label={`Profil ${k}`}
+                        type="number"
+                        min={1}
+                        max={4096}
+                        value={profile[k]}
+                        onChange={(e) =>
+                          setProfile({
+                            ...profile,
+                            [k]: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                  ))}
+                  <label>
+                    Skalierung
+                    <select
+                      value={profile.sampling}
+                      onChange={(e) =>
+                        setProfile({
+                          ...profile,
+                          sampling: e.target
+                            .value as ResolutionProfile["sampling"],
+                        })
+                      }
+                    >
+                      <option value="nearest">
+                        Nearest Neighbor · Pixelart
+                      </option>
+                      <option value="bilinear">Bilinear · alpha-korrekt</option>
+                    </select>
+                  </label>
+                  <label>
+                    Seitenverhältnis
+                    <select
+                      value={profile.fit}
+                      onChange={(e) =>
+                        setProfile({
+                          ...profile,
+                          fit: e.target.value as ResolutionProfile["fit"],
+                        })
+                      }
+                    >
+                      <option value="contain">
+                        Einpassen + transparentes Padding
+                      </option>
+                      <option value="cover">
+                        Füllen + zentrierter Zuschnitt
+                      </option>
+                    </select>
+                  </label>
+                </div>
+                <p>
+                  {active.width === profile.width &&
+                  active.height === profile.height
+                    ? "Auflösung entspricht Profil"
+                    : "Auflösung weicht ab"}{" "}
+                  · Ist {active.width}×{active.height} / Ziel {profile.width}×
+                  {profile.height}. Nearest Neighbor erzeugt keinen
+                  Pixelart-Stil aus Fotorealismus. Keine Verzerrung; Quelle
+                  bleibt erhalten.
+                </p>
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    if (
+                      profile.fit === "cover" &&
+                      !window.confirm(
+                        "Zentrierten Zuschnitt ausdrücklich anwenden? Die Quelle bleibt erhalten.",
+                      )
                     )
-                  )
-                    return;
-                  void command({
-                    type: "deriveResolution",
-                    sourceId: active.id,
-                    profile,
-                  }).catch(() => {});
-                }}
-              >
-                Separate Auflösungsvariante erstellen
-              </button>
-            </details>
-            <details onToggle={(e) => setStyleExpanded(e.currentTarget.open)}>
-              <summary>
-                Art-Direction-Vergleich · {style?.name ?? "Eigener Masterstil"}{" "}
-                · {styleIds.length} Stilreferenzen
-              </summary>
-              <p>
-                Zielpalette:{" "}
-                {style?.colorRules ??
-                  "Keine explizite Zielpalette; dominante Referenzfarben vergleichen."}
-                . Identität, Outfit und Hintergrund sind unabhängig vom
-                Renderingstil. Konturen, Farbflächen, Cluster und Details bei
-                gleichem Zoom prüfen; keine automatische Stilfreigabe.
-              </p>
-              {styleExpanded &&
-                styleIds.map((id) => (
+                      return;
+                    void command({
+                      type: "deriveResolution",
+                      sourceId: active.id,
+                      profile,
+                    }).catch(() => {});
+                  }}
+                >
+                  Separate Auflösungsvariante erstellen
+                </button>
+              </section>
+            )}
+            {showExpert && (
+              <section className="quality-expert">
+                <h3>
+                  Art-Direction-Vergleich ·{" "}
+                  {style?.name ?? "Eigener Masterstil"} · {styleIds.length}{" "}
+                  Stilreferenzen
+                </h3>
+                <p>
+                  Zielpalette:{" "}
+                  {style?.colorRules ??
+                    "Keine explizite Zielpalette; dominante Referenzfarben vergleichen."}
+                  . Identität, Outfit und Hintergrund sind unabhängig vom
+                  Renderingstil. Konturen, Farbflächen, Cluster und Details bei
+                  gleichem Zoom prüfen; keine automatische Stilfreigabe.
+                </p>
+                {styleIds.map((id) => (
                   <div key={id}>
                     <ImagePreview
                       id={id}
@@ -656,7 +720,8 @@ export function AssetQuality({
                     />
                   </div>
                 ))}
-            </details>
+              </section>
+            )}
             {relighting && (
               <RelightingEditor
                 source={relighting.source}
@@ -691,7 +756,7 @@ export function AssetQuality({
             )}
           </>
         )}
-      </details>
+      </section>
     </div>
   );
 }

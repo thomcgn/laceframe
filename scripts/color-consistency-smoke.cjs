@@ -314,7 +314,7 @@ const { nav } = require("./smoke-ui.cjs");
       .getByLabel("Library Assettyp", { exact: true })
       .selectOption("expression");
     let quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await quality.locator("summary").first().click();
+    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Farbkonsistenz prüfen", exact: true })
       .click();
@@ -459,7 +459,7 @@ const { nav } = require("./smoke-ui.cjs");
       reviewed.qualityAssets.at(-1).approvedExpressionId,
     );
     if (!(await quality.getAttribute("open")))
-      await quality.locator("summary").first().click();
+      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await choose(exportsDir);
     await quality
       .getByRole("button", {
@@ -494,7 +494,7 @@ const { nav } = require("./smoke-ui.cjs");
       .getByLabel("Library Assettyp", { exact: true })
       .selectOption("expression");
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await quality.locator("summary").first().click();
+    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Farbkonsistenz prüfen", exact: true })
       .click();
@@ -537,7 +537,7 @@ const { nav } = require("./smoke-ui.cjs");
     await page.getByLabel("Library Asset", { exact: true }).selectOption(q.id);
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if (!(await quality.getAttribute("open")))
-      await quality.locator("summary").first().click();
+      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
       .getByRole("button", { name: "Farbkonsistenz prüfen", exact: true })
       .click();

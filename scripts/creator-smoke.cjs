@@ -182,6 +182,7 @@ const { createHash } = require("node:crypto");
         .locator(".studio-editor:visible .character-creator")
         .getByText("Synthetic Cameo", { exact: true }),
     ).toBeVisible();
+    await studioStep(page, "Erzeugen");
     // UX-01: missing prerequisites explain the disabled action and focus the fix.
     await expect(
       page.getByRole("button", {
@@ -365,6 +366,7 @@ const { createHash } = require("node:crypto");
     await field(page, "Creator Identitätsmerkmale", { exact: true }).fill(
       "Use only the individual in the identity photos.",
     );
+    await studioExpert(page);
     await expect(
       field(page, "Creator Promptmodus", { exact: true }),
     ).toHaveValue("automatic");
@@ -375,6 +377,7 @@ const { createHash } = require("node:crypto");
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/Images 4–4 are STYLE ONLY/);
     // A retained draft survives style editing, mode changes and Library round trips.
+    await studioStep(page, "Auswählen");
     const originalOutfit = await field(page, "Creator Outfit", {
       exact: true,
     }).inputValue();
@@ -421,6 +424,7 @@ const { createHash } = require("node:crypto");
     await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
       originalOutfit,
     );
+    await studioExpert(page);
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/retained draft R3/);
@@ -474,6 +478,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Zurück zum Studio", exact: true })
       .click();
+    await studioExpert(page);
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(expertText);
@@ -499,12 +504,14 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Expression erstellen", exact: true })
       .click();
+    await studioStep(page, "Erzeugen");
     await expect(page.locator(".generation-requirements")).toContainText(
       "Kein freigegebener Master",
     );
     await page
       .getByRole("button", { name: "Master erstellen", exact: true })
       .click();
+    await studioStep(page, "Auswählen");
     await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
       originalOutfit,
     );
@@ -542,7 +549,9 @@ const { createHash } = require("node:crypto");
       name: "Neutralen Masterkandidaten generieren",
       exact: true,
     });
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
+    await studioStep(page, "Erzeugen");
     await generate.click();
     await expect(
       page.getByRole("status", {
@@ -597,6 +606,7 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Mastergenerierungszeit", { exact: true }),
     ).toContainText("Generiert in");
+    await studioStep(page, "Bearbeiten");
     await checkIdentityComparison({ page, app, project });
     await fs.writeFile(
       path.join(output, "result.png"),
@@ -620,14 +630,18 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Masterkandidat ablehnen", exact: true })
       .click();
     await expect(page.locator(".notice")).toContainText("abgelehnt");
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
     await fs.writeFile(path.join(root, "scenario"), "image-failed");
+    await studioStep(page, "Erzeugen");
     await generate.click();
     await expect(
       page.getByRole("status", { name: "Character Creator Status" }),
     ).toContainText("fehlgeschlagen");
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
     await fs.writeFile(path.join(root, "scenario"), "hang");
+    await studioStep(page, "Erzeugen");
     await generate.click();
     await expect(
       page.getByRole("button", {
@@ -659,8 +673,10 @@ const { createHash } = require("node:crypto");
     await expect(
       page.getByRole("status", { name: "Character Creator Status" }),
     ).toContainText("abgebrochen");
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
     await fs.writeFile(path.join(root, "scenario"), "delayed");
+    await studioStep(page, "Erzeugen");
     await generate.click();
     await expect(
       page.getByRole("status", { name: "Character Creator Status" }),
@@ -681,6 +697,7 @@ const { createHash } = require("node:crypto");
         exact: true,
       })
       .click();
+    await studioStep(page, "Auswählen");
     await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
       originalOutfit,
     );
@@ -703,9 +720,9 @@ const { createHash } = require("node:crypto");
       "Master Aktivierung bestätigen",
     ])
       await expect(field(page, label, { exact: true })).toBeChecked();
-    const management = page.locator(".project-management");
-    const managementWasOpen = await management.evaluate((el) => el.open);
-    if (!managementWasOpen) await management.locator("summary").click();
+    await expect(
+      page.getByRole("button", { name: "Projekt öffnen …", exact: true }),
+    ).toBeVisible();
     const beforeReviewSwitch = await fs.readFile(
       path.join(project, "laceframe.json"),
     );
@@ -724,7 +741,6 @@ const { createHash } = require("node:crypto");
     expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(
       beforeReviewSwitch,
     );
-    if (!managementWasOpen) await management.locator("summary").click();
 
     await page
       .getByRole("button", {
@@ -735,6 +751,7 @@ const { createHash } = require("node:crypto");
     await expect(page.locator(".notice")).toContainText(
       "Master V1 freigegeben und gesperrt",
     );
+    await studioStep(page, "Erzeugen");
     await expect(generate).toBeDisabled();
     const approved = await manifest();
     expect(approved.masterCandidates.map((c) => c.status)).toEqual([
@@ -780,6 +797,7 @@ const { createHash } = require("node:crypto");
       name: "Mit Masterreferenz generieren",
       exact: true,
     });
+    await studioStep(page, "Erzeugen");
     await expect(expression).toBeEnabled();
     await expression.click();
     await expect(
@@ -807,7 +825,9 @@ const { createHash } = require("node:crypto");
     await fs.mkdir(exportDir);
     await chooser(exportDir);
     const quality = page.locator('[data-testid="asset-quality"]:visible');
-    await quality.locator("summary").first().click();
+    await expect(
+      quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+    ).toBeVisible();
     await quality
       .getByRole("button", {
         name: "Ausdrücklich Rohbild exportieren",
@@ -953,6 +973,7 @@ const { createHash } = require("node:crypto");
     );
     await fs.writeFile(path.join(output, "result.png"), Buffer.from(result)); // real opaque PNG fixture
     await fs.writeFile(path.join(root, "scenario"), "delayed");
+    await studioStep(page, "Erzeugen");
     await gen().click();
     await expect(job()).toContainText("läuft");
     await assertOld();
@@ -1026,11 +1047,13 @@ const { createHash } = require("node:crypto");
       .click();
     await assertOld();
     await fs.writeFile(path.join(root, "scenario"), "image-failed");
+    await studioStep(page, "Erzeugen");
     await gen().click();
     await expect(job()).toContainText("fehlgeschlagen");
     await assertOld();
     await expect(gen()).toBeEnabled();
     await fs.writeFile(path.join(root, "scenario"), "hang");
+    await studioStep(page, "Erzeugen");
     await gen().click();
     await expect(job()).toContainText("läuft");
     await page
@@ -1044,6 +1067,7 @@ const { createHash } = require("node:crypto");
       Buffer.from(approvedResult),
     );
     await fs.writeFile(path.join(root, "scenario"), "delayed");
+    await studioStep(page, "Erzeugen");
     await gen().click();
     await expect(job()).toContainText("läuft");
     await expect(job()).toContainText("abgeschlossen");
@@ -1153,10 +1177,15 @@ const { createHash } = require("node:crypto");
     await expect(
       image(page, "Freigegebener Master V2", { exact: true }),
     ).toBeVisible();
-    await page.locator(".master-history summary").click();
+    await page
+      .getByLabel("Historische Masterversion", { exact: true })
+      .selectOption(v1.id);
     await expect(page.locator(".master-history")).toContainText(
       "Master V1 · historisch archiviert",
     );
+    await page
+      .getByLabel("Historische Masterversion", { exact: true })
+      .selectOption(v2.id);
     await expect(page.locator(".master-history")).toContainText(
       "Master V2 · aktuell aktiv",
     );

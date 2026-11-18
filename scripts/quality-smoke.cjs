@@ -87,7 +87,7 @@ const { createHash } = require("node:crypto");
       page.locator('[data-quality-status="opaque"]').first(),
     ).toBeVisible();
     let q = page.locator('[data-testid="asset-quality"]:visible').first();
-    await q.locator("summary").first().click();
+    await expect(q.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await q
       .getByRole("button", {
         name: "Transparentes PNG exportieren",
@@ -242,7 +242,7 @@ const { createHash } = require("node:crypto");
     expect(p.masters[0].sha256).toBe(originalHash);
     await expect(page.getByAltText("Freigegebener Master V2")).toBeVisible();
     q = page.locator('[data-testid="asset-quality"]:visible').first();
-    await q.locator("summary").first().click();
+    await expect(q.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await chooser(exports);
     await q
       .getByRole("button", {
@@ -319,7 +319,7 @@ const { createHash } = require("node:crypto");
       p.qualityAssets[0].id,
     );
     q = page.locator('[data-testid="asset-quality"]:visible');
-    await q.locator("summary").first().click();
+    await expect(q.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await expect(q.getByLabel("Qualitätsversion", { exact: true })).toHaveValue(
       p.qualityAssets[0].id,
     );

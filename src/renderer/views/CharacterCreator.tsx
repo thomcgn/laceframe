@@ -1,3 +1,4 @@
+import { PortraitPreview } from "../components/PortraitPreview";
 import { StudioSteps, useStudioSteps } from "../components/StudioSteps";
 import { MasterApproval } from "../components/MasterApproval";
 import { GenerationRequirements } from "../components/GenerationRequirements";
@@ -94,7 +95,6 @@ export function CharacterCreator({
     (a) => a.characterId === character?.id && !a.removedAt,
   );
   const [name, setName] = useState("");
-  const [promptOpen, setPromptOpen] = useState(true);
   const [promptMode, setPromptMode] = useState<PromptMode>("automatic");
   const [creative, setCreative] = useState("");
   const [styleId, setStyleId] = useState(
@@ -172,9 +172,6 @@ export function CharacterCreator({
     () => setComposer((old) => updateStudioPrompt(old, base, promptMode)),
     [base, promptMode],
   );
-  useEffect(() => {
-    if (composer.pendingBase !== undefined) setPromptOpen(true);
-  }, [composer.pendingBase]);
   function changePromptMode(mode: PromptMode) {
     if (
       promptMode === "expert" &&
@@ -474,9 +471,10 @@ export function CharacterCreator({
       ? (codex.execution ?? active?.execution)
       : active?.execution;
   return (
-    <div className="character-creator">
+    <div className="character-creator" data-step={step}>
       {slot &&
         (visible || running) &&
+        (step === "Erzeugen" || running) &&
         createPortal(
           <div className="create-action-bar">
             <div className="job-status">
@@ -589,32 +587,33 @@ export function CharacterCreator({
           </label>
         </>
       )}
-      <details
-        className="creator-new-character"
-        hidden={step !== "Auswählen"}
-        open={!character}
-      >
-        <summary>Neue Figur anlegen</summary>
-        <form
-          className="inline-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            command({ type: "addCharacter", name }, "Figurenentwurf angelegt.");
-          }}
-        >
-          <label>
-            Neue Entwurfsfigur
-            <input
-              aria-label="Name der Entwurfsfigur"
-              required
-              maxLength={120}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
-          <button>Figurenentwurf anlegen</button>
-        </form>
-      </details>
+      {step === "Auswählen" && (
+        <section className="creator-new-character">
+          <h3>Neue Figur anlegen</h3>
+          <form
+            className="inline-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              command(
+                { type: "addCharacter", name },
+                "Figurenentwurf angelegt.",
+              );
+            }}
+          >
+            <label>
+              Neue Entwurfsfigur
+              <input
+                aria-label="Name der Entwurfsfigur"
+                required
+                maxLength={120}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+            <button>Figurenentwurf anlegen</button>
+          </form>
+        </section>
+      )}
       {character && (
         <>
           <p>
@@ -631,266 +630,290 @@ export function CharacterCreator({
                 : "Für einen neuen Master derselben Figur in Characters Master neu aufbauen wählen."}
             </p>
           )}
-          <div className="creator-grid" hidden={step !== "Auswählen"}>
-            <section
-              className="panel creator-identity"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (
-                  !busy &&
-                  !running &&
-                  targetValid &&
-                  e.dataTransfer.files.length > 0
-                )
-                  importIdentity(Array.from(e.dataTransfer.files));
-              }}
-            >
-              <h3 data-focus-target="creator-identity">
-                Identität schützen · Identitätsquellen
-              </h3>
-              <p>
-                Bis zu drei Fotos derselben Person oder Illustrationen.
-                PNG/JPEG/WebP, je 16 MiB / 16 MP. Originale bleiben lokal, bis
-                du generierst.
-              </p>
-              <button
-                disabled={
-                  !targetValid || identities.length >= 3 || busy || running
-                }
-                onClick={() => importIdentity()}
+          {step === "Auswählen" && (
+            <div className="creator-grid">
+              <section
+                className="panel creator-identity"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (
+                    !busy &&
+                    !running &&
+                    targetValid &&
+                    e.dataTransfer.files.length > 0
+                  )
+                    importIdentity(Array.from(e.dataTransfer.files));
+                }}
               >
-                Identitätsbilder hinzufügen …
-              </button>
-              <p role="status">{identities.length} von 3 Bildern</p>
-              <div className="creator-references">
-                {identities.map((a, i) => (
-                  <div key={a.id}>
-                    <ImagePreview
-                      id={a.id}
-                      caption={`Identität ${i + 1}`}
-                      zoom="fit"
-                    />
-                    <small>
-                      {a.width} × {a.height} · {a.format.toUpperCase()} ·{" "}
-                      {a.sha256.slice(0, 12)}
-                    </small>
-                    <button
-                      disabled={!candidate}
-                      aria-pressed={activeReference?.id === a.id}
-                      onClick={() => {
-                        setReferenceId(a.id);
-                      }}
-                    >
-                      Vergleichen
-                    </button>
-                    <button
-                      disabled={busy || running}
-                      onClick={() => importIdentity(undefined, a.id)}
-                    >
-                      Referenz austauschen …
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            "Identitätsbild aus aktiver Auswahl entfernen? Historisch verwendete Quellen bleiben für ihre Provenienz erhalten; unbenutzte Projektkopien werden gelöscht. Originaldateien außerhalb des Projekts bleiben unverändert.",
-                          )
-                        )
-                          command(
-                            { type: "removeIdentityReference", id: a.id },
-                            "Referenz entfernt; historische Abhängigkeiten bleiben erhalten.",
-                          );
-                      }}
-                    >
-                      Referenz entfernen
-                    </button>
-                  </div>
-                ))}
-              </div>
-              {p.identityAssets.some(
-                (a) => a.characterId === character.id && a.removedAt,
-              ) && (
-                <small>
-                  Entfernte, historisch verwendete Referenzen bleiben im
-                  Projektarchiv. Kein sicheres Überschreiben oder Löschen von
-                  Codex-internen Dateien wird behauptet.
-                </small>
-              )}
-              <label>
-                Identitätsmerkmale
-                <textarea
-                  aria-label="Creator Identitätsmerkmale"
-                  maxLength={4000}
-                  rows={2}
-                  value={identityNotes}
-                  onChange={(e) => setIdentityNotes(e.target.value)}
+                <PortraitPreview
+                  image={activeReference ?? identities[0] ?? currentMaster}
+                  caption={`${character.name} · Identitätsvorlage`}
                 />
-              </label>
-            </section>
-            <section className="panel">
-              <h3>Art Direction / Style Lock</h3>
-              <button
-                className="text-link"
-                onClick={() => onArtDirection(style?.id)}
-              >
-                Art Direction bearbeiten
-              </button>
-              <label>
-                Darstellungsstil
-                <select
-                  aria-label="Creator Art Direction"
-                  value={style?.id ?? ""}
-                  onChange={(e) => {
-                    setStyleId(e.target.value);
-                    if (character && !rebuilding)
-                      command({
-                        type: "setCharacterStyle",
-                        characterId: character.id,
-                        selection: e.target.value
-                          ? { mode: "profile", profileId: e.target.value }
-                          : { mode: "master" },
-                      });
-                  }}
-                >
-                  <option value="">Ohne zusätzliches Stilprofil</option>
-                  {p.artDirections.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} · R{s.revision}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p>
-                Nur Rendering, Konturen, Licht und Farbe. Keine Gesichtsmerkmale
-                oder Kleidung aus Stilbildern übernehmen.
-              </p>
-              <div className="creator-references">
-                {styleRefs.map((r, i) => (
-                  <ImagePreview
-                    key={r.id}
-                    id={r.id}
-                    caption={`Stil ${i + 1} · nur Darstellung`}
-                    zoom="fit"
-                  />
-                ))}
-              </div>
-              {!style && (
-                <small>
-                  Stilprofile und Stilbilder lassen sich unter Art Direction
-                  anlegen.
-                </small>
-              )}
-              <h3 data-focus-target="creator-outfit">Outfit</h3>
-              <label>
-                Individuelle Kleidung
-                <textarea
-                  aria-label="Creator Outfit"
-                  rows={3}
-                  maxLength={4000}
-                  value={outfit}
-                  placeholder="Kleidung und Accessoires unabhängig von Fotos und Stilbildern"
-                  onChange={(e) => setOutfit(e.target.value)}
-                />
-              </label>
-              <details data-focus-target="creator-composition">
-                <summary>
-                  Composition · Pose, Ausschnitt & Zielauflösung
-                </summary>
+                <h3 data-focus-target="creator-identity">
+                  Identität schützen · Identitätsquellen
+                </h3>
                 <p>
-                  Hintergrund: echte Alpha-Transparenz, keine Kulisse. Das
-                  tatsächliche Ergebnis wird vor dem Review geprüft.
+                  Bis zu drei Fotos derselben Person oder Illustrationen.
+                  PNG/JPEG/WebP, je 16 MiB / 16 MP. Originale bleiben lokal, bis
+                  du generierst.
                 </p>
+                <button
+                  disabled={
+                    !targetValid || identities.length >= 3 || busy || running
+                  }
+                  onClick={() => importIdentity()}
+                >
+                  Identitätsbilder hinzufügen …
+                </button>
+                <p role="status">{identities.length} von 3 Bildern</p>
+                <div className="creator-references">
+                  {identities.map((a, i) => (
+                    <div key={a.id}>
+                      <ImagePreview
+                        id={a.id}
+                        caption={`Identität ${i + 1}`}
+                        zoom="fit"
+                      />
+                      <small>
+                        {a.width} × {a.height} · {a.format.toUpperCase()} ·{" "}
+                        {expert
+                          ? a.sha256.slice(0, 12)
+                          : "Original bleibt erhalten"}
+                      </small>
+                      <button
+                        disabled={!candidate}
+                        aria-pressed={activeReference?.id === a.id}
+                        onClick={() => {
+                          setReferenceId(a.id);
+                        }}
+                      >
+                        Vergleichen
+                      </button>
+                      <button
+                        disabled={busy || running}
+                        onClick={() => importIdentity(undefined, a.id)}
+                      >
+                        Referenz austauschen …
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "Identitätsbild aus aktiver Auswahl entfernen? Historisch verwendete Quellen bleiben für ihre Provenienz erhalten; unbenutzte Projektkopien werden gelöscht. Originaldateien außerhalb des Projekts bleiben unverändert.",
+                            )
+                          )
+                            command(
+                              { type: "removeIdentityReference", id: a.id },
+                              "Referenz entfernt; historische Abhängigkeiten bleiben erhalten.",
+                            );
+                        }}
+                      >
+                        Referenz entfernen
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {p.identityAssets.some(
+                  (a) => a.characterId === character.id && a.removedAt,
+                ) && (
+                  <small>
+                    Entfernte, historisch verwendete Referenzen bleiben im
+                    Projektarchiv. Kein sicheres Überschreiben oder Löschen von
+                    Codex-internen Dateien wird behauptet.
+                  </small>
+                )}
                 <label>
-                  Zielauflösungsprofil
+                  Identitätsmerkmale
+                  <textarea
+                    aria-label="Creator Identitätsmerkmale"
+                    maxLength={4000}
+                    rows={2}
+                    value={identityNotes}
+                    onChange={(e) => setIdentityNotes(e.target.value)}
+                  />
+                </label>
+              </section>
+              <section className="panel">
+                <h3>Art Direction / Style Lock</h3>
+                <button
+                  className="text-link"
+                  onClick={() => onArtDirection(style?.id)}
+                >
+                  Art Direction bearbeiten
+                </button>
+                <label>
+                  Darstellungsstil
                   <select
-                    aria-label="Creator Auflösungsprofil"
-                    defaultValue=""
+                    aria-label="Creator Art Direction"
+                    value={style?.id ?? ""}
                     onChange={(e) => {
-                      const p = RESOLUTION_PROFILES[Number(e.target.value)];
-                      if (p)
-                        setComposition((c) => ({
-                          ...c,
-                          targetWidth: p.width,
-                          targetHeight: p.height,
-                          targetResolution: p,
-                        }));
+                      setStyleId(e.target.value);
+                      if (character && !rebuilding)
+                        command({
+                          type: "setCharacterStyle",
+                          characterId: character.id,
+                          selection: e.target.value
+                            ? { mode: "profile", profileId: e.target.value }
+                            : { mode: "master" },
+                        });
                     }}
                   >
-                    <option value="" disabled>
-                      Benutzerdefiniertes Ziel
-                    </option>
-                    {RESOLUTION_PROFILES.map((p, i) => (
-                      <option key={p.name} value={i}>
-                        {p.name} · {p.width}×{p.height}
+                    <option value="">Ohne zusätzliches Stilprofil</option>
+                    {p.artDirections.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} · R{s.revision}
                       </option>
                     ))}
                   </select>
                 </label>
-                {(
-                  [
-                    ["pose", "Neutrale Pose"],
-                    ["framing", "Bildausschnitt"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <label key={key}>
-                    {label}
-                    <textarea
-                      aria-label={`Creator ${label}`}
-                      rows={2}
-                      maxLength={4000}
-                      value={composition[key]}
-                      onChange={(e) =>
-                        setComposition((c) => ({ ...c, [key]: e.target.value }))
-                      }
+                <p>
+                  Nur Rendering, Konturen, Licht und Farbe. Keine
+                  Gesichtsmerkmale oder Kleidung aus Stilbildern übernehmen.
+                </p>
+                <div className="creator-references">
+                  {styleRefs.map((r, i) => (
+                    <ImagePreview
+                      key={r.id}
+                      id={r.id}
+                      caption={`Stil ${i + 1} · nur Darstellung`}
+                      zoom="fit"
                     />
-                  </label>
-                ))}
+                  ))}
+                </div>
+                {!style && (
+                  <small>
+                    Stilprofile und Stilbilder lassen sich unter Art Direction
+                    anlegen.
+                  </small>
+                )}
+                <h3 data-focus-target="creator-outfit">Outfit</h3>
                 <label>
-                  Asset-Profil
-                  <input
-                    aria-label="Creator Asset-Profil"
-                    maxLength={120}
-                    value={composition.profile}
-                    onChange={(e) =>
-                      setComposition((c) => ({ ...c, profile: e.target.value }))
-                    }
+                  Individuelle Kleidung
+                  <textarea
+                    aria-label="Creator Outfit"
+                    rows={3}
+                    maxLength={4000}
+                    value={outfit}
+                    placeholder="Kleidung und Accessoires unabhängig von Fotos und Stilbildern"
+                    onChange={(e) => setOutfit(e.target.value)}
                   />
                 </label>
-                <div className="button-row">
-                  {(
-                    [
-                      ["targetWidth", "Zielbreite"],
-                      ["targetHeight", "Zielhöhe"],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <label key={key}>
-                      {label}
+                {expert && (
+                  <section data-focus-target="creator-composition">
+                    <h3>Composition · Pose, Ausschnitt & Zielauflösung</h3>
+                    <p>
+                      Hintergrund: echte Alpha-Transparenz, keine Kulisse. Das
+                      tatsächliche Ergebnis wird vor dem Review geprüft.
+                    </p>
+                    <label>
+                      Zielauflösungsprofil
+                      <select
+                        aria-label="Creator Auflösungsprofil"
+                        value={
+                          composition.targetResolution
+                            ? String(
+                                RESOLUTION_PROFILES.findIndex(
+                                  (p) =>
+                                    p.name ===
+                                    composition.targetResolution?.name,
+                                ),
+                              )
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const p = RESOLUTION_PROFILES[Number(e.target.value)];
+                          if (p)
+                            setComposition((c) => ({
+                              ...c,
+                              targetWidth: p.width,
+                              targetHeight: p.height,
+                              targetResolution: p,
+                            }));
+                        }}
+                      >
+                        <option value="" disabled>
+                          Benutzerdefiniertes Ziel
+                        </option>
+                        {RESOLUTION_PROFILES.map((p, i) => (
+                          <option key={p.name} value={i}>
+                            {p.name} · {p.width}×{p.height}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {(
+                      [
+                        ["pose", "Neutrale Pose"],
+                        ["framing", "Bildausschnitt"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label key={key}>
+                        {label}
+                        <textarea
+                          aria-label={`Creator ${label}`}
+                          rows={2}
+                          maxLength={4000}
+                          value={composition[key]}
+                          onChange={(e) =>
+                            setComposition((c) => ({
+                              ...c,
+                              [key]: e.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    ))}
+                    <label>
+                      Asset-Profil
                       <input
-                        aria-label={`Creator ${label}`}
-                        type="number"
-                        min={64}
-                        max={4096}
-                        value={composition[key]}
+                        aria-label="Creator Asset-Profil"
+                        maxLength={120}
+                        value={composition.profile}
                         onChange={(e) =>
                           setComposition((c) => ({
                             ...c,
-                            [key]: Number(e.target.value),
-                            targetResolution: undefined,
+                            profile: e.target.value,
                           }))
                         }
                       />
                     </label>
-                  ))}
-                </div>
-                <small>
-                  Gewünschte Auflösung ist ein Ziel. Tatsächliche Ausgabe bleibt
-                  unverändert; keine 64×64-Konvertierung.
-                </small>
-              </details>
-            </section>
-          </div>
+                    <div className="button-row">
+                      {(
+                        [
+                          ["targetWidth", "Zielbreite"],
+                          ["targetHeight", "Zielhöhe"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <label key={key}>
+                          {label}
+                          <input
+                            aria-label={`Creator ${label}`}
+                            type="number"
+                            min={64}
+                            max={4096}
+                            value={composition[key]}
+                            onChange={(e) =>
+                              setComposition((c) => ({
+                                ...c,
+                                [key]: Number(e.target.value),
+                                targetResolution: undefined,
+                              }))
+                            }
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <small>
+                      Gewünschte Auflösung ist ein Ziel. Tatsächliche Ausgabe
+                      bleibt unverändert; keine 64×64-Konvertierung.
+                    </small>
+                  </section>
+                )}
+              </section>
+            </div>
+          )}
           <div
             className="reference-roles"
             hidden={step !== "Erzeugen"}
@@ -909,34 +932,50 @@ export function CharacterCreator({
                 </p>
               )}
           </div>
-          <section className="panel" hidden={step === "Auswählen"}>
-            <h3>Masterentwürfe prüfen</h3>
-            <label>
-              Masterversuch
-              <select
-                aria-label="Masterversuch"
-                value={active?.id ?? ""}
-                onChange={(e) => {
-                  if (
-                    (reviewDirty || qualityDirty) &&
-                    e.target.value !== activeId &&
-                    !window.confirm(
-                      "Ungespeicherte Prüfnotizen verwerfen und anderen Versuch prüfen?",
+          {step === "Erzeugen" && (
+            <section className="creator-generation-reference">
+              <PortraitPreview
+                image={activeReference ?? identities[0] ?? currentMaster}
+                caption={`${character.name} · ${identities.length ? "Identitätsreferenz" : "Masterreferenz"}`}
+              />
+              <p>
+                {style?.name ?? "Ohne zusätzliches Stilprofil"} · Neutraler
+                Master · {composition.targetWidth} × {composition.targetHeight}{" "}
+                als Ziel
+              </p>
+            </section>
+          )}
+          <section className="panel creator-result" data-step={step}>
+            {step !== "Auswählen" && <h3>Masterentwürfe prüfen</h3>}
+            {expert && (
+              <label>
+                Masterversuch
+                <select
+                  aria-label="Masterversuch"
+                  value={active?.id ?? ""}
+                  onChange={(e) => {
+                    if (
+                      (reviewDirty || qualityDirty) &&
+                      e.target.value !== activeId &&
+                      !window.confirm(
+                        "Ungespeicherte Prüfnotizen verwerfen und anderen Versuch prüfen?",
+                      )
                     )
-                  )
-                    return;
-                  setActiveId(e.target.value);
-                }}
-              >
-                <option value="">Kein Versuch ausgewählt</option>
-                {attempts.map((a, i) => (
-                  <option key={a.id} value={a.id}>
-                    Versuch {i + 1} · {a.execution?.status ?? "ohne Abschluss"}{" "}
-                    · {a.id.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                      return;
+                    setActiveId(e.target.value);
+                  }}
+                >
+                  <option value="">Kein Versuch ausgewählt</option>
+                  {attempts.map((a, i) => (
+                    <option key={a.id} value={a.id}>
+                      Versuch {i + 1} ·{" "}
+                      {a.execution?.status ?? "ohne Abschluss"} ·{" "}
+                      {a.id.slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {candidate ? (
               <>
                 <button onClick={() => onLibrary(candidate.id)}>
@@ -967,26 +1006,35 @@ export function CharacterCreator({
                     )}
                   </p>
                 )}
-                <MasterCandidateCompare
-                  master={activeReference}
-                  candidate={candidate}
-                  beforeLabel="Identität"
-                  identityComparison
-                  requested={
-                    active
-                      ? {
-                          width: active.composition.targetWidth,
-                          height: active.composition.targetHeight,
-                        }
-                      : undefined
-                  }
-                  previewPrefix="Character Creator"
-                />
-                <div hidden={step === "Erzeugen"}>
+                {step === "Erzeugen" && (
+                  <PortraitPreview
+                    image={candidate}
+                    caption="Character Creator · Ergebnisvorschau"
+                  />
+                )}
+                {(step === "Bearbeiten" || step === "Freigeben") && (
+                  <MasterCandidateCompare
+                    master={activeReference}
+                    candidate={candidate}
+                    beforeLabel="Identität"
+                    identityComparison
+                    requested={
+                      active
+                        ? {
+                            width: active.composition.targetWidth,
+                            height: active.composition.targetHeight,
+                          }
+                        : undefined
+                    }
+                    previewPrefix="Character Creator"
+                  />
+                )}
+                <div className="creator-quality">
                   <AssetQuality
                     key={candidate.id}
                     source={candidate}
                     workspaceStep={step}
+                    expert={expert}
                     onDirtyChange={setQualityDirty}
                     cutoutRequested={cutoutRequested}
                     onCutoutOpened={() => setCutoutRequested(0)}
@@ -1013,6 +1061,7 @@ export function CharacterCreator({
                       Masterkandidat ablehnen
                     </button>
                     <MasterApproval
+                      visible={step === "Freigeben"}
                       key={candidate.id}
                       onDirtyChange={setReviewDirty}
                       source={candidate}
@@ -1046,16 +1095,14 @@ export function CharacterCreator({
                   </button>
                 )}
               </>
-            ) : (
+            ) : step !== "Auswählen" ? (
               <p>
-                Kein bestätigtes Ergebnis. Erst einen Auftrag ausdrücklich
-                starten; fehlgeschlagene oder abgebrochene Versuche erhalten
-                kein erfundenes Bild.
+                Hier erscheint dein neuer Masterentwurf nach der Generierung.
               </p>
-            )}
-            {active && expert && (
-              <details>
-                <summary>Gespeicherte Herkunft dieses Versuchs</summary>
+            ) : null}
+            {active && expert && step !== "Auswählen" && (
+              <section>
+                <h3>Gespeicherte Herkunft dieses Versuchs</h3>
                 <p className="mono">
                   {JSON.stringify(
                     { ...active, promptRevision: undefined },
@@ -1066,80 +1113,77 @@ export function CharacterCreator({
                 <pre className="saved-master-prompt">
                   {active.promptRevision.prompt}
                 </pre>
-              </details>
+              </section>
             )}
           </section>
-          <details
-            className="panel"
-            hidden={!expert || step !== "Erzeugen"}
-            open={promptOpen}
-            onToggle={(e) => setPromptOpen(e.currentTarget.open)}
-          >
-            <summary>Prompt Builder & Generierungsdetails</summary>
-            <p className="muted">
-              Verbindliche Systemregel in jedem Modus, auch Expert Override:
-              echte Alpha-Transparenz, kein eingebrannter Hintergrund. Main
-              ergänzt diese Regel im tatsächlich gesendeten Prompt. Das Modell
-              garantiert keinen transparenten Output; die Pixelprüfung
-              entscheidet über die Freigabe.
-            </p>
-            <PromptComposer
-              sources={[
-                {
-                  layer: "System",
-                  source:
-                    "Echte Alpha-Anforderung, immutable Referenzen, technische Prüfung und manuelle Freigabe (Main/Provider).",
-                },
-                {
-                  layer: "Style",
-                  source: style
-                    ? `${style.name} · R${style.revision}`
-                    : "Kein gemeinsamer Style",
-                },
-                {
-                  layer: "Character Identity",
-                  source: `${character?.name} · ausgewählte private Identitätsreferenzen und Identitätsnotizen`,
-                },
-                {
-                  layer: "Outfit",
-                  source:
-                    "Editierbarer Outfitentwurf dieser Figur; unabhängig vom Stil.",
-                },
-                {
-                  layer: "Expression Performance",
-                  source:
-                    "Neutraler Master; keine persönliche Emotionsperformance.",
-                },
-                {
-                  layer: "Composition",
-                  source:
-                    "Pose, Framing, Hintergrund und Auflösungsziel aus diesem Creator-Entwurf.",
-                },
-                {
-                  layer: "Creative Supplements",
-                  source:
-                    promptMode === "expert"
-                      ? "Expert Override mit verbindlichen Systemregeln."
-                      : creative || "Keine Ergänzung",
-                },
-              ]}
-              labelPrefix="Creator"
-              state={composer}
-              onChange={setComposer}
-              mode={promptMode}
-              onModeChange={changePromptMode}
-              extraInstructions={creative}
-              onExtraChange={setCreative}
-            />
-            <button
-              disabled={running || busy}
-              onClick={() =>
-                void perform(() => window.laceframe.checkCodex(), setCodex)
-              }
-            >
-              Creator-Verfügbarkeit prüfen
-            </button>
-          </details>
+          {expert && step === "Erzeugen" && (
+            <section className="panel creator-expert">
+              <h3>Prompt Builder & Generierungsdetails</h3>
+              <p className="muted">
+                Verbindliche Systemregel in jedem Modus, auch Expert Override:
+                echte Alpha-Transparenz, kein eingebrannter Hintergrund. Main
+                ergänzt diese Regel im tatsächlich gesendeten Prompt. Das Modell
+                garantiert keinen transparenten Output; die Pixelprüfung
+                entscheidet über die Freigabe.
+              </p>
+              <PromptComposer
+                sources={[
+                  {
+                    layer: "System",
+                    source:
+                      "Echte Alpha-Anforderung, immutable Referenzen, technische Prüfung und manuelle Freigabe (Main/Provider).",
+                  },
+                  {
+                    layer: "Style",
+                    source: style
+                      ? `${style.name} · R${style.revision}`
+                      : "Kein gemeinsamer Style",
+                  },
+                  {
+                    layer: "Character Identity",
+                    source: `${character?.name} · ausgewählte private Identitätsreferenzen und Identitätsnotizen`,
+                  },
+                  {
+                    layer: "Outfit",
+                    source:
+                      "Editierbarer Outfitentwurf dieser Figur; unabhängig vom Stil.",
+                  },
+                  {
+                    layer: "Expression Performance",
+                    source:
+                      "Neutraler Master; keine persönliche Emotionsperformance.",
+                  },
+                  {
+                    layer: "Composition",
+                    source:
+                      "Pose, Framing, Hintergrund und Auflösungsziel aus diesem Creator-Entwurf.",
+                  },
+                  {
+                    layer: "Creative Supplements",
+                    source:
+                      promptMode === "expert"
+                        ? "Expert Override mit verbindlichen Systemregeln."
+                        : creative || "Keine Ergänzung",
+                  },
+                ]}
+                labelPrefix="Creator"
+                state={composer}
+                onChange={setComposer}
+                mode={promptMode}
+                onModeChange={changePromptMode}
+                extraInstructions={creative}
+                onExtraChange={setCreative}
+              />
+              <button
+                disabled={running || busy}
+                onClick={() =>
+                  void perform(() => window.laceframe.checkCodex(), setCodex)
+                }
+              >
+                Creator-Verfügbarkeit prüfen
+              </button>
+            </section>
+          )}
         </>
       )}
     </div>

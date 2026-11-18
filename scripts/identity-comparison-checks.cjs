@@ -64,11 +64,11 @@ module.exports = async function checkIdentityComparison({page,app,project}) {
   await expect(panes().last().locator("img")).toBeVisible();
   await cdp.send("Emulation.clearDeviceMetricsOverride");await cdp.detach();
   await mode.selectOption("pixel");
-  await expect(page.getByRole("slider",{name:"Before/After-Vergleich",exact:true})).toBeVisible();
+  await expect(wrapper.getByRole("slider",{name:"Before/After-Vergleich",exact:true})).toBeVisible();
   await expect(wrapper.getByLabel("Vergleichsregistrierung",{exact:true})).toHaveValue("native");
   const stage=wrapper.locator(".compare-stage");expect(await stage.evaluate(el=>[el.style.width,el.style.height])).toEqual(["3024px","4032px"]);
-  await page.getByRole("slider",{name:"Before/After-Vergleich",exact:true}).press("End");
-  await expect(page.getByRole("slider",{name:"Before/After-Vergleich",exact:true})).toHaveAttribute("aria-valuenow","100");
+  await wrapper.getByRole("slider",{name:"Before/After-Vergleich",exact:true}).press("End");
+  await expect(wrapper.getByRole("slider",{name:"Before/After-Vergleich",exact:true})).toHaveAttribute("aria-valuenow","100");
   await wrapper.getByLabel("Create Zoom",{exact:true}).selectOption("200");expect(Number(await stage.getAttribute("data-scale"))).toBe(2);
   const viewport=wrapper.locator(".compare-viewport");await viewport.scrollIntoViewIfNeeded();box=await viewport.boundingBox();
   const pixelBefore=await stage.evaluate(el=>{const m=new window.DOMMatrix(window.getComputedStyle(el).transform);return {x:m.e,y:m.f,scale:m.a};});

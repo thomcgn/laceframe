@@ -1,5 +1,5 @@
 /* global exports */
-// Scope labels to the active workspace: retained Studio drafts intentionally remain mounted but hidden.
+// Scope labels to the active workspace. Mode owners retain drafts; step controls render on demand.
 const scope = (page) =>
   page.locator(
     ".expressions-workspace:visible, .studio-editor:visible, .studio-context:visible, .art-direction-workspace:visible, .library-workspace:visible, .characters-workspace:visible, .character-bar:visible, .project-management, .create-action-bar:visible, .modal-backdrop:visible",

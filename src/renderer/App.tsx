@@ -2,7 +2,6 @@ import { ExpressionDesigner } from "./views/ExpressionDesigner";
 import { StyleLibrary } from "./components/StyleLibrary";
 import { AssetLibrary } from "./views/AssetLibrary";
 import type { StudioIntent, StudioMode, Workspace } from "../shared/studio";
-import { AssetQuality } from "./components/AssetQuality";
 import { CharacterCreator } from "./views/CharacterCreator";
 import { ImagePreview } from "./components/ImagePreview";
 import { CreateView } from "./views/CreateView";
@@ -14,6 +13,7 @@ import type {
   StagedImage,
   VocalAction,
 } from "../shared/domain";
+import { PortraitPreview } from "./components/PortraitPreview";
 import { MasterHistory } from "./components/MasterHistory";
 import { MAX_IMAGE_BYTES } from "../shared/domain";
 import type { Result } from "../shared/bridge";
@@ -43,7 +43,6 @@ export function App() {
   const [characterName, setCharacterName] = useState("");
   const [expressionIntent, setExpressionIntent] = useState<StudioIntent>();
   const [assetId, setAssetId] = useState("");
-  const [zoom, setZoom] = useState(100);
   const [staged, setStaged] = useState<{
     image: StagedImage;
     characterId: string;
@@ -84,13 +83,6 @@ export function App() {
       previous?.focus();
     };
   }, [importing]);
-  function qualitySnapshot(value: Snapshot) {
-    setSnapshot(value);
-    setMessage(
-      "Qualitätsstand gespeichert. Originale und frühere Versionen bleiben erhalten.",
-    );
-    setError("");
-  }
   const p = snapshot?.project;
   const character = p?.characters.find((c) => c.id === p.selectedCharacterId);
   const master = p?.masters.find((m) => m.id === character?.masterId);
@@ -271,6 +263,51 @@ export function App() {
     setStyleIntent((old) => ({ id, serial: (old?.serial ?? 0) + 1 }));
     setView("Art Direction");
   }
+  const renderCharacterBar = () =>
+    p && (
+      <section className="character-bar">
+        <label>
+          Aktive Figur
+          <select
+            aria-label="Aktive Figur"
+            value={character?.id ?? ""}
+            onChange={(e) => {
+              setAssetId("");
+              void command({
+                type: "selectCharacter",
+                id: e.target.value,
+              });
+            }}
+          >
+            <option disabled value="">
+              Figur erstellen
+            </option>
+            {p.characters.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <form
+          className="inline-form"
+          onSubmit={addCharacter}
+          hidden={view !== "Characters"}
+        >
+          <label>
+            Neue Figur
+            <input
+              required
+              maxLength={120}
+              placeholder="z. B. Ada Voss"
+              value={characterName}
+              onChange={(e) => setCharacterName(e.target.value)}
+            />
+          </label>
+          <button type="submit">Figur erstellen</button>
+        </form>
+      </section>
+    );
   return (
     <div
       className="app"
@@ -357,10 +394,7 @@ export function App() {
           disabled={busy || Boolean(staged) || generationRunning}
           className="workspace"
         >
-          <details className="project-management" open={!p}>
-            <summary>
-              Projektverwaltung · {p?.name ?? "Projekt auswählen"}
-            </summary>
+          <section className="project-management">
             <section className="project-bar" aria-label="Projektverwaltung">
               <form
                 className="inline-form"
@@ -402,7 +436,7 @@ export function App() {
                 Projekt öffnen …
               </button>
             </section>
-          </details>
+          </section>
           {p && (
             <section
               className="studio-context"
@@ -636,62 +670,7 @@ export function App() {
             </section>
           ) : (
             <>
-              <section
-                className="character-bar"
-                hidden={view !== "Characters" && view !== "Library"}
-              >
-                <label>
-                  Aktive Figur
-                  <select
-                    aria-label="Aktive Figur"
-                    value={character?.id ?? ""}
-                    onChange={(e) => {
-                      setAssetId("");
-                      void command({
-                        type: "selectCharacter",
-                        id: e.target.value,
-                      });
-                    }}
-                  >
-                    <option disabled value="">
-                      Figur erstellen
-                    </option>
-                    {p.characters.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <form
-                  className="inline-form"
-                  onSubmit={addCharacter}
-                  hidden={view !== "Characters"}
-                >
-                  <label>
-                    Neue Figur
-                    <input
-                      required
-                      maxLength={120}
-                      placeholder="z. B. Ada Voss"
-                      value={characterName}
-                      onChange={(e) => setCharacterName(e.target.value)}
-                    />
-                  </label>
-                  <button type="submit">Figur erstellen</button>
-                </form>
-              </section>
-              {view === "Characters" && (
-                <button
-                  className="primary"
-                  onClick={() => {
-                    setStudioMode("master");
-                    setView("Studio");
-                  }}
-                >
-                  Neuen Charakter erstellen
-                </button>
-              )}
+              {view === "Library" && renderCharacterBar()}
               {view === "Characters" && (
                 <section className="panel characters-workspace">
                   <div className="section-head">
@@ -709,6 +688,23 @@ export function App() {
                       </span>
                     )}
                   </div>
+                  {master && (
+                    <PortraitPreview
+                      image={master}
+                      caption={`Freigegebener Master V${master.version}`}
+                    />
+                  )}
+                  {renderCharacterBar()}
+
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      setStudioMode("master");
+                      setView("Studio");
+                    }}
+                  >
+                    Neuen Charakter erstellen
+                  </button>
                   {character && (
                     <form
                       key={character.id + character.name}
@@ -737,16 +733,20 @@ export function App() {
                   )}
                   {character && (
                     <div className="button-row">
-                      <button
-                        onClick={() =>
-                          enterStudio({
-                            mode: "master",
-                            characterId: character.id,
-                          })
-                        }
-                      >
-                        Master im Studio erstellen
-                      </button>
+                      {!master && (
+                        <>
+                          <button
+                            onClick={() =>
+                              enterStudio({
+                                mode: "master",
+                                characterId: character.id,
+                              })
+                            }
+                          >
+                            Master im Studio erstellen
+                          </button>
+                        </>
+                      )}
                       <button
                         disabled={!master}
                         onClick={() =>
@@ -783,15 +783,15 @@ export function App() {
                     </div>
                   )}
                   {character && (
-                    <details>
-                      <summary>
+                    <section className="character-identities">
+                      <h3>
                         Identitätsquellen ·{" "}
                         {
                           p.identityAssets.filter(
                             (a) => a.characterId === character.id,
                           ).length
                         }
-                      </summary>
+                      </h3>
                       {p.identityAssets
                         .filter((a) => a.characterId === character.id)
                         .map((a) => (
@@ -802,49 +802,20 @@ export function App() {
                               zoom="fit"
                             />
                             <small>
-                              {a.width}×{a.height} · {a.sha256.slice(0, 12)}
+                              {a.width}×{a.height}
                             </small>
                           </div>
                         ))}
-                    </details>
+                    </section>
                   )}
                   {master ? (
                     <>
                       <p>Aktueller Master V{master.version}</p>
-                      <label>
-                        Zoom
-                        <select
-                          aria-label="Zoom"
-                          value={zoom}
-                          onChange={(e) => setZoom(Number(e.target.value))}
-                        >
-                          {[25, 50, 100, 200, 400].map((z) => (
-                            <option key={z} value={z}>
-                              {z}%
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <ImagePreview
-                        id={master.id}
-                        caption={`Freigegebener Master V${master.version}`}
-                        zoom={zoom}
-                      />
                       <p>
                         {master.width} × {master.height} px ·{" "}
                         {master.format.toUpperCase()} · bestätigt{" "}
                         {new Date(master.approvedAt).toLocaleString("de-DE")}
                       </p>
-                      <p className="mono">SHA-256 {master.sha256}</p>
-                      {p && (
-                        <AssetQuality
-                          key={master.id}
-                          source={master}
-                          project={p}
-                          onSnapshot={qualitySnapshot}
-                          disabled={busy || generationRunning}
-                        />
-                      )}
                       <MasterHistory
                         project={p!}
                         characterId={character!.id}

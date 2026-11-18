@@ -32,8 +32,8 @@ export function PromptComposer({
       }
     >
       {sources && (
-        <details className="prompt-sources">
-          <summary>Welche Quelle liefert welche Regel?</summary>
+        <section>
+          <h3>Welche Quelle liefert welche Regel?</h3>
           <p>
             Technische Systemregeln, Freigabe und Provenienz bleiben
             verbindlich, auch im Expert Override. Der vollständige tatsächlich
@@ -47,7 +47,7 @@ export function PromptComposer({
               </div>
             ))}
           </dl>
-        </details>
+        </section>
       )}
       <label>
         Promptmodus
@@ -97,11 +97,11 @@ export function PromptComposer({
         </span>
       </div>
       <PromptConflict state={state} onChange={onChange} />
-      <details className="full-prompt" open={mode === "expert"}>
-        <summary>
+      <section>
+        <h3>
           Vollständigen Prompt ansehen
           {mode === "expert" ? " und bearbeiten" : ""}
-        </summary>
+        </h3>
         <label>
           Arbeits-Prompt
           <textarea
@@ -115,16 +115,16 @@ export function PromptComposer({
             onChange={(e) => onChange(editComposer(state, e.target.value))}
           />
         </label>
-      </details>
+      </section>
       {mode === "expert" && (
         <button onClick={() => onChange(resetComposer(state))}>
           Auf Vorlage zurücksetzen
         </button>
       )}
-      <details>
-        <summary>Automatische Basis ansehen</summary>
+      <section>
+        <h3>Automatische Basis ansehen</h3>
         <pre className="prompt-base">{state.pendingBase ?? state.base}</pre>
-      </details>
+      </section>
     </div>
   );
 }
