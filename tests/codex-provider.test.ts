@@ -210,6 +210,11 @@ describe("native project ingestion", () => {
         token: randomUUID(),
       }),
     ).rejects.toThrow();
+    controller.resetProject();
+    expect(controller.status()).toMatchObject({ state: "unavailable" });
+    expect(controller.status().attemptId).toBeUndefined();
+    expect(controller.status().execution).toBeUndefined();
+    expect(service.snapshot().project.assets[0].status).toBe("approved");
   });
   it("keeps a failed attempt without a fake candidate", async () => {
     const c = new GenerationController(service, makeProvider("image-failed"));
@@ -227,6 +232,8 @@ describe("native project ingestion", () => {
   it("rejects concurrent jobs and cancels without importing a late result", async () => {
     const c = new GenerationController(service, makeProvider("hang"));
     await c.start(draft);
+    expect(() => c.resetProject()).toThrow("bereits");
+    expect(c.running).toBe(true);
     await expect(c.start(draft)).rejects.toThrow("bereits");
     for (let i = 0; i < 100; i++) {
       if (

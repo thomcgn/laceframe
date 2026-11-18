@@ -260,6 +260,12 @@ function registerIPC() {
     await shell.openExternal(validateExternalURL(input));
     return null;
   });
+  handle("project:close", (input) => {
+    z.undefined().parse(input);
+    generation.resetProject();
+    service.close();
+    return null;
+  });
   handle("project:create", async (input) => {
     const name = z.string().trim().min(1).max(120).parse(input);
     const selected = await dialog.showOpenDialog(window, {
@@ -377,7 +383,9 @@ else {
         request.method !== "GET" ||
         url.host !== "app" ||
         url.search ||
-        !/^\/(index\.html|assets\/[a-zA-Z0-9_.-]+)$/.test(url.pathname)
+        !/^\/(index\.html|images\/splash\.png|assets\/[a-zA-Z0-9_.-]+)$/.test(
+          url.pathname,
+        )
       )
         return new Response("Forbidden", { status: 403 });
       const file = path.join(
@@ -389,7 +397,7 @@ else {
       const headers = new Headers(response.headers);
       headers.set(
         "Content-Security-Policy",
-        "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
+        "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
       );
       return new Response(response.body, { status: response.status, headers });
     });

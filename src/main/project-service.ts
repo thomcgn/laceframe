@@ -241,6 +241,14 @@ export class ProjectService {
       bytes: Uint8Array,
     ) => Pixels | Promise<Pixels> = decodePixels,
   ) {}
+  close() {
+    this.project = undefined;
+    this.directory = "";
+    this.diskHash = "";
+    this.legacyBytes = undefined;
+    this.legacyBackupName = "laceframe.v1.backup.json";
+    this.staged = undefined;
+  }
   snapshot(): Snapshot {
     if (!this.project) throw new Error("Bitte zuerst ein Projekt öffnen.");
     return {

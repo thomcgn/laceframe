@@ -42,6 +42,14 @@ export class GenerationController {
   get running() {
     return this.state.state === "running";
   }
+  resetProject() {
+    if (this.running) throw new Error("Es läuft bereits ein Bildauftrag.");
+    this.clock = undefined;
+    this.state = {
+      state: "unavailable",
+      message: "Codex-Verfügbarkeit noch nicht geprüft.",
+    };
+  }
   status(): CodexStatus {
     return {
       ...this.state,

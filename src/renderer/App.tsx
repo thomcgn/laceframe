@@ -1,3 +1,5 @@
+import { SplashScreen } from "./components/SplashScreen";
+import { useAppLifecycle } from "./useAppLifecycle";
 import { ExpressionDesigner } from "./views/ExpressionDesigner";
 import { StyleLibrary } from "./components/StyleLibrary";
 import { AssetLibrary } from "./views/AssetLibrary";
@@ -5,7 +7,7 @@ import type { StudioIntent, StudioMode, Workspace } from "../shared/studio";
 import { CharacterCreator } from "./views/CharacterCreator";
 import { ImagePreview } from "./components/ImagePreview";
 import { CreateView } from "./views/CreateView";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type {
   Command,
@@ -20,6 +22,8 @@ import type { Result } from "../shared/bridge";
 
 type View = Workspace;
 export function App() {
+  const { lifecycle, state: lifecycleState } = useAppLifecycle();
+  const workLock = useRef(false);
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [projectSession, setProjectSession] = useState(0);
   const [view, setView] = useState<View>("Characters");
@@ -91,7 +95,8 @@ export function App() {
     success: (value: T) => void,
     notice = "",
   ) {
-    if (busy) return;
+    if (workLock.current) return;
+    workLock.current = true;
     setBusy(true);
     setError("");
     setMessage("");
@@ -109,6 +114,7 @@ export function App() {
           : "Vorgang fehlgeschlagen. Bitte erneut versuchen.",
       );
     } finally {
+      workLock.current = false;
       setBusy(false);
     }
   }
@@ -127,7 +133,39 @@ export function App() {
     setStaged(undefined);
     setAssetId("");
     setExpressionIntent(undefined);
+    setCharacterName("");
+    setError("");
+    setMessage("");
   }
+  function clearProject() {
+    setSnapshot(undefined);
+    setProjectSession((n) => n + 1);
+    setView("Characters");
+    setVisited([]);
+    setDraftDirty({});
+    setStyleDirty(false);
+    setStudioIntent(undefined);
+    setStyleIntent(undefined);
+    setExpressionIntent(undefined);
+    setStaged(undefined);
+    setAssetId("");
+    setCharacterName("");
+    setMessage("");
+    setError("");
+    setStudioMode("expression");
+  }
+  const openProject = () =>
+    lifecycle.project(
+      "opening-project",
+      () => window.laceframe.openProject(),
+      changedProject,
+    );
+  const createProject = (name: string) =>
+    lifecycle.project(
+      "creating-project",
+      () => window.laceframe.createProject(name),
+      changedProject,
+    );
   function stage(image: StagedImage | null) {
     if (image && character)
       setStaged({
@@ -308,6 +346,18 @@ export function App() {
         </form>
       </section>
     );
+  const switchingProject = ["opening-project", "creating-project"].includes(
+    lifecycleState.phase,
+  );
+  if ((lifecycleState.phase !== "workspace" && !switchingProject) || !p)
+    return (
+      <SplashScreen
+        state={lifecycleState}
+        onOpen={() => void openProject()}
+        onCreate={createProject}
+        onRetry={() => lifecycle.retry()}
+      />
+    );
   return (
     <div
       className="app"
@@ -317,7 +367,7 @@ export function App() {
         if (p && view === "Characters") void drop(e.dataTransfer.files);
       }}
     >
-      <aside className="sidebar" inert={importing}>
+      <aside className="sidebar" inert={importing || switchingProject}>
         <div className="brand">
           <span className="brand-mark">L</span>
           <div>
@@ -360,7 +410,7 @@ export function App() {
         </div>
       </aside>
       <main
-        inert={importing}
+        inert={importing || switchingProject}
         className={view === "Studio" ? "create-main" : undefined}
       >
         <header>
@@ -379,11 +429,15 @@ export function App() {
           </div>
         </header>
         <div role="status" aria-live="polite" className="notice">
-          {busy ? "Verarbeite …" : message}
+          {switchingProject
+            ? "Projekt wird geprüft …"
+            : busy
+              ? "Verarbeite …"
+              : message}
         </div>
-        {error && (
+        {(error || lifecycleState.error) && (
           <div role="alert" className="error">
-            {error}
+            {error || lifecycleState.error}
           </div>
         )}
         <div
@@ -391,7 +445,9 @@ export function App() {
           hidden={view !== "Studio" && !generationRunning}
         />
         <fieldset
-          disabled={busy || Boolean(staged) || generationRunning}
+          disabled={
+            busy || switchingProject || Boolean(staged) || generationRunning
+          }
           className="workspace"
         >
           <section className="project-management">
@@ -407,10 +463,7 @@ export function App() {
                     )
                   )
                     return;
-                  void run(
-                    () => window.laceframe.createProject(projectName),
-                    changedProject,
-                  );
+                  void createProject(projectName);
                 }}
               >
                 <label>
@@ -430,10 +483,27 @@ export function App() {
                     window.confirm(
                       "Ungespeicherte Studio-, Expressions- und Stilentwürfe verwerfen und Projekt wechseln?",
                     )) &&
-                  void run(() => window.laceframe.openProject(), changedProject)
+                  void openProject()
                 }
               >
                 Projekt öffnen …
+              </button>
+              <button
+                onClick={() => {
+                  if (
+                    createDirty &&
+                    !window.confirm(
+                      "Ungespeicherte Studio-, Expressions- und Stilentwürfe verwerfen und Projekt schließen?",
+                    )
+                  )
+                    return;
+                  void lifecycle.close(
+                    () => window.laceframe.closeProject(),
+                    clearProject,
+                  );
+                }}
+              >
+                Projekt schließen
               </button>
             </section>
           </section>
@@ -653,22 +723,7 @@ export function App() {
               />
             </section>
           )}
-          {!p ? (
-            <section className="welcome">
-              <p className="eyebrow">VOM PORTRAIT ZUM AUSDRUCK</p>
-              <h2>Ein sicherer Ort für deine Charaktere.</h2>
-              <p>
-                Projekt erstellen, Figur benennen und ein freigegebenes Portrait
-                als unveränderlichen Master importieren. Danach eigene
-                Ausdruckskandidaten vergleichen und prüfen.
-              </p>
-              <ol>
-                <li>Lokalen Projektordner wählen</li>
-                <li>PNG/WebP in Originalauflösung importieren</li>
-                <li>Ausdrücke organisieren und freigeben</li>
-              </ol>
-            </section>
-          ) : (
+          {
             <>
               {view === "Library" && renderCharacterBar()}
               {view === "Characters" && (
@@ -889,7 +944,7 @@ export function App() {
                 </section>
               )}
             </>
-          )}
+          }
         </fieldset>
         <footer>
           LACEFRAME{" "}
