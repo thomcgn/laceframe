@@ -2,17 +2,22 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { LaceframeBridge } from "../shared/bridge";
 // Each operation has its own channel. No generic invoke, filesystem or Node API escapes.
 const bridge: LaceframeBridge = {
-  importStyleImages: (input) => ipcRenderer.invoke("style:import-images", input),
-  discardStyleImage: (token) => ipcRenderer.invoke("style:discard-image", token),
+  importStyleImages: (input) =>
+    ipcRenderer.invoke("style:import-images", input),
+  discardStyleImage: (token) =>
+    ipcRenderer.invoke("style:discard-image", token),
   styleDraftSource: (token) => ipcRenderer.invoke("style:draft-source", token),
   checkStyleAnalysis: () => ipcRenderer.invoke("style:check"),
-  startStyleAnalysis: (references) => ipcRenderer.invoke("style:start", references),
+  startStyleAnalysis: (references) =>
+    ipcRenderer.invoke("style:start", references),
   styleAnalysisStatus: () => ipcRenderer.invoke("style:status"),
   cancelStyleAnalysis: () => ipcRenderer.invoke("style:cancel"),
-  importStyleSemantic: (input) => ipcRenderer.invoke("style:import-semantic", input),
+  importStyleSemantic: (input) =>
+    ipcRenderer.invoke("style:import-semantic", input),
   preferences: () => ipcRenderer.invoke("app:preferences"),
   setLanguage: (language) => ipcRenderer.invoke("app:set-language", language),
   closeProject: () => ipcRenderer.invoke("project:close"),
+  semanticLayers: (id) => ipcRenderer.invoke("image:semantic-layers", id),
   colorPalette: (id) => ipcRenderer.invoke("image:color-palette", id),
   colorRecipe: (id) => ipcRenderer.invoke("image:color-recipe", id),
   choosePack: (kind) => ipcRenderer.invoke("pack:choose", kind),

@@ -1,0 +1,7 @@
+{
+  "invalidMask": "Invalid layer mask or memory budget exceeded.",
+  "transparent": "Layers contain fully transparent image pixels.",
+  "overlap": "Layers overlap. Resolve conflicts before saving.",
+  "source": "Invalid layer source or image binding.",
+  "stale": "The layer revision changed. Reopen the editor."
+}

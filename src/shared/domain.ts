@@ -1,3 +1,4 @@
+import { layerSetSchema, saveLayerSetSchema } from "./semantic-layers";
 import { stylePresetInputSchema } from "./style-creator";
 import { tr } from "./locales/index";
 import { hasOtherAssetReference } from "./asset-retention";
@@ -178,6 +179,7 @@ const projectObject = z
     assetQualityVersion: z.literal(1).optional(),
     qualityAssets: z.array(qualityDerivativeSchema).max(10000).default([]),
     masterPalettes: z.array(paletteSchema).max(1000).default([]),
+    semanticLayerSets: z.array(layerSetSchema).max(1000).default([]),
     id: idSchema,
     name: label,
     createdAt: z.iso.datetime(),
@@ -282,6 +284,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       ...p.masters,
       ...p.qualityAssets,
       ...p.masterPalettes,
+      ...p.semanticLayerSets,
       ...p.families,
       ...p.variants,
       ...p.assets,
@@ -316,6 +319,72 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       )
     )
       fail("Invalid locked master selection");
+  }
+
+  for (const set of p.semanticLayerSets) {
+    const master = p.masters.find((m) => m.id === set.masterId),
+      source = [...p.masters, ...p.assets].find((a) => a.id === set.sourceId);
+    const revisions = p.semanticLayerSets.filter(
+      (s) => s.sourceId === set.sourceId,
+    );
+    if (
+      !master ||
+      !source ||
+      ("discardedAt" in source && source.discardedAt) ||
+      master.characterId !== set.characterId ||
+      source.characterId !== set.characterId ||
+      master.sha256 !== set.masterSha256 ||
+      source.sha256 !== set.sourceSha256 ||
+      source.width !== set.width ||
+      source.height !== set.height ||
+      ("masterId" in source && source.masterId !== master.id) ||
+      new Set(revisions.map((r) => r.revision)).size !== revisions.length ||
+      set.revision > revisions.length ||
+      new Set(set.layers.map((l) => l.id)).size !== set.layers.length ||
+      new Set(set.layers.map((l) => l.order)).size !== set.layers.length
+    )
+      fail("Invalid semantic layer binding");
+    const template = p.semanticLayerSets.find(
+      (s) => s.id === set.templateSetId,
+    );
+    if (
+      set.sourceId !== set.masterId &&
+      (!template ||
+        template.sourceId !== set.masterId ||
+        template.masterId !== set.masterId)
+    )
+      fail("Invalid semantic layer template");
+    if (set.sourceId === set.masterId && set.templateSetId)
+      fail("Master cannot use an expression template");
+    for (const layer of set.layers) {
+      if (
+        layer.mask.file !== assetFile("color-masks", layer.mask.sha256, "png")
+      )
+        fail("Invalid semantic mask path");
+      if (
+        layer.masterLayerId &&
+        (!template ||
+          !template.layers.some(
+            (l) => l.id === layer.masterLayerId && l.role === layer.role,
+          ))
+      )
+        fail("Invalid semantic role mapping");
+      if (layer.importedFrom) {
+        const palette = p.masterPalettes.find(
+            (r) => r.id === layer.importedFrom!.paletteId,
+          ),
+          region = palette?.regions.find(
+            (r) => r.id === layer.importedFrom!.regionId,
+          );
+        if (
+          set.sourceId !== set.masterId ||
+          palette?.masterId !== set.masterId ||
+          !region ||
+          region.mask.sha256 !== layer.importedFrom.maskSha256
+        )
+          fail("Invalid semantic region origin");
+      }
+    }
   }
   for (const palette of p.masterPalettes) {
     const master = p.masters.find((m) => m.id === palette.masterId);
@@ -1108,6 +1177,7 @@ export const commandSchema = z.discriminatedUnion("type", [
       style: styleContentSchema,
     })
     .strict(),
+  saveLayerSetSchema.extend({ type: z.literal("saveSemanticLayers") }),
   paletteInputSchema.extend({ type: z.literal("saveMasterPalette") }),
   correctionInputSchema.extend({ type: z.literal("createColorCorrection") }),
   relightInputSchema.extend({ type: z.literal("createRelighting") }),

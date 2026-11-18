@@ -279,6 +279,9 @@ function registerIPC(preferences: AppPreferences) {
   handle("image:smart-cutout-recipe", (input) =>
     service.smartCutoutRecipe(idSchema.parse(input)),
   );
+  handle("image:semantic-layers", (input) =>
+    service.semanticLayers(idSchema.parse(input)),
+  );
   handle("image:color-palette", (input) =>
     service.colorPalette(idSchema.parse(input)),
   );

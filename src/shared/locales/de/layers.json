@@ -1,0 +1,7 @@
+{
+  "invalidMask": "Ungültige Layer-Maske oder Speichergrenze überschritten.",
+  "transparent": "Layer enthalten vollständig transparente Bildpixel.",
+  "overlap": "Layer überlappen sich. Konflikte vor dem Speichern entfernen.",
+  "source": "Layerquelle oder Bildbindung ist ungültig.",
+  "stale": "Die Layerrevision hat sich geändert. Editor erneut öffnen."
+}

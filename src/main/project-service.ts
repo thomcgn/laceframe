@@ -1,3 +1,7 @@
+import {
+  validateLayerMasks,
+  type LayerSetInput,
+} from "../shared/semantic-layers";
 import { RASTER_VERSION } from "../shared/raster-snap";
 import { z } from "zod";
 import {
@@ -533,6 +537,22 @@ export class ProjectService {
         )
           throw new Error(tr("errors.mee293dfecc"));
       }
+    for (const set of project.semanticLayerSets) {
+      const source = [...project.masters, ...project.assets].find(
+        (a) => a.id === set.sourceId,
+      )!;
+      const pixels = await this.pixels(
+        await readLimited(await safePath(root, source.file), MAX_IMAGE_BYTES),
+      );
+      const layers = [];
+      for (const layer of set.layers)
+        layers.push({
+          ...layer,
+          weights: await readColorMask(layer.mask, set.width, set.height),
+        });
+      if (validateLayerMasks(pixels, layers).conflicts)
+        throw new Error(tr("layers.overlap"));
+    }
     for (const migration of project.styleMigrations)
       for (const source of migration.sources)
         if (hashBytes(Buffer.from(source.text)) !== source.sha256)
@@ -552,7 +572,8 @@ export class ProjectService {
       !Object.hasOwn(source, "styleAnalyses") ||
       source.smartCutoutVersion !== 1 ||
       source.portablePacksVersion !== 1 ||
-      !Object.hasOwn(source, "masterPalettes")
+      !Object.hasOwn(source, "masterPalettes") ||
+      !Object.hasOwn(source, "semanticLayerSets")
         ? bytes
         : undefined;
     this.legacyBackupName = versionOne
@@ -573,7 +594,9 @@ export class ProjectService {
                     ? "laceframe.v2.pre-smart-cutout.backup.json"
                     : source.portablePacksVersion !== 1
                       ? "laceframe.v2.pre-portable-packs.backup.json"
-                      : "laceframe.v2.pre-color-consistency.backup.json";
+                      : !Object.hasOwn(source, "masterPalettes")
+                        ? "laceframe.v2.pre-color-consistency.backup.json"
+                        : "laceframe.v2.pre-semantic-layers.backup.json";
     this.styleDrafts.clear();
     this.styleSemantics.clear();
     this.directory = root;
@@ -1194,6 +1217,11 @@ export class ProjectService {
         break;
       }
 
+      case "saveSemanticLayers": {
+        const set = await this.createLayerSet(cmd, p);
+        p.semanticLayerSets.push(set);
+        break;
+      }
       case "createPixelEdit": {
         if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const source = this.qualitySource(cmd.sourceId);
@@ -2892,6 +2920,87 @@ export class ProjectService {
       this.discard(image.token);
     }
   }
+  private semanticSource(id: string) {
+    const p = this.snapshot().project;
+    const source = [...p.masters, ...p.assets].find((a) => a.id === id);
+    if (!source || ("discardedAt" in source && source.discardedAt))
+      throw new Error(tr("layers.source"));
+    const master =
+      "masterId" in source
+        ? p.masters.find((m) => m.id === source.masterId)
+        : source;
+    if (!master) throw new Error(tr("layers.source"));
+    return { source, master };
+  }
+  async semanticLayers(id: string) {
+    const set = this.snapshot().project.semanticLayerSets.find(
+      (s) => s.id === id,
+    );
+    if (!set) throw new Error(tr("layers.source"));
+    const { source } = this.semanticSource(set.sourceId),
+      pixels = await this.analysisSource(source.id),
+      layers = [];
+    for (const { mask, ...layer } of set.layers)
+      layers.push({
+        ...layer,
+        weights: await this.colorMask(mask, set.width, set.height),
+      });
+    if (validateLayerMasks(pixels, layers).conflicts)
+      throw new Error(tr("layers.overlap"));
+    return { set, layers };
+  }
+  private async createLayerSet(input: LayerSetInput, p: Project) {
+    const { source, master } = this.semanticSource(input.sourceId);
+    if (source.sha256 !== input.sourceSha256)
+      throw new Error(tr("layers.source"));
+    const previous = p.semanticLayerSets
+      .filter((s) => s.sourceId === source.id)
+      .at(-1);
+    if (previous?.id !== input.baseSetId) throw new Error(tr("layers.stale"));
+    const pixels = await this.analysisSource(source.id);
+    if (validateLayerMasks(pixels, input.layers).conflicts)
+      throw new Error(tr("layers.overlap"));
+    // Validate bindings before any mask write, using temporary schema references.
+    const set = {
+      id: randomUUID(),
+      characterId: source.characterId,
+      masterId: master.id,
+      masterSha256: master.sha256,
+      sourceId: source.id,
+      sourceSha256: source.sha256,
+      templateSetId: input.templateSetId,
+      revision: (previous?.revision ?? 0) + 1,
+      width: source.width,
+      height: source.height,
+      createdAt: new Date().toISOString(),
+      layers: input.layers.map(({ weights, ...layer }) => {
+        void weights;
+        return ({
+        ...layer,
+        mask: {
+          file: assetFile("color-masks", "0".repeat(64), "png"),
+          sha256: "0".repeat(64),
+        },
+      });
+      }),
+    };
+    projectSchema.parse({
+      ...p,
+      semanticLayerSets: [...p.semanticLayerSets, set],
+    });
+    await this.prepareFeatureBackup(
+      "laceframe.v2.pre-semantic-layers.backup.json",
+      (before) => !before.semanticLayerSets.length,
+    );
+    const layers = [];
+    for (const { weights, ...layer } of input.layers)
+      layers.push({
+        ...layer,
+        mask: await this.storeColorMask(source.width, source.height, weights),
+      });
+    return { ...set, layers };
+  }
+
   private async colorBackup() {
     if (!this.legacyBytes && !this.snapshot().project.masterPalettes.length) {
       if (

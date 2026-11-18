@@ -1,3 +1,4 @@
+import type { CharacterLayerSet, LayerDraft } from "./semantic-layers";
 import type {
   StyleDraftImage,
   StyleDraftReference,
@@ -29,6 +30,9 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  semanticLayers(
+    id: string,
+  ): Promise<Result<{ set: CharacterLayerSet; layers: LayerDraft[] }>>;
   importStyleImages(input: {
     files?: { name: string; bytes: Uint8Array }[];
     replaceToken?: string;
