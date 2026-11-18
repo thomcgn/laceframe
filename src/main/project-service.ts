@@ -1218,6 +1218,7 @@ export class ProjectService {
       }
 
       case "saveSemanticLayers": {
+        if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const set = await this.createLayerSet(cmd, p);
         p.semanticLayerSets.push(set);
         break;

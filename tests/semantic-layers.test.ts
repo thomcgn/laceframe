@@ -213,7 +213,7 @@ it("rejects foreign master/template roles and source SHA", async () => {
   ).rejects.toThrow();
   expect(src.sha256).not.toBe("0".repeat(64));
 });
-it.each(["path", "hash", "dimensions", "overlap", "transparent"])(
+it.each(["path", "hash", "dimensions", "overlap", "transparent", "symlink"])(
   "refuses %s mask corruption on loading without replacing the active project",
   async (kind) => {
     await save([layer()]);
@@ -230,6 +230,13 @@ it.each(["path", "hash", "dimensions", "overlap", "transparent"])(
             encodePixels(image()),
           ),
         );
+    if (kind === "symlink") {
+      const file = path.join(dir, set.layers[0].mask.file),
+        outside = path.join(dir, "outside-mask.png");
+      await fs.copyFile(file, outside);
+      await fs.unlink(file);
+      await fs.symlink(outside, file);
+    }
     if (kind === "dimensions") set.width++;
     if (kind === "overlap")
       set.layers.push({ ...set.layers[0], id: randomUUID(), order: 1 });
@@ -410,4 +417,39 @@ it("rejects Expression mapping to a different character's layer template", async
     ),
   ).rejects.toThrow();
   expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
+});
+
+it("does not consume a pending image import while saving layers", async () => {
+  const pending = await s.stage(
+    encodePixels(image()),
+    "pending-expression.png",
+  );
+  await expect(save([layer()])).rejects.toThrow();
+  expect(s.snapshot().project.semanticLayerSets).toHaveLength(0);
+  await s.command({
+    type: "importCandidate",
+    characterId: s.snapshot().project.selectedCharacterId,
+    variantId: s.snapshot().project.variants[0].id,
+    action: "silent",
+    token: pending.token,
+  });
+  expect(s.snapshot().project.assets).toHaveLength(2);
+});
+it("rejects layer memory budgets before scanning oversized region lists", () => {
+  const p = {
+      width: 2048,
+      height: 2048,
+      data: new Uint8Array(2048 * 2048 * 4),
+    },
+    weights = new Uint8Array(2048 * 2048);
+  expect(() =>
+    validateLayerMasks(
+      p,
+      Array.from({ length: 17 }, (_, order) => ({
+        ...layer(),
+        order,
+        weights,
+      })),
+    ),
+  ).toThrow("Speichergrenze");
 });
