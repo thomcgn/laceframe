@@ -75,7 +75,7 @@
   "mc0842e89ad": "Identity image already exists or was selected twice.",
   "ma7d129a4c1": "{{v0}}: identity file collision or file changed.",
   "m66f87397d0": "Project changed externally. Please reopen.",
-  "m1fbd17e879": "Migration backup exists with different content.",
+  "m1fbd17e879": "Migration backup {{file}} exists with different content.",
   "m073701c8df": "Project manifest too large.",
   "m8a404636d7": "Style revision changed. Reopen.",
   "mf8dc207d83": "Migration does not match original revision.",

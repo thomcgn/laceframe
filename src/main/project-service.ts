@@ -791,9 +791,12 @@ export class ProjectService {
             this.legacyBytes,
           )
         )
-          throw new Error(tr("errors.m1fbd17e879"), {
-            cause: error,
-          });
+          throw new Error(
+            tr("errors.m1fbd17e879", { file: this.legacyBackupName }),
+            {
+              cause: error,
+            },
+          );
       }
     }
     const bytes = Buffer.from(JSON.stringify(validated, null, 2));
@@ -2703,7 +2706,41 @@ export class ProjectService {
       values: await this.storeColorMask(width, height, r.values),
     };
   }
+  /** Reuse only a valid same-project snapshot from before this feature existed.
+   * A format migration can already have saved it before the first feature operation.
+   * Conflicting/corrupt/foreign snapshots remain errors; no backup is overwritten.
+   */
+  private async hasFeatureBackup(
+    name: string,
+    beforeFeature: (p: Project) => boolean,
+  ) {
+    const file = await safePath(this.directory, name);
+    if (!(await exists(file))) return false;
+    const bytes = await readLimited(file, MAX_MANIFEST_BYTES);
+    try {
+      const backup = parseProject(JSON.parse(bytes.toString("utf8")));
+      if (backup.id === this.snapshot().project.id && beforeFeature(backup))
+        return true;
+    } catch (cause) {
+      throw new Error(tr("errors.m1fbd17e879", { file: name }), { cause });
+    }
+    throw new Error(tr("errors.m1fbd17e879", { file: name }));
+  }
   private async colorSelectionBackup() {
+    if (
+      await this.hasFeatureBackup(
+        "laceframe.v2.pre-color-selection.backup.json",
+        (p) =>
+          !p.masterPalettes.some((palette) =>
+            palette.regions.some((r) => r.selection),
+          ) &&
+          !p.qualityAssets.some((q) =>
+            q.colorCorrection?.regions.some((r) => r.transferGroups),
+          ),
+      )
+    )
+      return;
+
     const bytes = await readLimited(
       await safePath(this.directory, manifestName),
       MAX_MANIFEST_BYTES,
@@ -2834,6 +2871,14 @@ export class ProjectService {
   }
   private async colorBackup() {
     if (!this.legacyBytes && !this.snapshot().project.masterPalettes.length) {
+      if (
+        await this.hasFeatureBackup(
+          "laceframe.v2.pre-color-consistency.backup.json",
+          (p) => !p.masterPalettes.length,
+        )
+      )
+        return;
+
       this.legacyBytes = await readLimited(
         await safePath(this.directory, manifestName),
         MAX_MANIFEST_BYTES,

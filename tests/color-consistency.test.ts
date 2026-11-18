@@ -430,6 +430,90 @@ describe("safe versioned palette/candidate persistence", () => {
       ),
     ).toEqual(bytes);
   });
+
+  it("reuses a completed color migration backup for the first palette after another write and restart", async () => {
+    const file = path.join(dir, "laceframe.json"),
+      backup = path.join(dir, "laceframe.v2.pre-color-consistency.backup.json");
+    const raw = JSON.parse(await fs.readFile(file, "utf8"));
+    raw.qualityAssets = [];
+    delete raw.masterPalettes;
+    await fs.unlink(backup);
+    const original = Buffer.from(JSON.stringify(raw));
+    await fs.writeFile(file, original);
+    const next = new ProjectService();
+    await next.open(dir);
+    await next.command({
+      type: "addCharacter",
+      name: "Unrelated edit after migration",
+    });
+    await next.open(dir);
+    await next.command({
+      type: "saveMasterPalette",
+      masterId,
+      masterSha256: next.snapshot().project.masters[0].sha256,
+      regions: [
+        {
+          id: randomUUID(),
+          name: "Hair",
+          role: "hair",
+          weights: full(portrait()),
+        },
+      ],
+    });
+    expect(next.snapshot().project.masterPalettes).toHaveLength(1);
+    expect(await fs.readFile(backup)).toEqual(original);
+    await next.open(dir);
+    expect(next.snapshot().project.masterPalettes).toHaveLength(1);
+  });
+  it.each(["corrupt", "foreign", "nonempty", "symlink"])(
+    "does not bypass %s color backup conflicts or change the manifest",
+    async (kind) => {
+      const file = path.join(dir, "laceframe.json"),
+        backup = path.join(
+          dir,
+          "laceframe.v2.pre-color-consistency.backup.json",
+        );
+      const raw = JSON.parse(await fs.readFile(file, "utf8")),
+        previous = structuredClone(raw);
+      raw.qualityAssets = [];
+      raw.masterPalettes = [];
+      await fs.writeFile(file, JSON.stringify(raw));
+      await fs.unlink(backup);
+      const outside = path.join(root, "untouched.json");
+      if (kind === "corrupt") await fs.writeFile(backup, "other");
+      if (kind === "foreign") {
+        previous.id = randomUUID();
+        await fs.writeFile(backup, JSON.stringify(previous));
+      }
+      if (kind === "nonempty")
+        await fs.writeFile(backup, JSON.stringify(previous));
+      if (kind === "symlink") {
+        await fs.writeFile(outside, JSON.stringify(raw));
+        await fs.symlink(outside, backup);
+      }
+      const next = new ProjectService();
+      await next.open(dir);
+      const before = await fs.readFile(file),
+        archive = await fs.readFile(backup);
+      await expect(
+        next.command({
+          type: "saveMasterPalette",
+          masterId,
+          masterSha256: next.snapshot().project.masters[0].sha256,
+          regions: [
+            {
+              id: randomUUID(),
+              name: "Hair",
+              role: "hair",
+              weights: full(portrait()),
+            },
+          ],
+        }),
+      ).rejects.toThrow();
+      expect(await fs.readFile(file)).toEqual(before);
+      expect(await fs.readFile(backup)).toEqual(archive);
+    },
+  );
   it("enforces the existing hard mask independently of the color protection mask", async () => {
     const p = s.snapshot().project,
       m = p.masters[0],
@@ -710,6 +794,47 @@ describe("color-picked regions and selective palette transfer", () => {
       expect(ref.file).toMatch(/^assets\/color-masks\/[a-f0-9]{64}\.png$/);
       expect((await fs.stat(path.join(dir, ref.file))).mode & 0o222).toBe(0);
     }
+  });
+
+  it("retains an existing pre-selection snapshot after unrelated edits and a restart", async () => {
+    const m = await s.analysisSource(masterId),
+      file = path.join(dir, "laceframe.json"),
+      backup = path.join(dir, "laceframe.v2.pre-color-selection.backup.json");
+    const before = await fs.readFile(file);
+    await fs.writeFile(backup, before, { flag: "wx" });
+    await s.command({ type: "addCharacter", name: "Unrelated edit" });
+    await s.open(dir);
+    const selection = appendColorSeed(
+      m,
+      emptyRegionSelection(new Uint8Array(m.width * m.height)),
+      {
+        x: 1,
+        y: 1,
+        hex: "#646464",
+        tolerance: 3,
+        connected: true,
+        operation: "add",
+      },
+    );
+    await s.command({
+      type: "saveMasterPalette",
+      masterId,
+      masterSha256: m.sha256,
+      regions: [
+        {
+          id: regionId,
+          name: "Selected hair",
+          role: "hair",
+          weights: replayRegionSelection(m, selection),
+          selection,
+        },
+      ],
+    });
+    expect(await fs.readFile(backup)).toEqual(before);
+    await s.open(dir);
+    expect(
+      s.snapshot().project.masterPalettes.at(-1)!.regions[0].selection,
+    ).toBeDefined();
   });
   it("rejects mismatched replay and tampered recipe paths without changing an existing palette", async () => {
     const before = await fs.readFile(path.join(dir, "laceframe.json")),

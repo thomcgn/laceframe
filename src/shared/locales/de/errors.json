@@ -75,7 +75,7 @@
   "mc0842e89ad": "Identitätsbild bereits vorhanden oder doppelt ausgewählt.",
   "ma7d129a4c1": "{{v0}}: Identitätsdatei kollidiert oder wurde verändert.",
   "m66f87397d0": "Projekt wurde extern geändert. Bitte erneut öffnen.",
-  "m1fbd17e879": "Migrationssicherung existiert mit anderem Inhalt.",
+  "m1fbd17e879": "Migrationssicherung {{file}} existiert mit anderem Inhalt.",
   "m073701c8df": "Projektmanifest zu groß.",
   "m8a404636d7": "Stilrevision geändert. Erneut öffnen.",
   "mf8dc207d83": "Migration passt nicht zur Originalrevision.",
