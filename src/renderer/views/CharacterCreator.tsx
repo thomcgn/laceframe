@@ -589,10 +589,10 @@ export function CharacterCreator({
           </label>
         </>
       )}
-      <details
+      {!character && <details
         className="creator-new-character"
         hidden={step !== "Auswählen"}
-        open={!character}
+        open
       >
         <summary>Neue Figur anlegen</summary>
         <form
@@ -614,7 +614,7 @@ export function CharacterCreator({
           </label>
           <button>Figurenentwurf anlegen</button>
         </form>
-      </details>
+      </details>}
       {character && (
         <>
           <p>
