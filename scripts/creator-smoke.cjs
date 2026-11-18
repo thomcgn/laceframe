@@ -505,6 +505,8 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Master erstellen", exact: true })
       .click();
+    await expect(page.locator('.studio-editor[data-operation="master"]:visible')).toBeVisible();
+    await expect(page.locator('.creator-new-character:visible')).toHaveCount(0);
     await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
       originalOutfit,
     );
