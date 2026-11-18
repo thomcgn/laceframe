@@ -3,7 +3,11 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 import { MakerZIP } from "@electron-forge/maker-zip";
 
 const config: ForgeConfig = {
-  packagerConfig: { asar: true, executableName: "laceframe" },
+  packagerConfig: {
+    asar: true,
+    executableName: "laceframe",
+    extraResource: ["licenses/SpriteFusion-Pixel-Snapper-MIT.txt"],
+  },
   makers: [new MakerZIP({}, ["linux", "darwin", "win32"])],
   plugins: [
     new VitePlugin({
