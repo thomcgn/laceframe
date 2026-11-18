@@ -3464,3 +3464,30 @@ button.text-link {
 @media(max-width:1000px) {
   .raster-editor footer > span:nth-of-type(2) { display:none; }
 }
+
+.semantic-layer-editor header {padding-bottom:6px;flex:none;gap:12px;}
+.semantic-layer-editor header h2 {margin:0 auto 0 0;}
+.semantic-layout {display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;flex:1;min-height:0;}
+.semantic-image {display:flex;flex-direction:column;min-width:0;min-height:0;gap:6px;}
+.semantic-image > .pixel-camera {display:flex;flex-direction:column;flex:1;min-height:180px;}
+.semantic-image .pixel-camera-tools {flex-direction:row;flex-wrap:wrap;flex:none;overflow:visible;}
+.semantic-image .pixel-camera-viewport {flex:1;min-height:120px;}
+.semantic-image label {margin:0;display:flex;flex-direction:row;align-items:center;gap:5px;}
+.semantic-image input[type="number"] {width:60px;}
+.semantic-image input[type="checkbox"] {width:auto;}
+.semantic-image button,.semantic-row button {padding:5px 8px;font-size:12px;}
+.semantic-layout aside {overflow:auto;min-width:0;}
+.semantic-layout aside > label {margin:4px 0;}
+.semantic-layout fieldset {border:0;margin:0;padding:0;min-width:0;}
+.semantic-row {padding:8px;border:1px solid #343e4a;border-radius:6px;margin:0 0 6px;}
+.semantic-row[data-active="true"] {border-color:#8fada6;}
+.semantic-row > button {width:100%;text-align:left;margin-bottom:4px;}
+.semantic-row label {margin:3px 0;}
+.semantic-row input,.semantic-row select {padding:4px 6px;font-size:12px;}
+.semantic-row .button-row {gap:4px;margin-top:4px;}
+.semantic-row .button-row label {flex-direction:row;align-items:center;gap:3px;}
+.semantic-row input[type="checkbox"] {width:auto;}
+.semantic-layer-editor footer {flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-top:1px solid #343e4a;padding-top:6px;font-size:12px;}
+.semantic-layer-editor footer > button:last-child {margin-left:auto;}
+.semantic-polygon {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+@media(max-width:1050px){.semantic-layout {grid-template-columns:minmax(0,1fr) 240px;gap:8px;}.semantic-layer-editor button {padding:5px 7px;}.semantic-image .pixel-camera-tools input[type="range"]{display:none;}}

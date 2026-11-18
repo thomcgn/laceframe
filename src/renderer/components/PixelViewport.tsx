@@ -15,7 +15,11 @@ export function PixelViewport({
   hideTools = false,
   cameraWidth = width,
   cameraHeight = height,
+  panMode = false,
+  showHandTool = true,
 }: {
+  panMode?: boolean;
+  showHandTool?: boolean;
   hideTools?: boolean;
   cameraWidth?: number;
   cameraHeight?: number;
@@ -38,7 +42,8 @@ export function PixelViewport({
     if (onPan) onPan(next);
     else setLocalPan(next);
   };
-  const [hand, setHand] = useState(false);
+  const [localHand, setHand] = useState(false);
+  const hand = localHand || panMode;
   const drag = useRef<{
     id: number;
     x: number;
@@ -139,6 +144,7 @@ export function PixelViewport({
           +
         </button>
         <button
+          hidden={!showHandTool}
           aria-label={tr("editing.m6a4768841c")}
           title={tr("editing.md74050edae")}
           aria-pressed={hand}

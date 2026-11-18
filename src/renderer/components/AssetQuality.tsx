@@ -1,3 +1,4 @@
+import { SemanticLayerEditor } from "./SemanticLayerEditor";
 import { uiLabel } from "../../shared/locales";
 import { displayMessage } from "../../shared/locales";
 import { tr } from "../../shared/locales/index";
@@ -127,6 +128,7 @@ export function AssetQuality({
   cutoutRequested?: number;
   onCutoutOpened?: () => void;
 }) {
+  const [semanticEditor, setSemanticEditor] = useState<string>();
   const [pixelEditor, setPixelEditor] = useState<{
     id: string;
     mode: "snap" | "color";
@@ -367,6 +369,13 @@ export function AssetQuality({
             {tr("common.m035d80e3f1")}
           </button>
         )}
+        <button
+          disabled={busy || !project.masters.some((m) => m.id === active.id)}
+          title={tr("layers.masterOnly")}
+          onClick={() => setSemanticEditor(active.id)}
+        >
+          {tr("layers.open")}
+        </button>
         <button
           disabled={busy}
           onClick={() => setPixelEditor({ id: active.id, mode: "snap" })}
@@ -754,6 +763,14 @@ export function AssetQuality({
                   </div>
                 ))}
               </section>
+            )}
+            {semanticEditor && (
+              <SemanticLayerEditor
+                sourceId={semanticEditor}
+                project={project}
+                onSaved={onSnapshot}
+                onClose={() => setSemanticEditor(undefined)}
+              />
             )}
             {pixelEditor && (
               <PixelEditEditor

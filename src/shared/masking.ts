@@ -45,6 +45,26 @@ export function paintStroke(
   )
     throw new Error(tr("common.mc03d56045e"));
   const result = new Uint8Array(bytes);
+  visitStrokePixels(width, height, from, to, radius, (i) => {
+    result[i] = Math.round(Math.max(0, Math.min(255, value)));
+  });
+  return result;
+}
+/** Shared hard-edged stroke rasterizer; visitors can update a draft without copying per point. */
+export function visitStrokePixels(
+  width: number,
+  height: number,
+  from: Point,
+  to: Point,
+  radius: number,
+  visit: (index: number) => void,
+) {
+  if (
+    width * height > MAX_MASK_PIXELS ||
+    ![from.x, from.y, to.x, to.y, radius].every(Number.isFinite) ||
+    radius <= 0
+  )
+    throw new Error(tr("common.mc03d56045e"));
   const dx = to.x - from.x,
     dy = to.y - from.y,
     length = dx * dx + dy * dy;
@@ -67,10 +87,10 @@ export function paintStroke(
         (x + 0.5 - from.x - t * dx) ** 2 + (y + 0.5 - from.y - t * dy) ** 2 <=
         radius ** 2
       )
-        result[y * width + x] = Math.round(Math.max(0, Math.min(255, value)));
+        visit(y * width + x);
     }
-  return result;
 }
+
 export type MaskHistory = {
   past: Uint8Array[];
   present: Uint8Array;
