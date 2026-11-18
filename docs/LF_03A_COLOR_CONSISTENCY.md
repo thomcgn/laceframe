@@ -61,3 +61,7 @@ No new generation, AI segmentation, pose estimation, global palette quantization
 Manual acceptance: import a candidate, open Farbkonsistenz, assign and save three master regions, separately map candidate regions, sample drift/target colors, compare with strength zero/nonzero, protect highlights/details, save, review deliberately and export. Intentionally dark new shadow bands should remain; only explicitly selected groups/regions may change. Check the output with a reopened project before accepting it for production.
 
 Synthetic desktop screenshots: [960×720](screenshots/lf-03a/960x720.png), [1440×900](screenshots/lf-03a/1440x900.png). The 1920×1080 capture remains in ignored `artifacts/color-consistency/`.
+
+## Hosted CI findings
+
+[Initial Quality run 44213537633](https://github.com/thomcgn/laceframe/actions/runs/44213537633) passed HIGH classification, Typecheck, Lint, 422 unit tests and build, then failed the general Desktop smoke's exact preload method inventory: it had not yet listed the two new typed reads `colorPalette` and `colorRecipe`. The exact allowlist is extended by those two methods; unrestricted filesystem/Node methods remain forbidden. The complete affected `node scripts/desktop-smoke.cjs`, targeted lint and `git diff --check` passed locally; updated hosted results are recorded in the PR. No tolerance or application assertion is removed. The first hosted attempt is not a passed FULL regression.

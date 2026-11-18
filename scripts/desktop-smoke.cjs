@@ -95,6 +95,8 @@ const { createHash } = require("node:crypto");
         "checkCodex",
         "chooseImage",
         "choosePack",
+        "colorPalette",
+        "colorRecipe",
         "command",
         "copyPrompt",
         "createProject",
