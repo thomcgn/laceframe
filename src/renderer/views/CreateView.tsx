@@ -1,3 +1,4 @@
+import { ColorConsistency } from "../components/ColorConsistency";
 import { ImagePreview } from "../components/ImagePreview";
 import { GenerationRequirements } from "../components/GenerationRequirements";
 import {
@@ -1243,6 +1244,14 @@ export function CreateView({
           candidate={asset}
           mask={maskOverlay ? activeMask : undefined}
         />
+        {asset && (
+          <ColorConsistency
+            sourceId={asset.id}
+            project={p}
+            onSnapshot={onSnapshot}
+            disabled={busy || running}
+          />
+        )}
         {asset && (
           <AssetQuality
             key={asset.id}

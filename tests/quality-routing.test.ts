@@ -280,6 +280,7 @@ describe("profile orchestration and cache safety", () => {
     ]);
     expect(calls).toEqual([
       ["npm", "run", "build"],
+      ["node", "scripts/color-consistency-smoke.cjs"],
       ["node", "scripts/desktop-smoke.cjs"],
       ["node", "scripts/expression-designer-smoke.cjs"],
       ["node", "scripts/native-smoke.cjs"],
@@ -415,6 +416,7 @@ describe("real TARGETED entrypoint with explicit orchestration fixtures", () => 
     const stamp =
       "const fs=require('node:fs');fs.mkdirSync('artifacts/quality',{recursive:true});fs.appendFileSync('artifacts/quality/fixture.log',process.argv[1].split('/').pop()+'\\n');";
     for (const name of [
+      "color-consistency-smoke",
       "desktop-smoke",
       "expression-designer-smoke",
       "native-smoke",
@@ -471,6 +473,7 @@ describe("real TARGETED entrypoint with explicit orchestration fixtures", () => 
       report.commands.map((c: { command: string[] }) => c.command),
     ).toEqual([
       ["npm", "run", "build"],
+      ["node", "scripts/color-consistency-smoke.cjs"],
       ["node", "scripts/desktop-smoke.cjs"],
       ["node", "scripts/expression-designer-smoke.cjs"],
       ["node", "scripts/native-smoke.cjs"],
@@ -486,6 +489,7 @@ describe("real TARGETED entrypoint with explicit orchestration fixtures", () => 
         .split("\n"),
     ).toEqual([
       "build.cjs",
+      "color-consistency-smoke.cjs",
       "desktop-smoke.cjs",
       "expression-designer-smoke.cjs",
       "native-smoke.cjs",

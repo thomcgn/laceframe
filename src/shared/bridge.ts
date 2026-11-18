@@ -1,3 +1,4 @@
+import type { ColorDraft, MasterPalette } from "./color-consistency";
 import type { IdentityImport } from "./identity-import";
 import type { PackKind, PackPreview, PackSelection } from "./packs";
 import type { CutoutDraft, CutoutImage } from "./smart-cutout";
@@ -21,6 +22,15 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  colorPalette(
+    id: string,
+  ): Promise<
+    Result<{
+      palette: MasterPalette;
+      regions: (MasterPalette["regions"][number] & { weights: Uint8Array })[];
+    }>
+  >;
+  colorRecipe(id: string): Promise<Result<ColorDraft>>;
   choosePack(kind: PackKind): Promise<Result<PackPreview | null>>;
   exportPack(
     selection: PackSelection,

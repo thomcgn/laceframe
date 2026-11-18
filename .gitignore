@@ -25,3 +25,6 @@ artifacts/
 **/laceframe.v2.pre-asset-quality.backup.json
 
 **/assets/relight-masks/
+
+**/assets/color-masks/
+**/laceframe.v2.pre-color-consistency.backup.json

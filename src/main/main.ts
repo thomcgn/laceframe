@@ -181,6 +181,12 @@ function registerIPC() {
   handle("image:smart-cutout-recipe", (input) =>
     service.smartCutoutRecipe(idSchema.parse(input)),
   );
+  handle("image:color-palette", (input) =>
+    service.colorPalette(idSchema.parse(input)),
+  );
+  handle("image:color-recipe", (input) =>
+    service.colorRecipe(idSchema.parse(input)),
+  );
   handle("image:analysis-source", (input) =>
     service.analysisSource(idSchema.parse(input)),
   );

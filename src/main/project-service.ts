@@ -1,4 +1,10 @@
 import {
+  COLOR_VERSION,
+  extractPalette,
+  correctColors,
+  rgbHex,
+} from "../shared/color-consistency";
+import {
   identityImportSchema,
   type IdentityImport,
 } from "../shared/identity-import";
@@ -380,6 +386,53 @@ export class ProjectService {
           maskWeights(m);
         }
       }
+    const readColorMask = async (
+      ref: { file: string; sha256: string },
+      width: number,
+      height: number,
+    ) => {
+      const bytes = await readLimited(
+        await safePath(root, ref.file),
+        MAX_IMAGE_BYTES,
+      );
+      if (hashBytes(bytes) !== ref.sha256)
+        throw new Error("Farbmaske verändert.");
+      const pixels = decodePixels(bytes);
+      if (pixels.width !== width || pixels.height !== height)
+        throw new Error("Falsche Farbmaskengröße.");
+      return maskWeights(pixels);
+    };
+    for (const palette of project.masterPalettes) {
+      const master = project.masters.find((m) => m.id === palette.masterId)!;
+      const pixels = await this.pixels(
+        await readLimited(await safePath(root, master.file), MAX_IMAGE_BYTES),
+      );
+      for (const r of palette.regions) {
+        const weights = await readColorMask(
+          r.mask,
+          master.width,
+          master.height,
+        );
+        if (
+          JSON.stringify(extractPalette(pixels, weights)) !==
+          JSON.stringify(r.colors)
+        )
+          throw new Error("Masterpalette verändert.");
+      }
+    }
+    for (const q of project.qualityAssets)
+      if (q.colorCorrection) {
+        for (const mask of [
+          q.colorCorrection.protectedMask,
+          ...q.colorCorrection.regions.map((r) => r.mask),
+        ])
+          await readColorMask(mask, q.width, q.height);
+        const pixels = decodePixels(
+          await readLimited(await safePath(root, q.file), MAX_IMAGE_BYTES),
+        );
+        if (hashBytes(pixels.data) !== q.colorCorrection.pixelSha256)
+          throw new Error("Farb-Pixelprovenienz verändert.");
+      }
     for (const migration of project.styleMigrations)
       for (const source of migration.sources)
         if (hashBytes(Buffer.from(source.text)) !== source.sha256)
@@ -398,7 +451,8 @@ export class ProjectService {
       source.assetQualityVersion !== 1 ||
       !Object.hasOwn(source, "styleAnalyses") ||
       source.smartCutoutVersion !== 1 ||
-      source.portablePacksVersion !== 1
+      source.portablePacksVersion !== 1 ||
+      !Object.hasOwn(source, "masterPalettes")
         ? bytes
         : undefined;
     this.legacyBackupName = versionOne
@@ -417,7 +471,9 @@ export class ProjectService {
                   ? "laceframe.v2.pre-style-analysis.backup.json"
                   : source.smartCutoutVersion !== 1
                     ? "laceframe.v2.pre-smart-cutout.backup.json"
-                    : "laceframe.v2.pre-portable-packs.backup.json";
+                    : source.portablePacksVersion !== 1
+                      ? "laceframe.v2.pre-portable-packs.backup.json"
+                      : "laceframe.v2.pre-color-consistency.backup.json";
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -478,7 +534,8 @@ export class ProjectService {
       | "master-candidates"
       | "quality"
       | "cutout-masks"
-      | "relight-masks",
+      | "relight-masks"
+      | "color-masks",
     token: string,
   ) {
     const { image, bytes } = this.pending(token);
@@ -880,6 +937,128 @@ export class ProjectService {
         }
         break;
       }
+      case "saveMasterPalette": {
+        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        const master = p.masters.find((m) => m.id === cmd.masterId);
+        if (!master || master.sha256 !== cmd.masterSha256)
+          throw new Error(
+            "Freigegebenen Master mit unverändertem Hash auswählen.",
+          );
+        if (new Set(cmd.regions.map((r) => r.id)).size !== cmd.regions.length)
+          throw new Error("Doppelte Farbregion.");
+        const pixels = await this.analysisSource(master.id);
+        const colors = cmd.regions.map((r) =>
+          extractPalette(pixels, r.weights),
+        );
+        await this.colorBackup();
+        const regions = [];
+        for (const [i, r] of cmd.regions.entries()) {
+          const { weights, ...meta } = r;
+          regions.push({
+            ...meta,
+            colors: colors[i],
+            mask: await this.storeColorMask(
+              master.width,
+              master.height,
+              weights,
+            ),
+          });
+        }
+        p.masterPalettes.push({
+          id: randomUUID(),
+          masterId: master.id,
+          masterSha256: master.sha256,
+          characterId: master.characterId,
+          revision:
+            p.masterPalettes.filter((a) => a.masterId === master.id).length + 1,
+          createdAt: new Date().toISOString(),
+          algorithm: COLOR_VERSION,
+          regions,
+        });
+        break;
+      }
+      case "createColorCorrection": {
+        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        const source = this.qualitySource(cmd.sourceId),
+          expression = this.colorExpression(source.id);
+        const { palette } = await this.colorPalette(cmd.paletteId);
+        if (
+          palette.masterId !== expression.masterId ||
+          palette.characterId !== source.characterId ||
+          source.sha256 !== cmd.sourceSha256
+        )
+          throw new Error(
+            "Farbpalette gehört nicht zu diesem Master / dieser Expression.",
+          );
+        if (
+          new Set(cmd.regions.map((r) => r.paletteRegionId)).size !==
+          cmd.regions.length
+        )
+          throw new Error("Doppelte Kandidatenregion.");
+        const pixels = await this.analysisSource(source.id);
+        await this.validateColorTargets(palette.id, cmd.regions);
+        const output = correctColors(pixels, {
+          paletteId: cmd.paletteId,
+          alignmentConfirmed: true,
+          regions: cmd.regions,
+          protectedWeights: cmd.protectedWeights,
+        });
+        this.assertRelightLock(
+          output,
+          await this.relightProtectedPixels(source.id),
+        );
+        if (hashBytes(output.data) !== cmd.previewPixelSha256)
+          throw new Error("Farbvorschau veraltet. Berechnung abwarten.");
+        const regions = [];
+        for (const { weights, ...r } of cmd.regions)
+          regions.push({
+            ...r,
+            mask: await this.storeColorMask(
+              source.width,
+              source.height,
+              weights,
+            ),
+          });
+        const protectedMask = await this.storeColorMask(
+          source.width,
+          source.height,
+          cmd.protectedWeights,
+        );
+        const image = await this.stage(
+          encodePixels(output),
+          "color-corrected.png",
+        );
+        try {
+          p.qualityAssets.push({
+            ...(await this.store("quality", image.token)),
+            format: "png",
+            id: randomUUID(),
+            sourceId: source.id,
+            sourceSha256: source.sha256,
+            characterId: source.characterId,
+            operation: "color-correction",
+            version: 1,
+            createdAt: new Date().toISOString(),
+            status: "candidate",
+            colorCorrection: {
+              paletteId: palette.id,
+              alignmentConfirmed: true,
+              algorithm: COLOR_VERSION,
+              revision:
+                p.qualityAssets.filter(
+                  (a) => a.sourceId === source.id && a.colorCorrection,
+                ).length + 1,
+              pixelSha256: hashBytes(output.data),
+              regions,
+              protectedMask,
+            },
+          });
+        } finally {
+          this.discard(image.token);
+        }
+        break;
+      }
+
       case "createRelighting": {
         if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
         const source = this.qualitySource(cmd.sourceId);
@@ -2111,6 +2290,138 @@ export class ProjectService {
       throw new Error("Bildintegrität verletzt.");
     return bytes;
   }
+  private async validateColorTargets(
+    paletteId: string,
+    rules: { paletteRegionId: string; targetColor: string }[],
+  ) {
+    const { palette, regions: referenceRegions } =
+      await this.colorPalette(paletteId);
+    const master = await this.analysisSource(palette.masterId);
+    for (const rule of rules) {
+      const ref = referenceRegions.find((r) => r.id === rule.paletteRegionId);
+      if (!ref)
+        throw new Error("Farbregion fehlt in der gespeicherten Masterpalette.");
+      let found = false;
+      for (let i = 0; i < ref.weights.length; i++)
+        if (
+          ref.weights[i] >= 128 &&
+          master.data[i * 4 + 3] >= 128 &&
+          rgbHex(master.data.subarray(i * 4, i * 4 + 3)) === rule.targetColor
+        ) {
+          found = true;
+          break;
+        }
+      if (!found)
+        throw new Error(
+          "Referenzfarbe muss aus der zugeordneten Masterregion stammen.",
+        );
+    }
+  }
+
+  private async colorMask(
+    ref: { file: string; sha256: string },
+    width: number,
+    height: number,
+  ) {
+    if (ref.file !== assetFile("color-masks", ref.sha256, "png"))
+      throw new Error("Ungültiger Farbmaskenpfad.");
+    const bytes = await readLimited(
+      await safePath(this.directory, ref.file),
+      MAX_IMAGE_BYTES,
+    );
+    if (hashBytes(bytes) !== ref.sha256)
+      throw new Error("Farbmaske verändert.");
+    const p = decodePixels(bytes);
+    if (p.width !== width || p.height !== height)
+      throw new Error("Farbmaskengröße verändert.");
+    return new Uint8Array(maskWeights(p));
+  }
+  async colorPalette(id: string) {
+    const palette = this.snapshot().project.masterPalettes.find(
+      (p) => p.id === id,
+    );
+    if (!palette) throw new Error("Masterpalette fehlt.");
+    const master = await this.analysisSource(palette.masterId);
+    if (master.sha256 !== palette.masterSha256)
+      throw new Error("Masterpalette: Quellhash verändert.");
+    const regions = [];
+    for (const r of palette.regions) {
+      const weights = await this.colorMask(r.mask, master.width, master.height);
+      if (
+        JSON.stringify(extractPalette(master, weights)) !==
+        JSON.stringify(r.colors)
+      )
+        throw new Error("Referenzpalette passt nicht zum Master.");
+      regions.push({ ...r, weights });
+    }
+    return { palette, regions };
+  }
+  private colorExpression(id: string) {
+    let source = this.qualitySource(id);
+    const seen = new Set<string>();
+    while ("sourceId" in source) {
+      if (seen.has(source.id) || seen.size >= 64)
+        throw new Error("Zyklische Farbherkunft.");
+      seen.add(source.id);
+      source = this.qualitySource(source.sourceId);
+    }
+    const expression = this.snapshot().project.assets.find(
+      (a) => a.id === source.id,
+    );
+    if (!expression)
+      throw new Error(
+        "Farbkorrektur benötigt eine Expression mit freigegebenem Referenzmaster.",
+      );
+    return expression;
+  }
+  async colorRecipe(id: string) {
+    const q = this.snapshot().project.qualityAssets.find((a) => a.id === id);
+    if (!q?.colorCorrection)
+      throw new Error("Keine gespeicherte Farbkorrektur.");
+    const recipe = q.colorCorrection;
+    const regions = [];
+    for (const { mask, ...r } of recipe.regions)
+      regions.push({
+        ...r,
+        weights: await this.colorMask(mask, q.width, q.height),
+      });
+    return {
+      paletteId: recipe.paletteId,
+      alignmentConfirmed: true as const,
+      regions,
+      protectedWeights: await this.colorMask(
+        recipe.protectedMask,
+        q.width,
+        q.height,
+      ),
+    };
+  }
+  private async storeColorMask(
+    width: number,
+    height: number,
+    weights: Uint8Array,
+  ) {
+    const image = await this.stage(
+      encodeMask(width, height, weights),
+      "color-mask.png",
+    );
+    try {
+      const m = await this.store("color-masks", image.token);
+      return { file: m.file, sha256: m.sha256 };
+    } finally {
+      this.discard(image.token);
+    }
+  }
+  private async colorBackup() {
+    if (!this.legacyBytes && !this.snapshot().project.masterPalettes.length) {
+      this.legacyBytes = await readLimited(
+        await safePath(this.directory, manifestName),
+        MAX_MANIFEST_BYTES,
+      );
+      this.legacyBackupName = "laceframe.v2.pre-color-consistency.backup.json";
+    }
+  }
+
   private qualitySource(id: string) {
     const p = this.snapshot().project;
     const image = [
@@ -2254,6 +2565,17 @@ export class ProjectService {
               throw new Error("Freistellungs-Pixelprovenienz verändert.");
           }
           expected = cutoutPixels(pixels, weights);
+        } else if (a.operation === "color-correction") {
+          if (!a.colorCorrection) throw new Error("Farbkorrekturrezept fehlt.");
+          const recipe = await this.colorRecipe(a.id);
+          await this.validateColorTargets(recipe.paletteId, recipe.regions);
+          expected = correctColors(pixels, recipe);
+          this.assertRelightLock(
+            expected,
+            await this.relightProtectedPixels(a.sourceId),
+          );
+          if (hashBytes(actual.data) !== a.colorCorrection.pixelSha256)
+            throw new Error("Farb-Pixelprovenienz verändert.");
         } else if (a.operation === "relighting") {
           if (!a.relighting) throw new Error("Lichtrezept fehlt.");
           const recipe = await this.relightRecipe(a.id);
@@ -2549,6 +2871,9 @@ export class ProjectService {
               quality: report,
               character: { id: c.id, name: c.name },
               masters: p.masters.filter((m) => m.characterId === c.id),
+              masterPalettes: p.masterPalettes.filter(
+                (m) => m.characterId === c.id,
+              ),
               derivatives: p.qualityAssets.filter(
                 (q) => q.characterId === c.id,
               ),

@@ -1,3 +1,4 @@
+import { ColorConsistency } from "./ColorConsistency";
 import type { RelightEligibility } from "../../shared/relighting";
 import { StyleComparison } from "./StyleComparison";
 import { RelightingEditor } from "./RelightingEditor";
@@ -302,6 +303,12 @@ export function AssetQuality({
         </summary>
         {expanded && (
           <>
+            <ColorConsistency
+              sourceId={active.id}
+              project={project}
+              onSnapshot={onSnapshot}
+              disabled={busy}
+            />
             <StyleComparison project={project} sourceId={active.id} />
             {error && (
               <p role="alert" className="error">
@@ -316,7 +323,9 @@ export function AssetQuality({
                   ? "Freigestellter Kandidat"
                   : derivative.operation === "relighting"
                     ? `2D-Lichtkandidat · R${derivative.relighting?.revision}`
-                    : "Separate Auflösungsvariante"
+                    : derivative.operation === "color-correction"
+                      ? `Farbkandidat · R${derivative.colorCorrection?.revision}`
+                      : "Separate Auflösungsvariante"
                 : sourceQuality
                   ? "Freigegebene abgeleitete Version"
                   : "Unverändertes Rohbild"}

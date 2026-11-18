@@ -1,3 +1,4 @@
+import { correctionRecordSchema } from "./color-consistency";
 import { smartCutoutRecordSchema } from "./smart-cutout";
 import { relightRecordSchema } from "./relighting";
 import { z } from "zod";
@@ -60,7 +61,12 @@ export const qualityDerivativeSchema = z
       .positive()
       .max(4096 * 4),
     format: z.literal("png"),
-    operation: z.enum(["cutout", "resolution", "relighting"]),
+    operation: z.enum([
+      "cutout",
+      "resolution",
+      "relighting",
+      "color-correction",
+    ]),
     version: z.literal(1),
     createdAt: z.iso.datetime(),
     mask: z
@@ -74,6 +80,7 @@ export const qualityDerivativeSchema = z
       .optional(),
     profile: resolutionProfileSchema.optional(),
     relighting: relightRecordSchema.optional(),
+    colorCorrection: correctionRecordSchema.optional(),
     smartCutout: smartCutoutRecordSchema.optional(),
     status: z.enum(["candidate", "approved", "rejected"]),
     reviewedAt: z.iso.datetime().optional(),
