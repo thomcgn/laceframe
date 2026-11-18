@@ -1,0 +1,922 @@
+import { useEffect, useRef, useState } from "react";
+import type { Project, Snapshot } from "../../shared/domain";
+import {
+  type ColorDraft,
+  type ColorPixels,
+  type MasterPalette,
+  type ColorMeasurement,
+  type colorRoleSchema,
+  rgbHex,
+} from "../../shared/color-consistency";
+import type { z } from "zod";
+import { MaskEditor } from "./MaskEditor";
+type Region = {
+  id: string;
+  name: string;
+  role: z.infer<typeof colorRoleSchema>;
+  weights: Uint8Array<ArrayBuffer>;
+};
+const roles = {
+  hair: "Haare / Bart",
+  skin: "Haut",
+  clothes: "Kleidung",
+  custom: "Eigene Region",
+};
+type Pixels = ColorPixels & { sha256: string };
+function PixelCanvas({
+  pixels,
+  label,
+  onPick,
+}: {
+  pixels: ColorPixels;
+  label: string;
+  onPick?: (hex: string, index: number) => void;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (c)
+      c.getContext("2d")?.putImageData(
+        new ImageData(
+          new Uint8ClampedArray(pixels.data),
+          pixels.width,
+          pixels.height,
+        ),
+        0,
+        0,
+      );
+  }, [pixels]);
+  return (
+    <canvas
+      ref={ref}
+      width={pixels.width}
+      height={pixels.height}
+      aria-label={label}
+      style={{
+        maxWidth: "100%",
+        height: "auto",
+        imageRendering: "pixelated",
+        cursor: onPick ? "crosshair" : "default",
+      }}
+      onClick={(e) => {
+        const r = e.currentTarget.getBoundingClientRect(),
+          x = Math.min(
+            pixels.width - 1,
+            Math.floor(((e.clientX - r.left) * pixels.width) / r.width),
+          ),
+          y = Math.min(
+            pixels.height - 1,
+            Math.floor(((e.clientY - r.top) * pixels.height) / r.height),
+          ),
+          i = y * pixels.width + x;
+        if (pixels.data[i * 4 + 3] >= 128)
+          onPick?.(rgbHex(pixels.data.subarray(i * 4, i * 4 + 3)), i);
+      }}
+    />
+  );
+}
+export function ColorConsistency({
+  sourceId,
+  project,
+  onSnapshot,
+  disabled = false,
+}: {
+  sourceId: string;
+  project: Project;
+  onSnapshot: (s: Snapshot) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  let root = project.assets.find((a) => a.id === sourceId);
+  let q = project.qualityAssets.find((a) => a.id === sourceId);
+  const seen = new Set<string>();
+  while (q && !seen.has(q.id)) {
+    seen.add(q.id);
+    root = project.assets.find((a) => a.id === q!.sourceId);
+    q = project.qualityAssets.find((a) => a.id === q!.sourceId);
+  }
+  const master = project.masters.find((m) => m.id === root?.masterId);
+  const savedCorrection = project.qualityAssets.find(
+    (a) => a.id === sourceId && a.colorCorrection,
+  );
+  if (!master) return null;
+  return (
+    <div className="color-consistency-entry">
+      <button disabled={disabled} onClick={() => setOpen(true)}>
+        Farbkonsistenz prüfen
+      </button>
+      <small>
+        Vor Freigabe: Haare, Haut und Kleidung prüfen. Keine automatische
+        Identitätsfreigabe.
+      </small>
+      {open && (
+        <ColorEditor
+          sourceId={savedCorrection?.sourceId ?? sourceId}
+          recipeId={savedCorrection?.id}
+          master={master}
+          project={project}
+          onSnapshot={onSnapshot}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+function ColorEditor({
+  recipeId,
+  sourceId,
+  master,
+  project,
+  onSnapshot,
+  onClose,
+}: {
+  sourceId: string;
+  recipeId?: string;
+  master: Project["masters"][number];
+  project: Project;
+  onSnapshot: (s: Snapshot) => void;
+  onClose: () => void;
+}) {
+  const palettes = project.masterPalettes.filter(
+    (p) => p.masterId === master.id,
+  );
+  const [paletteId, setPaletteId] = useState(
+      project.qualityAssets.find((a) => a.id === recipeId)?.colorCorrection
+        ?.paletteId ??
+        palettes.at(-1)?.id ??
+        "",
+    ),
+    [palette, setPalette] = useState<MasterPalette>();
+  const [masterPixels, setMasterPixels] = useState<Pixels>(),
+    [source, setSource] = useState<Pixels>();
+  const [masterRegions, setMasterRegions] = useState<Region[]>([]),
+    [draft, setDraft] = useState<ColorDraft>();
+  const [past, setPast] = useState<ColorDraft[]>([]),
+    [future, setFuture] = useState<ColorDraft[]>([]);
+  const [selected, setSelected] = useState(""),
+    [mask, setMask] = useState<{
+      kind: "master" | "candidate" | "protected";
+      id: string;
+    }>();
+  const [result, setResult] = useState<{
+    result: ColorPixels;
+    sha256: string;
+    measurements: ({
+      before: ColorMeasurement;
+      after: ColorMeasurement;
+    } | null)[];
+  }>();
+  const [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [confirmed, setConfirmed] = useState(false),
+    [original, setOriginal] = useState(false);
+  const [coordinates, setCoordinates] = useState({ x: 0, y: 0 });
+  const modal = useRef<HTMLElement>(null),
+    dirty = useRef(false);
+  function edit(next: ColorDraft) {
+    dirty.current = true;
+    setPast((p) => [...p, draft!].slice(-8));
+    setFuture([]);
+    setDraft(next);
+    setError("");
+  }
+  const close = () => {
+    if (!busy && (!dirty.current || window.confirm("Farbentwurf verwerfen?")))
+      onClose();
+  };
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    modal.current?.focus();
+    return () => previous?.focus();
+  }, []);
+  useEffect(() => {
+    let live = true;
+    void Promise.all([
+      window.laceframe.analysisSource(master.id),
+      window.laceframe.analysisSource(sourceId),
+    ])
+      .then(([m, s]) => {
+        if (!m.ok) throw new Error(m.error);
+        if (!s.ok) throw new Error(s.error);
+        if (live) {
+          setMasterPixels(m.value);
+          setSource(s.value);
+        }
+      })
+      .catch((e) => {
+        if (live) setError(String(e));
+      });
+    return () => {
+      live = false;
+    };
+  }, [master.id, sourceId]);
+  useEffect(() => {
+    if (!paletteId || !source) return;
+    let live = true;
+    setResult(undefined);
+    setDraft(undefined);
+    setPalette(undefined);
+    setConfirmed(false);
+    void window.laceframe
+      .colorPalette(paletteId)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(r.error);
+        const saved =
+          recipeId &&
+          project.qualityAssets.find((a) => a.id === recipeId)?.colorCorrection
+            ?.paletteId === paletteId
+            ? await window.laceframe.colorRecipe(recipeId)
+            : undefined;
+        if (saved && !saved.ok) throw new Error(saved.error);
+        if (!live) return;
+        setPalette(r.value.palette);
+        setMasterRegions(
+          r.value.regions.map((r) => ({
+            ...r,
+            weights: new Uint8Array(r.weights),
+          })),
+        );
+        setSelected(r.value.regions[0].id);
+        setDraft(
+          saved?.ok
+            ? saved.value
+            : {
+                paletteId,
+                alignmentConfirmed: true,
+                regions: r.value.regions.map((r) => ({
+                  paletteRegionId: r.id,
+                  sourceColor: r.colors[0].hex,
+                  targetColor: r.colors[0].hex,
+                  strength: 1,
+                  tolerance: 12,
+                  correctLightness: false,
+                  weights: new Uint8Array(source.width * source.height),
+                })),
+                protectedWeights: new Uint8Array(source.width * source.height),
+              },
+        );
+        setPast([]);
+        setFuture([]);
+      })
+      .catch((e) => {
+        if (live) setError(String(e));
+      });
+    return () => {
+      live = false;
+    };
+  }, [paletteId, source]);
+  useEffect(() => {
+    setResult(undefined);
+    if (!source || !draft || !palette) return;
+    const w = new Worker(
+      new URL("../workers/color-consistency.worker.ts", import.meta.url),
+      { type: "module" },
+    );
+    w.onmessage = (e) => {
+      if (e.data.error) setError(e.data.error);
+      else setResult(e.data);
+    };
+    w.onerror = () =>
+      setError(
+        "Farb-Worker ausgefallen. Editor neu öffnen; nichts gespeichert.",
+      );
+    const timer = setTimeout(
+      () => w.postMessage({ source, draft, palette }),
+      100,
+    );
+    return () => {
+      clearTimeout(timer);
+      w.terminate();
+    };
+  }, [source, draft, palette]);
+  const region = draft?.regions.find((r) => r.paletteRegionId === selected),
+    refRegion = palette?.regions.find((r) => r.id === selected);
+  function updateRule(values: Partial<NonNullable<typeof region>>) {
+    if (draft && region)
+      edit({
+        ...draft,
+        regions: draft.regions.map((r) =>
+          r === region ? { ...r, ...values } : r,
+        ),
+      });
+  }
+  async function savePalette() {
+    if (!masterPixels) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r = await window.laceframe.command({
+        type: "saveMasterPalette",
+        masterId: master.id,
+        masterSha256: master.sha256,
+        regions: masterRegions.map(({ id, name, role, weights }) => ({
+          id,
+          name,
+          role,
+          weights,
+        })),
+      });
+      if (!r.ok) throw new Error(r.error);
+      onSnapshot(r.value);
+      setPaletteId(r.value.project.masterPalettes.at(-1)!.id);
+      dirty.current = false;
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function save() {
+    if (!source || !draft || !result || !confirmed) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r = await window.laceframe.command({
+        type: "createColorCorrection",
+        sourceId,
+        sourceSha256: source.sha256,
+        ...draft,
+        previewPixelSha256: result.sha256,
+      });
+      if (!r.ok) throw new Error(r.error);
+      onSnapshot(r.value);
+      dirty.current = false;
+      onClose();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function restore() {
+    const q = project.qualityAssets
+      .filter(
+        (a) =>
+          a.sourceId === sourceId && a.colorCorrection?.paletteId === paletteId,
+      )
+      .at(-1);
+    if (!q) return;
+    const r = await window.laceframe.colorRecipe(q.id);
+    if (r.ok) {
+      edit(r.value);
+      setConfirmed(false);
+    } else setError(r.error);
+  }
+  function pickTarget(hex: string, index: number) {
+    const r = masterRegions.find((r) => r.id === selected);
+    if (!r || r.weights[index] < 128) {
+      setError(
+        "Pipette: Farbe innerhalb der gewählten Masterregion auswählen.",
+      );
+      return;
+    }
+    updateRule({ targetColor: hex });
+  }
+  const view = original ? source : (result?.result ?? source);
+  return (
+    <div className="modal-backdrop">
+      <section
+        className="color-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Farbkonsistenz"
+        tabIndex={-1}
+        ref={modal}
+        onKeyDown={(e) => {
+          if (e.target instanceof Element && e.target.closest(".mask-editor"))
+            return;
+          if (e.key === "Escape" && !mask) {
+            e.preventDefault();
+            close();
+          }
+          if (e.key === "Tab") {
+            const items = [
+              ...e.currentTarget.querySelectorAll<HTMLElement>(
+                'button:not(:disabled),input:not(:disabled),select:not(:disabled),summary,[tabindex="0"]',
+              ),
+            ].filter((n) => n.getClientRects().length);
+            const first = items[0],
+              last = items.at(-1);
+            if (e.shiftKey && document.activeElement === first) {
+              e.preventDefault();
+              last?.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+              e.preventDefault();
+              first?.focus();
+            }
+          }
+        }}
+      >
+        <div className="section-head">
+          <h2>Farbkonsistenz · regionale Palette</h2>
+          <button disabled={busy} onClick={close}>
+            Schließen / verwerfen
+          </button>
+        </div>
+        <p>
+          Manuelle Haar-, Haut- und Kleidungsregionen. Zusätzliche dunkle
+          Schatten sind zulässig. Keine Segmentierung, kein Stilscore und keine
+          automatische Freigabe.
+        </p>
+        {error && (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        )}
+        {!source || !masterPixels ? (
+          <p role="status">Originalpixel werden geprüft …</p>
+        ) : (
+          <>
+            <div className="color-layout">
+              <fieldset disabled={busy} className="color-controls">
+                <label>
+                  Masterpalette
+                  <select
+                    aria-label="Masterpalette"
+                    value={paletteId}
+                    onChange={(e) => {
+                      setPaletteId(e.target.value);
+                      setError("");
+                      setPast([]);
+                      setFuture([]);
+                      setConfirmed(false);
+                      if (!e.target.value) {
+                        setPalette(undefined);
+                        setDraft(undefined);
+                        setMasterRegions([]);
+                      }
+                    }}
+                  >
+                    <option value="">Neue Palette anlegen</option>
+                    {palettes.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        Master V{master.version} · Palette R{p.revision}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <details open={!paletteId}>
+                  <summary>
+                    Masterregionen manuell zuweisen / neue Palettenrevision
+                  </summary>
+                  <div className="button-row">
+                    {Object.entries(roles).map(([role, name]) => (
+                      <button
+                        key={role}
+                        disabled={masterRegions.length >= 5}
+                        onClick={() => {
+                          const r: Region = {
+                            id: crypto.randomUUID(),
+                            name,
+                            role: role as Region["role"],
+                            weights: new Uint8Array(
+                              masterPixels.width * masterPixels.height,
+                            ),
+                          };
+                          setMasterRegions((old) => [...old, r]);
+                          setMask({ kind: "master", id: r.id });
+                        }}
+                      >
+                        {name} zuweisen
+                      </button>
+                    ))}
+                  </div>
+                  {masterRegions.map((r) => (
+                    <div key={r.id} className="button-row">
+                      <span>{r.name}</span>
+                      <button
+                        onClick={() => setMask({ kind: "master", id: r.id })}
+                      >
+                        Mastermaske {r.name}
+                      </button>
+                      <button
+                        onClick={() =>
+                          setMasterRegions((old) =>
+                            old.filter((v) => v.id !== r.id),
+                          )
+                        }
+                      >
+                        Region {r.name} entfernen
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    disabled={!masterRegions.length}
+                    onClick={() => void savePalette()}
+                  >
+                    Masterpalette als neue Revision speichern
+                  </button>
+                  <small>
+                    Bestehende Paletten und Master werden nicht überschrieben.
+                    Änderungen erst nach Speichern wirksam.
+                  </small>
+                </details>
+                {draft && palette && (
+                  <>
+                    <label>
+                      Farbregion
+                      <select
+                        aria-label="Farbregion"
+                        value={selected}
+                        onChange={(e) => setSelected(e.target.value)}
+                      >
+                        {palette.regions.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      onClick={() =>
+                        setMask({ kind: "candidate", id: selected })
+                      }
+                    >
+                      Kandidatenregion zuordnen
+                    </button>
+                    {source.width === master.width &&
+                      source.height === master.height && (
+                        <button
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "Gleiche Maße beweisen keine gleiche Pose. Masterkoordinaten ausdrücklich kopieren und anschließend prüfen?",
+                              )
+                            ) {
+                              updateRule({
+                                weights: new Uint8Array(
+                                  masterRegions.find(
+                                    (r) => r.id === selected,
+                                  )!.weights,
+                                ),
+                              });
+                              setConfirmed(false);
+                            }
+                          }}
+                        >
+                          Mastermaske ausdrücklich kopieren
+                        </button>
+                      )}
+                    <button
+                      onClick={() =>
+                        setMask({ kind: "protected", id: "protected" })
+                      }
+                    >
+                      Geschützte Pixel bearbeiten
+                    </button>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={confirmed}
+                        onChange={(e) => setConfirmed(e.target.checked)}
+                      />
+                      Kandidatenregionen und Pose manuell geprüft
+                    </label>
+                    <p className="warning">
+                      {source.width !== master.width ||
+                      source.height !== master.height
+                        ? "Andere Bilddimensionen: keine automatische Maskenübernahme. "
+                        : "Auch bei gleichen Maßen wird keine Registrierung angenommen. "}
+                      Kandidatenregionen separat markieren; Überschneidungen
+                      werden abgelehnt.
+                    </p>
+                    {region && (
+                      <>
+                        <label>
+                          Ausgangsfarbe (Pipette im Kandidaten)
+                          <input
+                            aria-label="Ausgangsfarbe"
+                            type="color"
+                            value={region.sourceColor}
+                            onChange={(e) =>
+                              updateRule({ sourceColor: e.target.value })
+                            }
+                          />
+                        </label>
+                        <div
+                          className="button-row"
+                          aria-label="Verbindliche Referenzfarben"
+                        >
+                          {refRegion?.colors.map((c) => (
+                            <button
+                              key={c.hex}
+                              title={`${c.count} Masterpixel in Farbgruppe`}
+                              aria-label={`Referenzfarbe ${c.hex}`}
+                              onClick={() => updateRule({ targetColor: c.hex })}
+                              style={{ borderBottom: `6px solid ${c.hex}` }}
+                            >
+                              {c.hex}
+                            </button>
+                          ))}
+                        </div>
+                        <p>
+                          Referenz: {region.targetColor} · per Masterpipette
+                          oder Palettenfarbe wählen.
+                        </p>
+                        <label>
+                          Korrekturstärke · {region.strength}
+                          <input
+                            aria-label="Korrekturstärke"
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={region.strength}
+                            onChange={(e) =>
+                              updateRule({ strength: Number(e.target.value) })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Farbgruppenradius (ΔE a/b) · {region.tolerance}
+                          <input
+                            aria-label="Farbgruppenradius"
+                            type="range"
+                            min="1"
+                            max="50"
+                            value={region.tolerance}
+                            onChange={(e) =>
+                              updateRule({ tolerance: Number(e.target.value) })
+                            }
+                          />
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={region.correctLightness}
+                            onChange={(e) =>
+                              updateRule({ correctLightness: e.target.checked })
+                            }
+                          />
+                          Helligkeitsversatz ausdrücklich mit korrigieren (z. B.
+                          aufgehellte Haare)
+                        </label>
+                      </>
+                    )}
+                    <details>
+                      <summary>
+                        Pipette über Pixelkoordinaten (Tastatur)
+                      </summary>
+                      {(["x", "y"] as const).map((k) => (
+                        <label key={k}>
+                          {k}
+                          <input
+                            type="number"
+                            min="0"
+                            aria-label={`Pipette ${k}`}
+                            value={coordinates[k]}
+                            onChange={(e) =>
+                              setCoordinates((v) => ({
+                                ...v,
+                                [k]: Number(e.target.value),
+                              }))
+                            }
+                          />
+                        </label>
+                      ))}
+                      <button
+                        onClick={() => {
+                          const { x, y } = coordinates;
+                          if (
+                            Number.isInteger(x) &&
+                            Number.isInteger(y) &&
+                            x >= 0 &&
+                            y >= 0 &&
+                            x < masterPixels.width &&
+                            y < masterPixels.height
+                          ) {
+                            const i = y * masterPixels.width + x;
+                            if (masterPixels.data[i * 4 + 3] >= 128)
+                              pickTarget(
+                                rgbHex(
+                                  masterPixels.data.subarray(i * 4, i * 4 + 3),
+                                ),
+                                i,
+                              );
+                          }
+                        }}
+                      >
+                        Masterfarbe an Koordinate übernehmen
+                      </button>
+                      <button
+                        onClick={() => {
+                          const { x, y } = coordinates;
+                          if (
+                            Number.isInteger(x) &&
+                            Number.isInteger(y) &&
+                            x >= 0 &&
+                            y >= 0 &&
+                            x < source.width &&
+                            y < source.height
+                          ) {
+                            const i = y * source.width + x;
+                            if (source.data[i * 4 + 3] >= 128)
+                              updateRule({
+                                sourceColor: rgbHex(
+                                  source.data.subarray(i * 4, i * 4 + 3),
+                                ),
+                              });
+                          }
+                        }}
+                      >
+                        Kandidatenfarbe an Koordinate übernehmen
+                      </button>
+                    </details>
+                  </>
+                )}
+              </fieldset>
+              <div className="color-review">
+                <div className="color-images">
+                  <figure>
+                    <figcaption>
+                      Freigegebener Master V{master.version} ·{" "}
+                      {masterPixels.width}×{masterPixels.height} · Pipette
+                    </figcaption>
+                    <PixelCanvas
+                      pixels={masterPixels}
+                      label="Master Farbpalette"
+                      onPick={pickTarget}
+                    />
+                  </figure>
+                  <figure>
+                    <figcaption>
+                      {original ? "Original" : "Korrekturvorschau"} ·{" "}
+                      {source.width}×{source.height} · Kandidatenpipette
+                    </figcaption>
+                    {view && (
+                      <PixelCanvas
+                        pixels={view}
+                        label="Farbvorschau"
+                        onPick={(_hex, i) =>
+                          updateRule({
+                            sourceColor: rgbHex(
+                              source.data.subarray(i * 4, i * 4 + 3),
+                            ),
+                          })
+                        }
+                      />
+                    )}
+                    <button
+                      aria-pressed={original}
+                      onClick={() => setOriginal((v) => !v)}
+                    >
+                      Original / Korrektur vergleichen
+                    </button>
+                  </figure>
+                </div>
+                {result && palette && (
+                  <div role="status" aria-label="Farbmessungen">
+                    {result.measurements.map((m, i) => (
+                      <p key={i} className={m?.before.warning ? "warning" : ""}>
+                        {
+                          palette.regions.find(
+                            (r) => r.id === draft!.regions[i].paletteRegionId,
+                          )?.name
+                        }
+                        :{" "}
+                        {m
+                          ? `${m.before.warning ? "Farbabweichung – manuell prüfen" : "Kein Schwellenwert überschritten"} · ${m.before.visible} sichtbare Pixel · ΔE76 a/b ${m.before.chromaticDeltaE76.toFixed(1)} → ${m.after.chromaticDeltaE76.toFixed(1)} · Aufhellung über Referenz + 8 L*: ${m.before.excessLightness.toFixed(1)} → ${m.after.excessLightness.toFixed(1)}`
+                          : "Kandidatenregion noch nicht zugeordnet"}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                <small>
+                  CIELAB D65: mittlere nächste a/b-Distanz (Warnung &gt;12),
+                  mittlere Aufhellung oberhalb hellster Referenz +8 L* (Warnung
+                  &gt;8). Dunklere Töne bleiben zulässig. Selektiver Lab-Versatz
+                  erhält Tonabstände; Gamut-Clipping/Rundung kann Details an
+                  Kanalgrenzen begrenzen. Visuell prüfen. Alpha und Schutzpixel
+                  bleiben exakt. Maximal 4 MP, keine Skalierung.
+                </small>
+              </div>
+            </div>
+            <div className="button-row color-actions">
+              <button
+                disabled={busy || !past.length}
+                onClick={() => {
+                  setFuture((v) => [draft!, ...v]);
+                  setDraft(past.at(-1));
+                  setPast((v) => v.slice(0, -1));
+                }}
+              >
+                Farbe rückgängig
+              </button>
+              <button
+                disabled={busy || !future.length}
+                onClick={() => {
+                  setPast((v) => [...v, draft!].slice(-8));
+                  setDraft(future[0]);
+                  setFuture((v) => v.slice(1));
+                }}
+              >
+                Farbe wiederholen
+              </button>
+              <button
+                disabled={busy || !draft}
+                onClick={() =>
+                  draft &&
+                  edit({
+                    ...draft,
+                    regions: draft.regions.map((r) => ({ ...r, strength: 0 })),
+                  })
+                }
+              >
+                Farbe zurücksetzen
+              </button>
+              <button
+                disabled={
+                  busy ||
+                  !project.qualityAssets.some(
+                    (a) =>
+                      a.sourceId === sourceId &&
+                      a.colorCorrection?.paletteId === paletteId,
+                  )
+                }
+                onClick={() => void restore()}
+              >
+                Gespeicherte Korrektur laden
+              </button>
+              <button
+                className="primary"
+                disabled={
+                  busy ||
+                  !confirmed ||
+                  !draft ||
+                  !result ||
+                  Boolean(error) ||
+                  result.measurements.some((m) => !m)
+                }
+                onClick={() => void save()}
+              >
+                Als separaten Farbkandidaten speichern
+              </button>
+            </div>
+          </>
+        )}
+        {mask && source && masterPixels && (
+          <MaskEditor
+            contextLabel={{
+              title:
+                mask.kind === "protected" ? "Farbschutzmaske" : "Farbregion",
+              description:
+                mask.kind === "protected"
+                  ? "Weiß oder Grau schützt den Originalpixel vollständig vor Farbkorrektur. Schwarz lässt Korrekturen zu."
+                  : "Weiß wählt Pixel für die regionale Farbprüfung und Korrektur aus. Schwarz lässt sie unverändert. Keine automatische Haar-/Hauterkennung.",
+              saveLabel: "In Farbentwurf übernehmen",
+              readOnlyName: mask.kind !== "master",
+            }}
+            master={
+              mask.kind === "master"
+                ? master
+                : { id: sourceId, width: source.width, height: source.height }
+            }
+            initialName={
+              mask.kind === "protected"
+                ? "Geschützte Pixel (weiß schützt)"
+                : (masterRegions.find((r) => r.id === mask.id)?.name ??
+                  refRegion?.name ??
+                  "Farbregion")
+            }
+            initialWeights={
+              mask.kind === "master"
+                ? masterRegions.find((r) => r.id === mask.id)?.weights
+                : mask.kind === "protected"
+                  ? draft?.protectedWeights
+                  : draft?.regions.find((r) => r.paletteRegionId === mask.id)
+                      ?.weights
+            }
+            onClose={() => setMask(undefined)}
+            onSave={async (weights, name) => {
+              if (mask.kind === "master") {
+                setMasterRegions((old) =>
+                  old.map((r) =>
+                    r.id === mask.id
+                      ? { ...r, name, weights: new Uint8Array(weights) }
+                      : r,
+                  ),
+                );
+                dirty.current = true;
+              } else if (draft) {
+                edit(
+                  mask.kind === "protected"
+                    ? { ...draft, protectedWeights: new Uint8Array(weights) }
+                    : {
+                        ...draft,
+                        regions: draft.regions.map((r) =>
+                          r.paletteRegionId === mask.id
+                            ? { ...r, weights: new Uint8Array(weights) }
+                            : r,
+                        ),
+                      },
+                );
+                setConfirmed(false);
+              }
+              setMask(undefined);
+            }}
+          />
+        )}
+      </section>
+    </div>
+  );
+}

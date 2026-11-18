@@ -1,4 +1,10 @@
 import {
+  paletteSchema,
+  paletteInputSchema,
+  correctionInputSchema,
+  MAX_COLOR_PIXELS,
+} from "./color-consistency";
+import {
   packSchema,
   importChoicesSchema,
   migrationRecordSchema,
@@ -168,6 +174,7 @@ const projectObject = z
     styleAnalyses: z.array(analysisRecordSchema).max(100).default([]),
     assetQualityVersion: z.literal(1).optional(),
     qualityAssets: z.array(qualityDerivativeSchema).max(10000).default([]),
+    masterPalettes: z.array(paletteSchema).max(1000).default([]),
     id: idSchema,
     name: label,
     createdAt: z.iso.datetime(),
@@ -266,6 +273,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       ...p.characters,
       ...p.masters,
       ...p.qualityAssets,
+      ...p.masterPalettes,
       ...p.families,
       ...p.variants,
       ...p.assets,
@@ -301,6 +309,25 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     )
       fail("Invalid locked master selection");
   }
+  for (const palette of p.masterPalettes) {
+    const master = p.masters.find((m) => m.id === palette.masterId);
+    const revisions = p.masterPalettes.filter(
+      (m) => m.masterId === palette.masterId,
+    );
+    if (
+      !master ||
+      master.characterId !== palette.characterId ||
+      master.sha256 !== palette.masterSha256 ||
+      palette.revision !== revisions.indexOf(palette) + 1 ||
+      master.width * master.height > MAX_COLOR_PIXELS ||
+      new Set(palette.regions.map((r) => r.id)).size !==
+        palette.regions.length ||
+      palette.regions.some(
+        (r) => r.mask.file !== assetFile("color-masks", r.mask.sha256, "png"),
+      )
+    )
+      fail("Invalid master palette");
+  }
   const qualitySources = [
     ...p.masters,
     ...p.assets,
@@ -318,32 +345,78 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     )
       fail("Invalid quality source");
     if (
-      q.operation === "relighting"
-        ? !q.relighting ||
+      q.operation === "color-correction"
+        ? !q.colorCorrection ||
           Boolean(q.mask) ||
           Boolean(q.profile) ||
+          Boolean(q.relighting) ||
           source?.width !== q.width ||
           source?.height !== q.height ||
-          q.width * q.height > MAX_RELIGHT_PIXELS ||
-          new Set(q.relighting.regions.map((r) => r.id)).size !==
-            q.relighting.regions.length ||
-          q.relighting.regions.some(
-            (r) =>
-              r.mask.file !== assetFile("relight-masks", r.mask.sha256, "png"),
-          )
-        : q.relighting ||
-          (q.operation === "cutout"
-            ? !q.mask ||
-              Boolean(q.profile) ||
-              q.mask.file !== assetFile("cutout-masks", q.mask.sha256, "png") ||
-              source?.width !== q.width ||
-              source?.height !== q.height
-            : !q.profile ||
+          q.width * q.height > MAX_COLOR_PIXELS ||
+          !p.masterPalettes.some(
+            (m) =>
+              m.id === q.colorCorrection?.paletteId &&
+              m.characterId === q.characterId,
+          ) ||
+          [
+            q.colorCorrection.protectedMask,
+            ...q.colorCorrection.regions.map((r) => r.mask),
+          ].some((m) => m.file !== assetFile("color-masks", m.sha256, "png"))
+        : Boolean(q.colorCorrection) ||
+          (q.operation === "relighting"
+            ? !q.relighting ||
               Boolean(q.mask) ||
-              q.profile.width !== q.width ||
-              q.profile.height !== q.height)
+              Boolean(q.profile) ||
+              source?.width !== q.width ||
+              source?.height !== q.height ||
+              q.width * q.height > MAX_RELIGHT_PIXELS ||
+              new Set(q.relighting.regions.map((r) => r.id)).size !==
+                q.relighting.regions.length ||
+              q.relighting.regions.some(
+                (r) =>
+                  r.mask.file !==
+                  assetFile("relight-masks", r.mask.sha256, "png"),
+              )
+            : q.relighting ||
+              (q.operation === "cutout"
+                ? !q.mask ||
+                  Boolean(q.profile) ||
+                  q.mask.file !==
+                    assetFile("cutout-masks", q.mask.sha256, "png") ||
+                  source?.width !== q.width ||
+                  source?.height !== q.height
+                : !q.profile ||
+                  Boolean(q.mask) ||
+                  q.profile.width !== q.width ||
+                  q.profile.height !== q.height))
     )
       fail("Invalid quality operation");
+    if (q.colorCorrection) {
+      const record = q.colorCorrection,
+        palette = p.masterPalettes.find((m) => m.id === record.paletteId);
+      let root = qualitySources.find((a) => a.id === q.sourceId);
+      const seen = new Set<string>();
+      while (root && "sourceId" in root && !seen.has(root.id)) {
+        seen.add(root.id);
+        root = qualitySources.find((a) => a.id === (root as typeof q).sourceId);
+      }
+      const expression = p.assets.find((a) => a.id === root?.id);
+      if (
+        !palette ||
+        record.revision !==
+          p.qualityAssets
+            .filter((a) => a.sourceId === q.sourceId && a.colorCorrection)
+            .findIndex((a) => a.id === q.id) +
+            1 ||
+        palette.masterId !== expression?.masterId ||
+        new Set(record.regions.map((r) => r.paletteRegionId)).size !==
+          record.regions.length ||
+        record.regions.some(
+          (r) => !palette.regions.some((m) => m.id === r.paletteRegionId),
+        )
+      )
+        fail("Invalid color correction palette provenance");
+    }
     if (q.smartCutout) {
       if (
         q.operation !== "cutout" ||
@@ -937,7 +1010,8 @@ export const assetFile = (
     | "master-candidates"
     | "quality"
     | "cutout-masks"
-    | "relight-masks",
+    | "relight-masks"
+    | "color-masks",
   hash: string,
   format: "png" | "webp",
 ) => `assets/${kind}/${hash}.${format}`;
@@ -966,6 +1040,8 @@ export const commandSchema = z.discriminatedUnion("type", [
       style: styleContentSchema,
     })
     .strict(),
+  paletteInputSchema.extend({ type: z.literal("saveMasterPalette") }),
+  correctionInputSchema.extend({ type: z.literal("createColorCorrection") }),
   relightInputSchema.extend({ type: z.literal("createRelighting") }),
   z
     .object({

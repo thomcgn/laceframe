@@ -40,12 +40,19 @@ export function MaskEditor({
   initialWeights,
   initialName,
   recipeId,
+  contextLabel,
 }: {
   master: { id: string; width: number; height: number; version?: number };
   cutout?: boolean;
   initialWeights?: Uint8Array;
   initialName?: string;
   recipeId?: string;
+  contextLabel?: {
+    title: string;
+    description: string;
+    saveLabel: string;
+    readOnlyName?: boolean;
+  };
   mask?: Mask;
   onSave: (
     weights: Uint8Array,
@@ -595,17 +602,22 @@ export function MaskEditor({
         }}
         role="dialog"
         aria-modal="true"
-        aria-label={cutout ? "Freistellungsmaske" : "Bearbeitungsmaske"}
+        aria-label={
+          contextLabel?.title ??
+          (cutout ? "Freistellungsmaske" : "Bearbeitungsmaske")
+        }
       >
         <h2>
-          {cutout
-            ? "Hintergrund freistellen"
-            : "Maske · Master V" + master.version}
+          {contextLabel?.title ??
+            (cutout
+              ? "Hintergrund freistellen"
+              : "Maske · Master V" + master.version)}
         </h2>
         <p className="editor-description">
-          {cutout
-            ? "Original bleibt unverändert. Hintergrund manuell wählen; Schutz gewinnt. Keine automatische Silhouettenerkennung."
-            : "Weiß erlaubt · Schwarz schützt · Grau überblendet. Keine KI-Inpainting-Garantie."}{" "}
+          {contextLabel?.description ??
+            (cutout
+              ? "Original bleibt unverändert. Hintergrund manuell wählen; Schutz gewinnt. Keine automatische Silhouettenerkennung."
+              : "Weiß erlaubt · Schwarz schützt · Grau überblendet. Keine KI-Inpainting-Garantie.")}{" "}
           {master.width} × {master.height} native Bildpixel.
         </p>
         {(error || sourceError || paintError) && (
@@ -961,6 +973,7 @@ export function MaskEditor({
                 Name
                 <input
                   aria-label="Maskenname"
+                  readOnly={contextLabel?.readOnlyName}
                   value={name}
                   maxLength={120}
                   onChange={(e) => {
@@ -1572,9 +1585,10 @@ export function MaskEditor({
                 .finally(() => setSaving(false));
             }}
           >
-            {cutout
-              ? "Freigestellten Kandidaten speichern"
-              : "Maskenrevision speichern"}
+            {contextLabel?.saveLabel ??
+              (cutout
+                ? "Freigestellten Kandidaten speichern"
+                : "Maskenrevision speichern")}
           </button>
         </div>
       </section>

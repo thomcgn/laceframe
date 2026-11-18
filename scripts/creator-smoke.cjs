@@ -273,6 +273,9 @@ const { createHash } = require("node:crypto");
       await page.locator(".creator-identity").getByRole("button",{name:"Referenz entfernen",exact:true}).last().click();
       await expect.poll(async()=> (await manifest()).identityAssets.length).toBe(2-i);
     }
+    // The manifest write can finish before React clears the removal's busy state.
+    // A synthetic drop dispatched while disabled is intentionally ignored by production.
+    await expect(addIdentities()).toBeEnabled();
     await drop(".creator-identity", other, "identity.png", "image/png");
     await expect(image(page, "Identität 2", { exact: true })).toBeVisible();
     await drop(".creator-identity", webp, "identity.webp", "image/webp");

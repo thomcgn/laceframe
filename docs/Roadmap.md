@@ -35,6 +35,7 @@ Lies **dieses Dokument vollständig**, bevor du eine Implementierung beginnst. P
 | Phase | Thema | Status | Voraussetzung | Ergebnis |
 |---|---|---|---|---|
 | LF-02 | Portable Style & Expression Packs | 🟨 implementiert · PR zur Abnahme | LF-01 / PR #23 gemergt | JSON-Packs, Importvorschau, Linter, geprüfte Freitext-Migration; [Prüfbericht](LF_02_PORTABLE_PACKS.md) |
+| LF-03A | Expression Color Consistency & Palette Lock (separat freigegebener Zusatzauftrag) | 🟨 implementiert · PR zur Abnahme | LF-02 / PR #28 gemergt | Regionale Masterpaletten, Farbmessung, separate Korrekturkandidaten; [Prüfbericht](LF_03A_COLOR_CONSISTENCY.md) |
 | LF-03 | Guided Mode & durchgängige Studio UX | ⬜ offen | LF-02 | Einsteigerworkflow ohne Promptwissen |
 | LF-04 | Outfits & Appearance/Condition States | ⬜ offen | LF-03 | Versionierte Erscheinungszustände |
 | LF-05 | Motion & Ambient Behavior | ⬜ offen | LF-04 | Freigabefähige Timeline-/Frame-Animationen |

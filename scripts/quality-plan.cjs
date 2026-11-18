@@ -3,6 +3,7 @@ const { GROUPS, rank } = require("./quality-classifier.cjs");
 const groupScripts = {
   creator: ["creator-smoke.cjs"],
   expressions: [
+    "color-consistency-smoke.cjs",
     "desktop-smoke.cjs",
     "expression-designer-smoke.cjs",
     "native-smoke.cjs",
@@ -17,6 +18,7 @@ const groupScripts = {
   relighting: ["relighting-smoke.cjs", "cutout-stability-smoke.cjs"],
   native: ["native-smoke.cjs", "creator-smoke.cjs"],
   persistence: [
+    "color-consistency-smoke.cjs",
     "desktop-smoke.cjs",
     "expression-designer-smoke.cjs",
     "quality-smoke.cjs",
