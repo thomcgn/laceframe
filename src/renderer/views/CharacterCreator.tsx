@@ -468,7 +468,13 @@ export function CharacterCreator({
         "Einstellungen oder Prompt überschreiten die erlaubten Grenzen. Eingaben im Prompt Builder prüfen.",
       target: "creator-prompt-builder",
     });
-  const slot = document.getElementById("create-action-slot");
+  // The portal target is created by App in the same React commit as this editor.
+  // Looking it up during render can return null on the initial project load;
+  // resolve it after the DOM has been committed and trigger one rerender.
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setSlot(document.getElementById("create-action-slot"));
+  }, []);
   const timing =
     codex.attemptId === activeId
       ? (codex.execution ?? active?.execution)
