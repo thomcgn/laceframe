@@ -76,6 +76,7 @@ export function CreateView({
 }) {
   const flow = useStudioSteps();
   const { step, expert } = flow;
+  const [qualityDirty, setQualityDirty] = useState(false);
   const p = snapshot.project;
   const character = p.characters.find((c) => c.id === p.selectedCharacterId);
   const attempts = p.attempts.filter((a) => a.characterId === character?.id);
@@ -177,6 +178,7 @@ export function CreateView({
       intent.characterId !== character?.id
     )
       return;
+    if (!discardReview()) return;
     flow.setStep(intent.candidateId ? "Freigeben" : "Auswählen");
     if (intent.masterId) setMasterId(intent.masterId);
     if (intent.familyId) setFamilyId(intent.familyId);
@@ -304,8 +306,8 @@ export function CreateView({
     };
   }, [codex.state, onSnapshot]);
   function generate() {
+    if (!draft || !valid || !discardReview()) return;
     flow.setStep("Erzeugen");
-    if (!draft || !valid) return;
     void perform(
       () =>
         window.laceframe.startGeneration({
@@ -314,7 +316,7 @@ export function CreateView({
         }),
       (value) => {
         savedSignature.current = formSignature;
-        onDirtyChange(false);
+        onDirtyChange(qualityDirty);
         setCodex(value);
         setActiveId(value.attemptId ?? "");
         setComposer((old) => ({ ...old, saved: true }));
@@ -397,9 +399,11 @@ export function CreateView({
   useEffect(
     () =>
       onDirtyChange(
-        formSignature !== (savedSignature.current ?? initialSignature.current),
+        qualityDirty ||
+          formSignature !==
+            (savedSignature.current ?? initialSignature.current),
       ),
-    [formSignature, onDirtyChange],
+    [formSignature, qualityDirty, onDirtyChange],
   );
   const [replace, setReplace] = useState<{ file?: File } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -430,7 +434,7 @@ export function CreateView({
     );
     onSnapshot(saved);
     savedSignature.current = formSignature;
-    onDirtyChange(false);
+    onDirtyChange(qualityDirty);
     setComposer((old) => ({ ...old, saved: true }));
     const attempt = saved.project.attempts.at(-1)!;
     setActiveId(attempt.id);
@@ -497,7 +501,16 @@ export function CreateView({
       },
     );
   }
+  function discardReview() {
+    return (
+      !qualityDirty ||
+      window.confirm(
+        "Ungespeicherte Qualitäts-Prüfnotizen verwerfen und Bild wechseln?",
+      )
+    );
+  }
   function requestImport(file?: File) {
+    if (!discardReview()) return;
     flow.setStep("Erzeugen");
     if (providerId !== "manual-import") {
       void perform(
@@ -514,11 +527,13 @@ export function CreateView({
     else importImage(file);
   }
   function editOptions(change: () => void) {
+    if (!discardReview()) return;
     change();
     setActiveId("");
     setReplace(null);
   }
   function loadAttempt(id: string) {
+    if (id !== activeId && !discardReview()) return;
     setActiveId(id);
     setCandidateKind("composite");
     setReplace(null);
@@ -723,9 +738,8 @@ export function CreateView({
         <PromptConflict state={composer} onChange={setComposer} />
       )}
       <p className="studio-context-summary">
-        Arbeitsauswahl:{" "}
-        {character?.name ?? "Keine Figur"} · Master V{master?.version ?? "—"} ·{" "}
-        {family?.label} / {variant?.label} ·{" "}
+        Arbeitsauswahl: {character?.name ?? "Keine Figur"} · Master V
+        {master?.version ?? "—"} · {family?.label} / {variant?.label} ·{" "}
         {artDirection?.name ?? "Eigener Masterstil"}
       </p>
       {providerError && (
@@ -854,6 +868,7 @@ export function CreateView({
               aria-label="Create Anbieter"
               value={providerId}
               onChange={(e) => {
+                if (!discardReview()) return;
                 setProviderId(
                   e.target.value as "manual-import" | "codex-native",
                 );
@@ -1216,7 +1231,9 @@ export function CreateView({
               <select
                 aria-label="Rohkandidat oder Composite"
                 value={candidateKind}
-                onChange={(e) => setCandidateKind(e.target.value)}
+                onChange={(e) => {
+                  if (discardReview()) setCandidateKind(e.target.value);
+                }}
               >
                 <option value="raw">Rohkandidat</option>
                 <option value="composite">
@@ -1290,6 +1307,7 @@ export function CreateView({
               key={asset.id}
               source={asset}
               workspaceStep={step}
+              onDirtyChange={setQualityDirty}
               project={p}
               onSnapshot={onSnapshot}
               disabled={busy || running}
@@ -1558,10 +1576,11 @@ export function CreateView({
               <button
                 onClick={() => {
                   if (
-                    formSignature !==
-                      (savedSignature.current ?? initialSignature.current) &&
+                    (qualityDirty ||
+                      formSignature !==
+                        (savedSignature.current ?? initialSignature.current)) &&
                     !window.confirm(
-                      "Arbeitsentwurf durch diese gespeicherte Revision ersetzen?",
+                      "Arbeitsentwurf einschließlich ungespeicherter Prüfnotizen durch diese gespeicherte Revision ersetzen?",
                     )
                   )
                     return;

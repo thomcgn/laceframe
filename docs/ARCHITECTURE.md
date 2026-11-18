@@ -14,7 +14,7 @@ Electron Forge, Vite, React, TypeScript und Zod; keine lokale Datenbank oder zus
 
 ## Studio und Editorpräsentation
 
-`StudioSteps` hält ausschließlich lokale Schritt-/Expertenansicht je erhaltenem Master-/Expressionformular. `App` bleibt Eigentümer des einen Projektsnapshots und der bestehenden Projekt-/Job-/Draft-Grenzen. Schrittwechsel versteckt Panels, ohne Formulare zu unmounten; echte Generierung/Import führt zur Ergebnisansicht Erzeugen. Es gibt keine neue Projektpersistenz oder IPC-Methode.
+`StudioSteps` hält ausschließlich lokale Schritt-/Expertenansicht je erhaltenem Master-/Expressionformular. `App` bleibt Eigentümer des einen Projektsnapshots und der bestehenden Projekt-/Job-/Draft-Grenzen. Schrittwechsel versteckt Panels einschließlich der Masterfreigabe, ohne Formulare zu unmounten; ungespeicherte Master-/Qualitätsprüfnotizen fließen in die bestehende Projektwechsel-Warnung ein; echte Generierung/Import führt zur Ergebnisansicht Erzeugen. Es gibt keine neue Projektpersistenz oder IPC-Methode.
 
 `EditorWorkspace` präsentiert Farb-, Regions-, Masken- und Lichteditoren über React-Portale außerhalb des inerten App-Roots. Kontextzähler verbergen übergeordnete Arbeitsflächen während eines Unterwerkzeugs; Zustand, Worker und Undo-Historie bleiben erhalten. Es gibt genau eine sichtbare Dialogfläche. Tastaturereignisse bleiben im aktuellen Workspace, Fokus kehrt nach dem Schließen zurück. Vorhandene Speichern-/Verwerfen- und Dirty-Prüfungen bleiben verantwortlich; Lichtentwurf-Verwerfen fragt jetzt ebenfalls nach.
 

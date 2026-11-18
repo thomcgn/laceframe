@@ -87,9 +87,11 @@ export function AssetQuality({
   cutoutRequested = 0,
   onCutoutOpened,
   workspaceStep,
+  onDirtyChange,
 }: {
   source: Asset;
   workspaceStep?: StudioStep;
+  onDirtyChange?: (dirty: boolean) => void;
   project: Project;
   onSnapshot: (s: Snapshot) => void;
   disabled?: boolean;
@@ -223,6 +225,12 @@ export function AssetQuality({
       live = false;
     };
   }, [expanded, active.id, project, lightingRecipe?.id]);
+  useEffect(() => {
+    onDirtyChange?.(
+      Boolean(derivative?.status === "candidate" && (notes || confirmed)),
+    );
+  }, [derivative?.id, derivative?.status, notes, confirmed, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const busy = disabled || working;
   async function command(c: Command) {
     setWorking(true);

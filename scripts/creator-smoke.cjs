@@ -691,6 +691,41 @@ const { createHash } = require("node:crypto");
     await field(page, "Master Prüfnotiz", { exact: true }).fill(
       "Synthetic silhouette and identity reviewed",
     );
+    // Review state must survive every Studio step; project switching must warn.
+    for (const name of ["Bearbeiten", "Auswählen", "Erzeugen", "Freigeben"])
+      await studioStep(page, name);
+    await expect(field(page, "Master Prüfnotiz", { exact: true })).toHaveValue(
+      "Synthetic silhouette and identity reviewed",
+    );
+    for (const label of [
+      "Master Identität bestätigt",
+      "Master Silhouette geprüft",
+      "Master Aktivierung bestätigen",
+    ])
+      await expect(field(page, label, { exact: true })).toBeChecked();
+    const management = page.locator(".project-management");
+    const managementWasOpen = await management.evaluate((el) => el.open);
+    if (!managementWasOpen) await management.locator("summary").click();
+    const beforeReviewSwitch = await fs.readFile(
+      path.join(project, "laceframe.json"),
+    );
+    let reviewWarning;
+    page.once("dialog", (d) => {
+      reviewWarning = d.message();
+      void d.dismiss();
+    });
+    await page
+      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .click();
+    expect(reviewWarning).toContain("Ungespeicherte");
+    await expect(field(page, "Master Prüfnotiz", { exact: true })).toHaveValue(
+      "Synthetic silhouette and identity reviewed",
+    );
+    expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(
+      beforeReviewSwitch,
+    );
+    if (!managementWasOpen) await management.locator("summary").click();
+
     await page
       .getByRole("button", {
         name: "Als Master V1 freigeben & sperren",

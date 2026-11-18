@@ -71,6 +71,8 @@ export function CharacterCreator({
 }) {
   const flow = useStudioSteps();
   const { step, expert } = flow;
+  const [reviewDirty, setReviewDirty] = useState(false);
+  const [qualityDirty, setQualityDirty] = useState(false);
   const p = snapshot.project,
     character = p.characters.find((c) => c.id === p.selectedCharacterId);
   const attempts = p.masterAttempts.filter(
@@ -190,6 +192,15 @@ export function CharacterCreator({
     if (
       intent?.mode === "master" &&
       intent.characterId === character?.id &&
+      (reviewDirty || qualityDirty) &&
+      !window.confirm(
+        "Ungespeicherte Prüfnotizen verwerfen und Studio-Kontext wechseln?",
+      )
+    )
+      return;
+    if (
+      intent?.mode === "master" &&
+      intent.characterId === character?.id &&
       intent.rebuild &&
       currentMaster
     ) {
@@ -251,9 +262,12 @@ export function CharacterCreator({
   useEffect(
     () =>
       onDirtyChange(
-        formSignature !== (savedSignature.current ?? initialSignature.current),
+        reviewDirty ||
+          qualityDirty ||
+          formSignature !==
+            (savedSignature.current ?? initialSignature.current),
       ),
-    [formSignature, onDirtyChange],
+    [formSignature, reviewDirty, qualityDirty, onDirtyChange],
   );
   const draft = settings
     ? {
@@ -363,13 +377,20 @@ export function CharacterCreator({
     );
   }
   function generate() {
-    flow.setStep("Erzeugen");
     if (!valid || !draft) return;
+    if (
+      (reviewDirty || qualityDirty) &&
+      !window.confirm(
+        "Ungespeicherte Prüfnotizen verwerfen und neuen Masterentwurf erzeugen?",
+      )
+    )
+      return;
+    flow.setStep("Erzeugen");
     void perform(
       () => window.laceframe.startGeneration(draft as CharacterCreationDraft),
       (s) => {
         savedSignature.current = formSignature;
-        onDirtyChange(false);
+        onDirtyChange(reviewDirty || qualityDirty);
         setCodex(s);
         setActiveId(s.attemptId ?? "");
         setComposer((c) => ({ ...c, saved: true }));
@@ -895,7 +916,17 @@ export function CharacterCreator({
               <select
                 aria-label="Masterversuch"
                 value={active?.id ?? ""}
-                onChange={(e) => setActiveId(e.target.value)}
+                onChange={(e) => {
+                  if (
+                    (reviewDirty || qualityDirty) &&
+                    e.target.value !== activeId &&
+                    !window.confirm(
+                      "Ungespeicherte Prüfnotizen verwerfen und anderen Versuch prüfen?",
+                    )
+                  )
+                    return;
+                  setActiveId(e.target.value);
+                }}
               >
                 <option value="">Kein Versuch ausgewählt</option>
                 {attempts.map((a, i) => (
@@ -956,6 +987,7 @@ export function CharacterCreator({
                     key={candidate.id}
                     source={candidate}
                     workspaceStep={step}
+                    onDirtyChange={setQualityDirty}
                     cutoutRequested={cutoutRequested}
                     onCutoutOpened={() => setCutoutRequested(0)}
                     project={p}
@@ -963,8 +995,8 @@ export function CharacterCreator({
                     disabled={busy || running}
                   />
                 </div>
-                {candidate.status === "candidate" && step === "Freigeben" && (
-                  <div className="button-row">
+                {candidate.status === "candidate" && (
+                  <div className="button-row" hidden={step !== "Freigeben"}>
                     <button
                       className="danger"
                       onClick={() =>
@@ -982,6 +1014,7 @@ export function CharacterCreator({
                     </button>
                     <MasterApproval
                       key={candidate.id}
+                      onDirtyChange={setReviewDirty}
                       source={candidate}
                       disabled={busy || running || !targetValid}
                       label={
