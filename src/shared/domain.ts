@@ -341,7 +341,9 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       new Set(revisions.map((r) => r.revision)).size !== revisions.length ||
       set.revision > revisions.length ||
       new Set(set.layers.map((l) => l.id)).size !== set.layers.length ||
-      new Set(set.layers.map((l) => l.order)).size !== set.layers.length
+      new Set(set.layers.map((l) => l.order)).size !== set.layers.length ||
+      set.layers.some((layer, index) => layer.order !== index) ||
+      revisions.some((revision, index) => revision.revision !== index + 1)
     )
       fail("Invalid semantic layer binding");
     const template = p.semanticLayerSets.find(

@@ -154,6 +154,7 @@ it("rejects stale edits and invalid orders/IDs", async () => {
   for (const rows of [
     [hair, hair],
     [hair, { ...layer("skin", 21), order: 0 }],
+    [{ ...hair, order: 4 }],
   ])
     await expect(save(rows, masterId, set.id)).rejects.toThrow();
   expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
