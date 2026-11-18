@@ -1,5 +1,11 @@
 import type { Requirement } from "../../shared/studio";
-export function GenerationRequirements({ items }: { items: Requirement[] }) {
+export function GenerationRequirements({
+  items,
+  onFix,
+}: {
+  items: Requirement[];
+  onFix?: (target: string) => void;
+}) {
   return (
     <div
       className="generation-requirements"
@@ -15,29 +21,32 @@ export function GenerationRequirements({ items }: { items: Requirement[] }) {
                   type="button"
                   className="text-link"
                   onClick={() => {
-                    const element =
-                      document
-                        .querySelector(".studio-editor:not([hidden])")
-                        ?.querySelector<HTMLElement>(
-                          `[data-focus-target="${r.target}"]`,
-                        ) ?? document.getElementById(r.target!);
-                    for (
-                      let parent: HTMLElement | null = element;
-                      parent;
-                      parent = parent.parentElement
-                    ) {
-                      if (parent instanceof HTMLDetailsElement)
-                        parent.open = true;
-                    }
-                    element?.scrollIntoView({ block: "center" });
-                    (
-                      element?.querySelector<HTMLElement>(
-                        "input,textarea,select,button",
-                      ) ??
-                      element?.nextElementSibling?.querySelector<HTMLElement>(
-                        "input,textarea,select,button",
-                      )
-                    )?.focus();
+                    onFix?.(r.target!);
+                    requestAnimationFrame(() => {
+                      const element =
+                        document
+                          .querySelector(".studio-editor:not([hidden])")
+                          ?.querySelector<HTMLElement>(
+                            `[data-focus-target="${r.target}"]`,
+                          ) ?? document.getElementById(r.target!);
+                      for (
+                        let parent: HTMLElement | null = element;
+                        parent;
+                        parent = parent.parentElement
+                      ) {
+                        if (parent instanceof HTMLDetailsElement)
+                          parent.open = true;
+                      }
+                      element?.scrollIntoView({ block: "center" });
+                      (
+                        element?.querySelector<HTMLElement>(
+                          "input,textarea,select,button",
+                        ) ??
+                        element?.nextElementSibling?.querySelector<HTMLElement>(
+                          "input,textarea,select,button",
+                        )
+                      )?.focus();
+                    });
                   }}
                 >
                   {r.message}

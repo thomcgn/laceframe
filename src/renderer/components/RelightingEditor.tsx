@@ -1,3 +1,4 @@
+import { EditorWorkspace } from "./EditorWorkspace";
 import { useEffect, useRef, useState } from "react";
 import type { Project, Snapshot } from "../../shared/domain";
 import {
@@ -92,12 +93,19 @@ export function RelightingEditor({
     setError("");
   }
   function close() {
-    if (!locked.current) onClose();
+    if (
+      !locked.current &&
+      (!dirty.current || window.confirm("Lichtentwurf verwerfen?"))
+    )
+      onClose();
   }
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const key = (e: KeyboardEvent) => {
-      if (modal.current?.querySelector(".modal-backdrop")) return;
+      if (
+        modal.current?.closest<HTMLElement>(".editor-workspace-screen")?.hidden
+      )
+        return;
       if (e.key === "Escape" && !locked.current) {
         e.preventDefault();
         if (!dirty.current || window.confirm("Lichtentwurf verwerfen?"))
@@ -259,7 +267,7 @@ export function RelightingEditor({
     }
   }
   return (
-    <div className="modal-backdrop relight-backdrop">
+    <EditorWorkspace title="Live Relighting" className="relight-backdrop">
       <section
         className="relight-dialog"
         role="dialog"
@@ -510,6 +518,11 @@ export function RelightingEditor({
                   value={zoom}
                   onChange={(e) => setZoom(Number(e.target.value))}
                 >
+                  {![0.25, 0.5, 1, 2, 4].includes(zoom) && (
+                    <option value={zoom}>
+                      {Math.round(zoom * 100)}% · aktuell
+                    </option>
+                  )}
                   <option value={0.25}>25%</option>
                   <option value={0.5}>50%</option>
                   <option value={1}>100%</option>
@@ -531,6 +544,7 @@ export function RelightingEditor({
               <RelightCanvas
                 pixels={(showOriginal ? pixels : output?.pixels)!}
                 zoom={zoom}
+                onZoom={setZoom}
                 pixelArt={
                   draft.light.pixelArt ||
                   draft.regions.some((r) => r.light.pixelArt)
@@ -617,6 +631,6 @@ export function RelightingEditor({
           />
         )}
       </section>
-    </div>
+    </EditorWorkspace>
   );
 }

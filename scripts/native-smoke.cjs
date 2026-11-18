@@ -1,3 +1,4 @@
+const { studioStep, studioExpert } = require("./smoke-ui.cjs");
 const { reviewImport } = require("./historical-master-fixture.cjs");
 const { selectMaskTool, zoomMask } = require("./smoke-ui.cjs");
 const { field, image, text, nav } = require("./smoke-ui.cjs");
@@ -128,6 +129,7 @@ const path = require("node:path");
     await page
       .getByRole("button", { name: "Expression erstellen", exact: true })
       .click();
+    await studioStep(page, "Auswählen");
     await field(page, "Create Anbieter", { exact: true }).selectOption(
       "codex-native",
     );
@@ -258,6 +260,7 @@ const path = require("node:path");
       });
     }, project);
     await nav(page, "Studio");
+    await studioStep(page, "Auswählen");
     await page
       .locator(".studio-editor:visible")
       .getByRole("button", { name: "Expression bearbeiten", exact: true })
@@ -275,13 +278,17 @@ const path = require("node:path");
       .getByRole("button", { name: "Zurück zum Studio", exact: true })
       .filter({ visible: true })
       .click();
+    await studioExpert(page);
     await field(page, "Promptmodus", { exact: true }).selectOption(
       "supplement",
     );
+    await studioExpert(page);
     await field(page, "Ergänzende Anweisung", { exact: true }).fill(
       "Native pipeline assertion.",
     );
+    await studioExpert(page);
     await field(page, "Promptmodus", { exact: true }).selectOption("expert");
+    await studioExpert(page);
     await field(page, "Arbeits-Prompt", { exact: true }).fill(
       (await field(page, "Arbeits-Prompt", { exact: true }).inputValue()) +
         "\nReviewed expert override.",
@@ -428,6 +435,7 @@ const path = require("node:path");
       path: "artifacts/create-quality-1440.png",
       fullPage: true,
     });
+    await studioStep(page, "Freigeben");
     await page
       .getByRole("button", { name: "Als Expression freigeben", exact: true })
       .click();
@@ -565,6 +573,7 @@ const path = require("node:path");
       field(page, "Stilrevision ansehen", { exact: true }),
     ).toHaveValue(String(styleRevision + 1));
     await nav(page, "Studio");
+    await studioExpert(page);
     await expect(
       page.getByRole("button", {
         name: "Neue Vorlage übernehmen",
@@ -631,9 +640,11 @@ const path = require("node:path");
       })
       .click();
     await nav(page, "Studio");
+    await studioStep(page, "Auswählen");
     await field(page, "Create Anbieter", { exact: true }).selectOption(
       "codex-native",
     );
+    await studioStep(page, "Auswählen");
     await page
       .locator(".studio-editor:visible")
       .getByRole("button", { name: "Expression bearbeiten", exact: true })
@@ -684,6 +695,7 @@ const path = require("node:path");
     ).toContainText("Synthetic Native");
     await page.evaluate(() => window.scrollTo(0, 0));
 
+    await studioStep(page, "Auswählen");
     await page
       .locator(".studio-editor:visible")
       .getByRole("button", { name: "Expression bearbeiten", exact: true })
@@ -701,6 +713,7 @@ const path = require("node:path");
       exact: true,
     });
     if (await adopt.isVisible()) await adopt.click();
+    await studioStep(page, "Auswählen");
     await field(page, "Charakter Stilzuordnung", { exact: true }).selectOption(
       "master",
     );
@@ -735,6 +748,7 @@ const path = require("node:path");
     {
       // 02D: actual editor -> persisted mask -> fixture raw -> deterministic composite.
       const { PNG } = require("pngjs");
+      await studioStep(page, "Bearbeiten");
       await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
         "hard",
       );
@@ -906,6 +920,7 @@ const path = require("node:path");
       await expect(
         text(page, /Hard Lock blockiert: unterschiedliche Abmessungen/),
       ).toBeVisible();
+      await studioStep(page, "Freigeben");
       await expect(
         page.getByRole("button", {
           name: "Als Expression freigeben",
@@ -950,11 +965,13 @@ const path = require("node:path");
       page.once("dialog", (dialog) => dialog.accept());
       await page
         .getByRole("button", {
-          name: "Registrierung bestätigen & Composite erstellen",
+          name: "Registrierung bestätigen & geschütztes Ergebnis erstellen",
           exact: true,
         })
         .click();
-      await expect(page.locator(".notice")).toContainText("Composite erstellt");
+      await expect(page.locator(".notice")).toContainText(
+        "Geschütztes Ergebnis erstellt",
+      );
       const compositeProject = await manifest(),
         compositeRecord = compositeProject.assets.at(-1);
       expect(compositeRecord.status).toBe("candidate");
@@ -1005,6 +1022,7 @@ const path = require("node:path");
       await field(page, "Rohkandidat oder Composite", {
         exact: true,
       }).selectOption("raw");
+      await studioStep(page, "Freigeben");
       await expect(
         page.getByRole("button", {
           name: "Als Expression freigeben",
@@ -1018,6 +1036,7 @@ const path = require("node:path");
         exact: true,
       }).click();
       await expect(image(page, "Gespeicherte Maske")).toBeVisible();
+      await studioStep(page, "Freigeben");
       await page
         .getByRole("button", { name: "Als Expression freigeben", exact: true })
         .click();
@@ -1040,6 +1059,7 @@ const path = require("node:path");
         .selectOption("visual");
       await expect(text(page, /Nur visuelle Normalisierung/)).toBeVisible();
       await nav(page, "Studio");
+      await studioStep(page, "Bearbeiten");
       await page
         .getByRole("button", { name: "Maske bearbeiten", exact: true })
         .click();
@@ -1048,11 +1068,13 @@ const path = require("node:path");
       await editor
         .getByRole("button", { name: "Editor schließen", exact: true })
         .click();
+      await studioStep(page, "Bearbeiten");
       await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
         "soft",
       );
       await expect(generate).toBeDisabled();
       await expect(text(page, /Soft Lock nicht verfügbar/)).toBeVisible();
+      await studioStep(page, "Bearbeiten");
       await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
         "none",
       );
@@ -1069,6 +1091,7 @@ const path = require("node:path");
       .map(JSON.parse)
       .filter((m) => m.method === "turn/start").length;
     await fs.writeFile(path.join(root, "scenario"), "no-multi");
+    await studioStep(page, "Auswählen");
     await field(page, "Charakter Stilzuordnung", { exact: true }).selectOption(
       "project",
     );
@@ -1077,9 +1100,11 @@ const path = require("node:path");
     await expect(field(page, "Arbeits-Prompt", { exact: true })).toHaveValue(
       /STYLE LOCK — Shared Noir/,
     );
-    await text(page, "Inspector · technische Herkunft", {
+    await studioExpert(page);
+    await text(page, "Technische Details · Herkunft", {
       exact: true,
     }).click();
+    await studioExpert(page);
     await page
       .getByRole("button", { name: "Codex-Verfügbarkeit prüfen", exact: true })
       .click();
@@ -1089,6 +1114,7 @@ const path = require("node:path");
         .getByText(/Mehrfachreferenzen nicht bestätigt/),
     ).toBeVisible();
     await expect(generate).toBeDisabled();
+    await studioStep(page, "Auswählen");
     await field(page, "Charakter Stilzuordnung", { exact: true }).selectOption(
       "master",
     );
@@ -1101,6 +1127,7 @@ const path = require("node:path");
         .filter((m) => m.method === "turn/start"),
     ).toHaveLength(turnsBefore);
     await fs.writeFile(path.join(root, "scenario"), "no-auth");
+    await studioExpert(page);
     await page
       .getByRole("button", { name: "Codex-Verfügbarkeit prüfen", exact: true })
       .click();
@@ -1132,6 +1159,7 @@ const path = require("node:path");
       page.getByRole("heading", { name: "Synthetic Native", exact: true }),
     ).toBeVisible();
     await nav(page, "Studio");
+    await studioStep(page, "Bearbeiten");
     await expect(field(page, "Bearbeitungsmodus", { exact: true })).toHaveValue(
       "hard",
     );
@@ -1144,6 +1172,7 @@ const path = require("node:path");
         .filter({ hasText: "Freigegeben" }),
     ).toBeVisible();
     expect(await manifest()).toEqual(beforeMaskRestart);
+    await studioStep(page, "Bearbeiten");
     await page
       .getByRole("button", { name: "Maske bearbeiten", exact: true })
       .click();

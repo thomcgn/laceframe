@@ -17,7 +17,7 @@ npm run start
 
 Die Bereiche sind **Characters → Art Direction → Expressions → Studio → Library → Motion**. Projekte außerhalb dieses öffentlichen Repositorys speichern und als vollständiges Verzeichnis sichern. Master und Originale bleiben unverändert; neue Bearbeitungen werden separate Entwürfe mit manueller Freigabe.
 
-Vorhanden sind unter anderem Mehrfachimport von Identitätsbildern, versionierte Stile, Character Creator, Master-Rebuild, native Generierung oder manueller Ergebnisimport, Bildvergleich, Freistellung, Masken/Originalpixelschutz, 2D-Relighting und regionale Farbkorrektur. Motion zeigt bislang einen Planungshinweis. Der vierstufige Studio-Ablauf ist Bestandteil des laufenden UX-06-Auftrags und noch nicht implementiert.
+Vorhanden sind unter anderem Mehrfachimport von Identitätsbildern, versionierte Stile, Character Creator, Master-Rebuild, native Generierung oder manueller Ergebnisimport, Bildvergleich, Freistellung, Masken/Originalpixelschutz, 2D-Relighting und regionale Farbkorrektur. Motion zeigt bislang einen Planungshinweis. Studio führt durch **Auswählen → Erzeugen → Bearbeiten → Freigeben**. Die Expertenansicht erhält vollständige Anweisungen und Diagnosen. Bildeditoren nutzen eine große gemeinsame Arbeitsfläche; Unterwerkzeuge erhalten den bisherigen Entwurf.
 
 ## Dokumentation
 

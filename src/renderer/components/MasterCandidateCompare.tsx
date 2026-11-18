@@ -127,7 +127,7 @@ function PixelComparison({
         <span className="compare-legend">
           <b>{beforeLabel}</b>
           <span>↔</span>
-          <b>Kandidat</b>
+          <b>Entwurf</b>
         </span>
         <label>
           Prüfhintergrund
@@ -373,7 +373,7 @@ function PixelComparison({
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(position)}
-              aria-valuetext={`${Math.round(position)}% Master, ${Math.round(100 - position)}% Kandidat`}
+              aria-valuetext={`${Math.round(position)}% Master, ${Math.round(100 - position)}% Entwurf`}
               tabIndex={0}
               style={{
                 left: `${position}%`,
@@ -424,7 +424,7 @@ function PixelComparison({
           <p className="compare-empty">
             {!master
               ? "Freigegebenen Master auswählen."
-              : "Noch kein Kandidat · PNG/WebP ablegen oder generieren."}
+              : "Noch kein Entwurf · PNG/WebP ablegen oder generieren."}
           </p>
         )}
       </div>
@@ -438,7 +438,7 @@ function PixelComparison({
           {beforeLabel} {master ? `${master.width} × ${master.height}` : "—"}
         </span>
         <span>
-          Kandidat{" "}
+          Entwurf{" "}
           {candidate ? `${candidate.width} × ${candidate.height}` : "—"}
         </span>
         <small>

@@ -52,6 +52,12 @@ const { nav } = require("./smoke-ui.cjs");
   async function paintMask(name, rename) {
     const editor = page.getByRole("dialog", { name, exact: true });
     await expect(editor).toBeVisible();
+    await expect(page.locator(".editor-workspace-screen:visible")).toHaveCount(
+      1,
+    );
+    await expect(
+      page.getByRole("dialog", { name: "Auswahl nach Farbe", exact: true }),
+    ).toBeHidden();
     if (rename) {
       await editor.locator("summary").filter({ hasText: "Erweitert" }).click();
       await editor.getByLabel("Maskenname", { exact: true }).fill(rename);
@@ -80,6 +86,44 @@ const { nav } = require("./smoke-ui.cjs");
       exact: true,
     });
     await expect(editor).toBeVisible();
+    // Subtools replace the workspace; parent dialogs retain drafts but are not interactive.
+    await expect(page.locator(".editor-workspace-screen:visible")).toHaveCount(
+      1,
+    );
+    await expect(
+      page.getByRole("dialog", { name: "Farbkonsistenz", exact: true }),
+    ).toBeHidden();
+    expect(await page.locator("#root").evaluate((el) => el.inert)).toBe(true);
+    const view = editor.getByLabel("Bildfläche · Alt ziehen zum Verschieben", {
+      exact: true,
+    });
+    const imageCanvas = editor.getByLabel("Farbauswahlfläche", { exact: true });
+    const originalPixels = await imageCanvas.evaluate((c) => [
+      ...c.getContext("2d").getImageData(0, 0, c.width, c.height).data,
+    ]);
+    await editor.getByRole("button", { name: "1:1", exact: true }).click();
+    await expect(editor.getByLabel("Bildzoom", { exact: true })).toHaveText(
+      "100%",
+    );
+    await view.focus();
+    await page.keyboard.press("+");
+    await expect(editor.getByLabel("Bildzoom", { exact: true })).toHaveText(
+      "125%",
+    );
+    const stage = editor.locator(".pixel-camera-stage");
+    const left = await stage.evaluate((el) => parseFloat(el.style.left));
+    await page.keyboard.press("ArrowRight");
+    expect(await stage.evaluate((el) => parseFloat(el.style.left))).toBe(
+      left + 20,
+    );
+    await editor
+      .getByRole("button", { name: "Einpassen", exact: true })
+      .click();
+    expect(
+      await imageCanvas.evaluate((c) => [
+        ...c.getContext("2d").getImageData(0, 0, c.width, c.height).data,
+      ]),
+    ).toEqual(originalPixels);
     if (rename)
       await editor.getByLabel("Regionname", { exact: true }).fill(rename);
     const pick = async (x, y) => {
@@ -146,6 +190,8 @@ const { nav } = require("./smoke-ui.cjs");
       for (const [width, height] of [
         [960, 720],
         [1440, 900],
+        [1280, 800],
+        [1920, 1080],
       ]) {
         await app.evaluate(
           ({ BrowserWindow }, { width, height }) =>
@@ -166,6 +212,9 @@ const { nav } = require("./smoke-ui.cjs");
               .evaluate((el) => el.scrollWidth <= el.clientWidth),
           )
           .toBe(true);
+        await expect(
+          editor.getByRole("button", { name: "Region speichern", exact: true }),
+        ).toBeInViewport();
         await fs.mkdir("artifacts/color-consistency", { recursive: true });
         await page.screenshot({
           path: `artifacts/color-consistency/region-${width}x${height}.png`,

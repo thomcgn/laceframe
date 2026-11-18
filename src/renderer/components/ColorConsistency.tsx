@@ -1,3 +1,5 @@
+import { PixelViewport } from "./PixelViewport";
+import { EditorWorkspace } from "./EditorWorkspace";
 import type { RegionSelection } from "../../shared/color-region";
 import { ColorRegionEditor } from "./ColorRegionEditor";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -52,32 +54,34 @@ function PixelCanvas({
       );
   }, [pixels]);
   return (
-    <canvas
-      ref={ref}
-      width={pixels.width}
-      height={pixels.height}
-      aria-label={label}
-      style={{
-        maxWidth: "100%",
-        height: "auto",
-        imageRendering: "pixelated",
-        cursor: onPick ? "crosshair" : "default",
-      }}
-      onClick={(e) => {
-        const r = e.currentTarget.getBoundingClientRect(),
-          x = Math.min(
-            pixels.width - 1,
-            Math.floor(((e.clientX - r.left) * pixels.width) / r.width),
-          ),
-          y = Math.min(
-            pixels.height - 1,
-            Math.floor(((e.clientY - r.top) * pixels.height) / r.height),
-          ),
-          i = y * pixels.width + x;
-        if (pixels.data[i * 4 + 3] >= 128)
-          onPick?.(rgbHex(pixels.data.subarray(i * 4, i * 4 + 3)), i);
-      }}
-    />
+    <PixelViewport width={pixels.width} height={pixels.height}>
+      <canvas
+        ref={ref}
+        width={pixels.width}
+        height={pixels.height}
+        aria-label={label}
+        style={{
+          maxWidth: "100%",
+          height: "auto",
+          imageRendering: "pixelated",
+          cursor: onPick ? "crosshair" : "default",
+        }}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect(),
+            x = Math.min(
+              pixels.width - 1,
+              Math.floor(((e.clientX - r.left) * pixels.width) / r.width),
+            ),
+            y = Math.min(
+              pixels.height - 1,
+              Math.floor(((e.clientY - r.top) * pixels.height) / r.height),
+            ),
+            i = y * pixels.width + x;
+          if (pixels.data[i * 4 + 3] >= 128)
+            onPick?.(rgbHex(pixels.data.subarray(i * 4, i * 4 + 3)), i);
+        }}
+      />
+    </PixelViewport>
   );
 }
 export function ColorConsistency({
@@ -392,7 +396,7 @@ function ColorEditor({
   }
   const view = original ? source : (result?.result ?? source);
   return (
-    <div className="modal-backdrop">
+    <EditorWorkspace title="Farbkonsistenz" className="">
       <section
         className="color-dialog"
         role="dialog"
@@ -1011,6 +1015,6 @@ function ColorEditor({
           />
         )}
       </section>
-    </div>
+    </EditorWorkspace>
   );
 }

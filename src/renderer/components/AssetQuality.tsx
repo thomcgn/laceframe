@@ -1,3 +1,4 @@
+import type { StudioStep } from "./StudioSteps";
 import { ColorConsistency } from "./ColorConsistency";
 import type { RelightEligibility } from "../../shared/relighting";
 import { StyleComparison } from "./StyleComparison";
@@ -85,8 +86,12 @@ export function AssetQuality({
   disabled = false,
   cutoutRequested = 0,
   onCutoutOpened,
+  workspaceStep,
+  onDirtyChange,
 }: {
   source: Asset;
+  workspaceStep?: StudioStep;
+  onDirtyChange?: (dirty: boolean) => void;
   project: Project;
   onSnapshot: (s: Snapshot) => void;
   disabled?: boolean;
@@ -104,7 +109,7 @@ export function AssetQuality({
     [notes, setNotes] = useState(""),
     [confirmed, setConfirmed] = useState(false);
   const [includeProvenance, setIncludeProvenance] = useState(true);
-  const [expanded, setExpanded] = useState(false),
+  const [expanded, setExpanded] = useState(Boolean(workspaceStep)),
     [styleExpanded, setStyleExpanded] = useState(false);
   const [profile, setProfile] = useState<ResolutionProfile>(
     RESOLUTION_PROFILES[0],
@@ -220,6 +225,12 @@ export function AssetQuality({
       live = false;
     };
   }, [expanded, active.id, project, lightingRecipe?.id]);
+  useEffect(() => {
+    onDirtyChange?.(
+      Boolean(derivative?.status === "candidate" && (notes || confirmed)),
+    );
+  }, [derivative?.id, derivative?.status, notes, confirmed, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const busy = disabled || working;
   async function command(c: Command) {
     setWorking(true);
@@ -298,18 +309,20 @@ export function AssetQuality({
         data-testid="asset-quality"
         onToggle={(e) => setExpanded(e.currentTarget.open)}
       >
-        <summary>
+        <summary hidden={Boolean(workspaceStep)}>
           Assetqualität · Transparenz, Freistellung, Stil & Export
         </summary>
         {expanded && (
           <>
-            <ColorConsistency
-              sourceId={active.id}
-              project={project}
-              onSnapshot={onSnapshot}
-              disabled={busy}
-            />
-            <StyleComparison project={project} sourceId={active.id} />
+            <div hidden={workspaceStep === "Freigeben"}>
+              <ColorConsistency
+                sourceId={active.id}
+                project={project}
+                onSnapshot={onSnapshot}
+                disabled={busy}
+              />
+              <StyleComparison project={project} sourceId={active.id} />
+            </div>
             {error && (
               <p role="alert" className="error">
                 {error}
@@ -343,7 +356,7 @@ export function AssetQuality({
                 ? `Prüfstatus: ${derivative.status} · ${derivative.notes ?? "Freigabe steht aus"}`
                 : "Eine bestehende Freigabe belegt keine Transparenz. Deckende Assets bleiben als Rohbilder nutzbar."}
             </p>
-            <div className="button-row">
+            <div className="button-row" hidden={workspaceStep === "Freigeben"}>
               <button
                 disabled={busy || !eligibility?.allowed}
                 onClick={() => setRelighting({ source: active })}
@@ -436,7 +449,10 @@ export function AssetQuality({
                   previewPrefix="Qualität"
                 />
                 {derivative?.status === "candidate" && (
-                  <div className="quality-review">
+                  <div
+                    className="quality-review"
+                    hidden={workspaceStep === "Bearbeiten"}
+                  >
                     <label>
                       Stil-/Silhouettenprüfung und Abweichungen
                       <textarea

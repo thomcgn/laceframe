@@ -1,3 +1,4 @@
+const { studioStep, studioExpert } = require("./smoke-ui.cjs");
 const { reviewImport } = require("./historical-master-fixture.cjs");
 const { field, image, text, nav } = require("./smoke-ui.cjs");
 const { _electron: electron, expect } = require("@playwright/test");
@@ -323,8 +324,11 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Expression erstellen", exact: true })
       .click();
+    await studioStep(page, "Erzeugen");
     await expect(image(page, "Create · Masterreferenz")).toBeVisible();
+    await studioStep(page, "Auswählen");
     await expect(field(page, "Create Anbieter", { exact: true })).toBeVisible();
+    await studioStep(page, "Erzeugen");
     await expect(image(page, "Create · Ergebnisvorschau")).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Ergebnis importieren …", exact: true }),
@@ -356,20 +360,89 @@ const { createHash } = require("node:crypto");
       ["chatgpt-plan", false],
       ["manual-import", false],
     ]);
+    await studioStep(page, "Auswählen");
     await field(page, "Create Familie", { exact: true }).selectOption({
       label: "Amüsiert",
     });
+    await studioStep(page, "Auswählen");
     await field(page, "Create Variante", { exact: true }).selectOption({
       label: "half-smile / half-smile",
     });
+    await studioExpert(page);
     await field(page, "Promptmodus", { exact: true }).selectOption(
       "supplement",
     );
+    await studioExpert(page);
     await field(page, "Ergänzende Anweisung", { exact: true }).fill(
       "Keep the original framing.",
     );
+    // UX-06: task navigation is keyboard accessible and never discards a working draft.
+    const draftBeforeSteps = await fs.readFile(
+      path.join(project, "laceframe.json"),
+    );
+    for (const [width, height] of [
+      [960, 720],
+      [1280, 800],
+      [1920, 1080],
+    ]) {
+      await app.evaluate(
+        ({ BrowserWindow }, size) =>
+          BrowserWindow.getAllWindows()[0].setSize(...size),
+        [width, height],
+      );
+      const stepBounds = await page
+        .locator(".studio-editor:visible .studio-flow nav button")
+        .evaluateAll((nodes) =>
+          nodes.map((n) => {
+            const r = n.getBoundingClientRect();
+            return { y: r.y, height: r.height };
+          }),
+        );
+      expect(stepBounds).toHaveLength(4);
+      expect(
+        Math.max(...stepBounds.map((r) => r.y)) -
+          Math.min(...stepBounds.map((r) => r.y)),
+      ).toBeLessThan(2);
+      expect(Math.max(...stepBounds.map((r) => r.height))).toBeLessThan(50);
+      for (const name of ["Auswählen", "Erzeugen", "Bearbeiten", "Freigeben"]) {
+        const tab = page
+          .locator(".studio-editor:visible")
+          .getByRole("navigation", { name: "Studio Schritte" })
+          .getByRole("button", { name: new RegExp(name + "$") });
+        await tab.focus();
+        await page.keyboard.press("Enter");
+        await expect(tab).toHaveAttribute("aria-current", "step");
+        await expect(tab).toBeInViewport();
+        await expect(
+          field(page, "Ergänzende Anweisung", { exact: true }),
+        ).toHaveValue("Keep the original framing.");
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= window.innerWidth,
+          ),
+        ).toBe(true);
+      }
+      await studioExpert(page);
+      const expert = page
+        .locator(".studio-editor:visible")
+        .getByRole("checkbox", { name: "Expertenansicht", exact: true });
+      await expert.uncheck();
+      await expect(field(page, "Promptmodus", { exact: true })).toBeHidden();
+      await expert.check();
+      await expect(
+        field(page, "Ergänzende Anweisung", { exact: true }),
+      ).toHaveValue("Keep the original framing.");
+      await fs.mkdir("artifacts/ux06", { recursive: true });
+      await page.screenshot({
+        path: `artifacts/ux06/studio-${width}x${height}.png`,
+      });
+    }
+    expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(
+      draftBeforeSteps,
+    );
     const prompt = field(page, "Arbeits-Prompt", { exact: true });
     await expect(prompt).toHaveValue(/Keep the original framing/);
+    await studioExpert(page);
     await field(page, "Promptmodus", { exact: true }).selectOption("expert");
     await prompt.fill((await prompt.inputValue()) + "\nMy reviewed prompt.");
     // Substitute the OS shell boundary only; real bridge validation, clipboard,
@@ -401,7 +474,8 @@ const { createHash } = require("node:crypto");
     );
     expect(blocked.ok).toBe(false);
     expect(await app.evaluate(() => globalThis.__opened)).toHaveLength(1);
-    await text(page, "Inspector · technische Herkunft", {
+    await studioExpert(page);
+    await text(page, "Technische Details · Herkunft", {
       exact: true,
     }).click();
     await page
@@ -413,8 +487,9 @@ const { createHash } = require("node:crypto");
     expect(await app.evaluate(() => globalThis.__revealed)).toMatch(
       /assets[/\\]originals[/\\][a-f0-9]{64}\.png$/,
     );
-    const dropResult = async (webp = false) =>
-      page.evaluate(
+    const dropResult = async (webp = false) => {
+      await studioStep(page, "Erzeugen");
+      return page.evaluate(
         async ({ bytes, webp }) => {
           let blob = new window.Blob([new Uint8Array(bytes)], {
             type: "image/png",
@@ -440,8 +515,10 @@ const { createHash } = require("node:crypto");
         },
         { bytes, webp },
       );
+    };
     await dropResult();
     await expect(image(page, "Create · Ergebnisvorschau")).toBeVisible();
+    await studioStep(page, "Freigeben");
     await page
       .getByRole("button", { name: "Als Expression freigeben", exact: true })
       .click();
@@ -453,9 +530,11 @@ const { createHash } = require("node:crypto");
       field(page, "Library Asset", { exact: true }).locator("option"),
     ).toHaveCount(4);
     await nav(page, "Studio");
+    await studioStep(page, "Auswählen");
     await field(page, "Create Familie", { exact: true }).selectOption({
       label: "Wütend",
     });
+    await studioExpert(page);
     await expect(
       page.getByRole("button", {
         name: "Eigenen Prompt behalten",
@@ -465,6 +544,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
       .click();
+    await studioStep(page, "Auswählen");
     await field(page, "Create Variante", { exact: true }).selectOption({
       label: "Anbrüllen / shouting",
     });
@@ -474,10 +554,11 @@ const { createHash } = require("node:crypto");
     await expect(
       text(page, /Abweichende Abmessungen: Master 24 × 32, Ergebnis 8 × 10/),
     ).toBeVisible();
+    await studioStep(page, "Freigeben");
     await page
-      .getByRole("button", { name: "Kandidat verwerfen", exact: true })
+      .getByRole("button", { name: "Entwurf verwerfen", exact: true })
       .click();
-    await expect(page.locator(".notice")).toContainText("Kandidat verworfen.");
+    await expect(page.locator(".notice")).toContainText("Entwurf verworfen.");
     await dropResult();
     await expect(
       text(page, "Ergebnis ersetzen?", { exact: true }),
@@ -485,12 +566,14 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Ersetzen bestätigen", exact: true })
       .click();
+    await studioStep(page, "Freigeben");
     await expect(
       page.getByRole("button", {
         name: "Als Expression freigeben",
         exact: true,
       }),
     ).toBeVisible();
+    await studioStep(page, "Freigeben");
     await page
       .getByRole("button", { name: "Als Expression freigeben", exact: true })
       .click();
@@ -573,6 +656,7 @@ const { createHash } = require("node:crypto");
       ),
     ).toEqual(before);
     await nav(page, "Studio");
+    await studioExpert(page);
     await expect(image(page, "Create · Ergebnisvorschau")).toBeVisible();
     await expect(field(page, "Arbeits-Prompt", { exact: true })).toHaveValue(
       /VOCAL ACTION .*: shouting/,

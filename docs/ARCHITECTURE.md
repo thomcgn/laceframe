@@ -1,6 +1,6 @@
 # Architektur
 
-Gültiger Implementierungsstand: nach PR #30. [ROADMAP](ROADMAP.md) enthält offene Produktphasen; geplante Architektur wird hier ausdrücklich als geplant bezeichnet. Typen und Validierung im Quellcode sind maßgeblich für die exakten Felder und Grenzen.
+Gültiger Implementierungsstand: UX-06 B auf Basis des gemergten Dokumentationsresets #31. [ROADMAP](ROADMAP.md) enthält offene Produktphasen; geplante Architektur wird hier ausdrücklich als geplant bezeichnet. Typen und Validierung im Quellcode sind maßgeblich für die exakten Felder und Grenzen.
 
 ## Anwendung und Vertrauensgrenzen
 
@@ -11,6 +11,14 @@ Electron Forge, Vite, React, TypeScript und Zod; keine lokale Datenbank oder zus
 - Paketierte UI unter `laceframe://app` mit CSP, gesperrten fremden Protokollen, Navigation, Popups und Berechtigungen. Der Vite-Entwicklungsserver ist lokal; seine exakte URL bildet die Entwicklungsgrenze.
 - Begrenzte Reads, Format-/Dimensionsprüfung, kanonische Projektpfade, Hashes und Symlink-Ablehnung. Native Eingabe-/Exportpfade kommen aus OS-Dialogen; Renderer übergibt IDs oder begrenzte Bytes, keine beliebigen Pfadbefehle.
 - Geheimnisse verbleiben in der verwalteten Codex-Anmeldung. Keine Cookies, selbst gespeicherten ChatGPT-Passwörter oder API-Keys. Absolute zuletzt gewählte Bildordner werden ausschließlich als lokale Anwendungseinstellung in `userData/image-dialog.json` gespeichert, nicht im Projekt oder Export.
+
+## Studio und Editorpräsentation
+
+`StudioSteps` hält ausschließlich lokale Schritt-/Expertenansicht je erhaltenem Master-/Expressionformular. `App` bleibt Eigentümer des einen Projektsnapshots und der bestehenden Projekt-/Job-/Draft-Grenzen. Schrittwechsel versteckt Panels einschließlich der Masterfreigabe, ohne Formulare zu unmounten; ungespeicherte Master-/Qualitätsprüfnotizen fließen in die bestehende Projektwechsel-Warnung ein; echte Generierung/Import führt zur Ergebnisansicht Erzeugen. Es gibt keine neue Projektpersistenz oder IPC-Methode.
+
+`EditorWorkspace` präsentiert Farb-, Regions-, Masken- und Lichteditoren über React-Portale außerhalb des inerten App-Roots. Kontextzähler verbergen übergeordnete Arbeitsflächen während eines Unterwerkzeugs; Zustand, Worker und Undo-Historie bleiben erhalten. Es gibt genau eine sichtbare Dialogfläche. Tastaturereignisse bleiben im aktuellen Workspace, Fokus kehrt nach dem Schließen zurück. Vorhandene Speichern-/Verwerfen- und Dirty-Prüfungen bleiben verantwortlich; Lichtentwurf-Verwerfen fragt jetzt ebenfalls nach.
+
+`PixelViewport` teilt die Darstellungskamera für Farbpipette, Farbauswahl und Lichtanzeige: begrenzter CSS-Zoom, Einpassen/1:1, Pan, Tastatur und Mausrad; keine zusätzlichen nativen Bildbuffer und keine Änderung des Exports. Maske und registrierter Vergleich behalten ihre spezialisierten Kameras/Interaktionen. Eine Vereinheitlichung ihrer Bildverarbeitung ist nicht vorgenommen; UX-07 bleibt getrennt.
 
 ## Persistenz und unveränderliche Herkunft
 

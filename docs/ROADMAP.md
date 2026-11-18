@@ -1,6 +1,6 @@
 # Laceframe — verbindliche Produkt-Roadmap
 
-Stand: 18.11.2026, geprüft gegen `origin/main` nach PR #30 (`b0d8603`), Implementierung, Testinventar, gemergte PRs und Issues. Beim Audit bestanden keine offenen PRs und keine Issues. Diese Datei ist die einzige Produkt-Roadmap. Status: **DONE / IN PROGRESS / TODO / BLOCKED**. DONE bezeichnet vorhandenen, geprüften Umfang dieses Stands; PR-Review/Merge sind auf GitHub nachzuweisen, nicht aus dem Status abzuleiten. Keine Garantie generativer Bildqualität. Phasen werden einzeln freigegeben, in eigenem Branch/PR geprüft und vom Benutzer gemergt.
+Stand: 18.11.2026, Basis `origin/main` nach PR #31 (`a122552`), ergänzt um UX-06 B; geprüft gegen Implementierung, Testinventar, gemergte PRs und Issues. Beim Audit bestanden keine offenen PRs und keine Issues. Diese Datei ist die einzige Produkt-Roadmap. Status: **DONE / IN PROGRESS / TODO / BLOCKED**. DONE bezeichnet vorhandenen, geprüften Umfang dieses Stands; PR-Review/Merge sind auf GitHub nachzuweisen, nicht aus dem Status abzuleiten. Keine Garantie generativer Bildqualität. Phasen werden einzeln freigegeben, in eigenem Branch/PR geprüft und vom Benutzer gemergt.
 
 ## Aktueller Stand
 
@@ -19,9 +19,9 @@ Stand: 18.11.2026, geprüft gegen `origin/main` nach PR #30 (`b0d8603`), Impleme
 | DONE | Risk-Based CI und Vermeidung doppelter Post-Merge-Läufe | Quality-Routing-/Gate-Tests; #25, #28 (LF-00) |
 | DONE | Regionale Masterpaletten, Driftprüfung und separate Farbkorrektur | Color-Tests; #29 (LF-03A) |
 | DONE | Pipette, mehrere Farbseeds, Toleranz, rekonstruierbare Regionen und selektiver Palettentransfer | Color-/Desktop-Tests; #30 |
-| IN PROGRESS | UX-06: Dokumentationsreset und vierstufiges Studio | Zweiteiliger aktueller Auftrag; Studio-Redesign noch nicht implementiert |
+| DONE | UX-06: Dokumentationsreset und vierstufiges Studio | A gemergt (#31); B implementiert und lokal geprüft, Review/Merge im eigenen PR |
 
-Die Modelldaten für Outfitnotizen, lokale Bearbeitungsalgorithmen und Prompt-Betriebsarten existieren. Ein vollständiges Outfit-/Condition-System, eine persistente Guided-Mode-Sitzung und ein einheitlicher Editor sind **teilweise vorbereitet, nicht abgeschlossen**. Motion besitzt nur einen Planungshinweis, kein Timeline-Modell oder Playback. PNG-Einzelexport ist vorhanden; Atlas-/Animations-/Engine-Export nicht.
+Die Modelldaten für Outfitnotizen, lokale Bearbeitungsalgorithmen und Prompt-Betriebsarten existieren. Ein vollständiges Outfit-/Condition-System und eine persistente Guided-Mode-Sitzung sind **teilweise vorbereitet, nicht abgeschlossen**; der gemeinsame UX-06-Editorrahmen verwendet weiterhin spezialisierte Masken-/Vergleichskameras. Motion besitzt nur einen Planungshinweis, kein Timeline-Modell oder Playback. PNG-Einzelexport ist vorhanden; Atlas-/Animations-/Engine-Export nicht.
 
 ## Priorisierte Phasen und Akzeptanz
 
@@ -30,7 +30,7 @@ Nur **UX-06** ist mit diesem Auftrag zur Umsetzung freigegeben. Alle folgenden E
 | Phase | Status | Abhängigkeit | Umfang und Abnahmekriterien |
 | --- | --- | --- | --- |
 | UX-06 A — Documentation Reset | DONE | Gemergter Stand bis #30 | Nur README, AGENTS und vier aktuelle Dokumente; alte Aufträge/Berichte löschen, keine Archive; gültige Regeln/offene Arbeit übertragen, alle aktiven Verweise prüfen; eigenständiger Dokumentations-PR. |
-| UX-06 B — Studio Redesign | TODO | PR A vollständig abgeschlossen/gemergt | Auswählen → Erzeugen → Bearbeiten → Freigeben; große wiederverwendbare Editorfläche mit Werkzeugen, Kontext und festen Aktionen; keine verschachtelten Bildmodals. Standard/Experte zeigen dieselben Daten, alle bisherigen Diagnosen bleiben erreichbar. Entwürfe bei Navigation erhalten, Verluste/Projektwechsel bestätigen. Bestehende Algorithmen/IPC/Versionen beibehalten. Navigation, Mock-Generierung, Referenzen, Vergleich, Masken, Farben, Warnungen, Freigabe/Ablehnung, Restart und Tastatur bei 960×720, 1280×800, 1920×1080 testen. Eigener Code-PR nach A. |
+| UX-06 B — Studio Redesign | DONE | PR A vollständig abgeschlossen/gemergt | Auswählen → Erzeugen → Bearbeiten → Freigeben; große wiederverwendbare Editorfläche mit Werkzeugen, Kontext und festen Aktionen; keine verschachtelten Bildmodals. Standard/Experte zeigen dieselben Daten, alle bisherigen Diagnosen bleiben erreichbar. Entwürfe bei Navigation erhalten, Verluste/Projektwechsel bestätigen. Bestehende Algorithmen/IPC/Versionen beibehalten. Navigation, Mock-Generierung, Referenzen, Vergleich, Masken, Farben, Warnungen, Freigabe/Ablehnung, Restart und Tastatur bei 960×720, 1280×800, 1920×1080 testen. Eigener Code-PR nach A. |
 | UX-07 — Pixel-Finishing-Workspace | TODO | UX-06 | Gemeinsame präzise Auswahl-/Korrekturbedienung weiterführen; vorhandene Maskenrollen und Werkzeuge erhalten. Verbesserte manuelle Auswahl inklusive offener Freihand-Lasso-Frage prüfen. Undo/Redo, Zoom/Pan, Alpha, sichere Speicherung und identischer Preview-/Export-Nachweis. |
 | PX-01 — Pixel Grid Analyzer | TODO | UX-07 | Tatsächliches Raster/Mixel-Indizien nachvollziehbar messen, Unsicherheit zeigen; Snapping nur ausdrücklich als separate Ableitung. Kein aus Run-Length-Metriken behauptetes Raster, keine automatische Portrait-Verkleinerung. Synthetische Raster-/Nicht-Raster-/Alpha-Fixtures und exakter Export. |
 | LF-04 — Outfit / Appearance / Condition | TODO | UX-06, PX-01-Abschluss gemäß Reihenfolge | Notizen verlustfrei in versionierte Outfitprofile überführen; Identität, Kleidung, Haar-/Erscheinungszustände und narrative Condition getrennt. Eine Figur mit zwei Outfits/Haarzuständen/Conditions, unabhängige Stilregeln, eigene Kandidaten/Review, historische Masterbindung und Restart prüfen. Keine medizinische Diagnose oder automatische Kombinationsgenerierung. |
