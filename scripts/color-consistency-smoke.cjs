@@ -201,7 +201,7 @@ const { nav } = require("./smoke-ui.cjs");
       .getByRole("button", { name: "Farbe rückgängig", exact: true })
       .click();
     await expect(save).toBeEnabled();
-    expect(await preview()).toEqual([
+    await expect.poll(preview).toEqual([
       ...PNG.sync.read(Buffer.from(input)).data,
     ]);
     await dialog
