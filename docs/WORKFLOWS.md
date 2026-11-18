@@ -18,6 +18,8 @@ Style-/Expression-Packs über native JSON-Dialoge austauschen. Importvorschau pr
 
 ## 3. Charakter erstellen
 
+**Characters** zeigt den freigegebenen Master automatisch eingepasst; Zoomregler, 1:1/200/400, Mausrad am Mauszeiger und Alt-/Leertaste-Ziehen verändern nur die Ansicht. Identitätsquellen, Figurenaktionen und Masterversionsauswahl stehen daneben beziehungsweise darunter.
+
 **Characters → Neuen Charakter erstellen** oder **Studio → Master erstellen**: Figur benennen, ein bis drei Identitätsbilder (PNG/JPEG/WebP) per Mehrfachauswahl oder Drop importieren, Stil, Outfitbeschreibung und Komposition festlegen. Anzahl, Referenzrollen und Zielmaße prüfen. Zu große Gruppen, Duplikate und defekte Dateien werden vollständig abgelehnt. Einzelne Quellen lassen sich entfernen/ersetzen; historische Abhängigkeiten bleiben archiviert.
 
 Der native Bilddialog merkt sich den letzten gewählten Ordner über Neustarts; Abbruch behält ihn, ein fehlender Ordner verwendet den OS-Standard. Drop verändert diese native Ordnerwahl nicht. Import/Änderung von Einstellungen erzeugt kein Bild.
@@ -36,7 +38,7 @@ Neue Masteraktivierung benötigt echte transparente, nichtleere Bilddaten sowie 
 
 **Expressions** verwaltet globale Familien/Varianten, Intensität, Anweisungen und vorgeschlagene Sprechaktion. Eigene Varianten sind möglich. Persönliche Performance gilt nur für die gewählte Figur/Variante; ohne Override greift die globale Vorlage. **Expression bearbeiten** übergibt den aktuellen Kontext an Studio.
 
-**Studio → Expression erstellen**: Figur, freigegebenen Master, Familie/Variante und unabhängige Aktion wählen. Wut kann still oder schreiend sein; „Anbrüllen“ ersetzt nicht die gesamte Emotionsfamilie. Aktiven Stil und wirksame Regeln prüfen.
+**Studio → Expression erstellen** zeigt den Master bereits in Auswählen und Erzeugen mit Figurenname/Version. Figur, freigegebenen Master, Familie/Variante und unabhängige Aktion wählen. Wut kann still oder schreiend sein; „Anbrüllen“ ersetzt nicht die gesamte Emotionsfamilie. Aktiven Stil und wirksame Regeln prüfen.
 
 ## 6. Erzeugen oder importieren
 
@@ -47,7 +49,7 @@ Neue Masteraktivierung benötigt echte transparente, nichtleere Bilddaten sowie 
 
 ## 7. Manuell bearbeiten
 
-**Studio → Bearbeiten** bietet Vergleich und Qualitätswerkzeuge; in der Library bleiben sie über **Assetqualität** erreichbar. Farbkorrektur, Farbauswahl, Masken/Freistellung und Relighting verwenden die gemeinsame fensterfüllende Editorfläche. Unterwerkzeuge ersetzen die sichtbare Fläche; der übergeordnete Entwurf bleibt erhalten und wird danach wieder bedienbar. Eigenschaften stehen seitlich, Übernehmen/Verwerfen bleiben erreichbar. Nicht jedes Werkzeug gilt für jede Quelle.
+**Studio → Bearbeiten** bietet einen großen Vergleich mit direkt sichtbaren Qualitätswerkzeugen daneben; in der Library bleiben sie über **Assetqualität** erreichbar. Farbkorrektur, Farbauswahl, Masken/Freistellung und Relighting verwenden die gemeinsame fensterfüllende Editorfläche. Unterwerkzeuge ersetzen die sichtbare Fläche; der übergeordnete Entwurf bleibt erhalten und wird danach wieder bedienbar. Eigenschaften stehen seitlich, Übernehmen/Verwerfen bleiben erreichbar. Nicht jedes Werkzeug gilt für jede Quelle.
 
 | Aufgabe | Aktueller Weg / Bedeutung |
 | --- | --- |
@@ -74,7 +76,7 @@ Entwurf groß vergleichen, Warnungen, Identität, Silhouette, Alpha, Farbe und M
 3. **Bearbeiten:** Vergleich, Originalpixelschutz, Farbe, Freistellung, Qualität und vorhandenes Relighting verwenden. Abgeleitete Bilder sind eigene Entwürfe. Zoom ändert keine Pixel: Einpassen/1:1, Mausrad, Hand/Alt-Ziehen; in den Farb-/Lichtansichten auch +/- und Pfeiltasten auf der Bildfläche. Die präzise Maske behält ihre bestehenden Werkzeugkürzel und Zoom-/Pan-Steuerung.
 4. **Freigeben:** Große Vorschau, Transparenzbefund, Herkunft und gegebenenfalls separate Qualitätsversion prüfen. Masteraktivierung und Qualitätsableitungen benötigen weiterhin Bestätigungen/Notizen. Rohentwurf und abgeleitete Version sind unterschiedliche Freigaben. Danach zur Library wechseln und exportieren.
 
-**Expertenansicht** blendet vollständige Generierungsanweisung im Schritt Erzeugen sowie technische Herkunft, Maskenrevisionen, SHA-256 und historischen Verlauf ein. Die Farb-/Qualitätswerkzeuge behalten ihre Messwerte und Diagnosen. Ein Kontextkonflikt des eigenen Prompts bleibt auch in Standard sichtbar und muss explizit gelöst werden. Das Umschalten erzeugt keine zweite Projektkopie und verwirft keine Eingaben.
+**Expertenansicht** zeigt flache Abschnitte ohne Prompt-/Herkunftsaccordions: vollständige Generierungsanweisung im Schritt Erzeugen sowie technische Herkunft, Maskenrevisionen, SHA-256 und historischen Verlauf ein. Die Farb-/Qualitätswerkzeuge behalten ihre Messwerte und Diagnosen. Ein Kontextkonflikt des eigenen Prompts bleibt auch in Standard sichtbar und muss explizit gelöst werden. Das Umschalten erzeugt keine zweite Projektkopie und verwirft keine Eingaben.
 
 Projektwechsel und Verwerfen geänderter Bildentwürfe verlangen Bestätigung. Kein automatisches Speichern unfertiger Editorentwürfe über einen Neustart; gespeicherte Assets/Rezepte bleiben wiederherstellbar. Ein unabhängiger Pixel-Finishing-Workspace und verbesserte Auswahl sind UX-07, nicht Teil dieses Ablaufs.
 

@@ -1,6 +1,6 @@
 # Architektur
 
-Gültiger Implementierungsstand: UX-06 B auf Basis des gemergten Dokumentationsresets #31. [ROADMAP](ROADMAP.md) enthält offene Produktphasen; geplante Architektur wird hier ausdrücklich als geplant bezeichnet. Typen und Validierung im Quellcode sind maßgeblich für die exakten Felder und Grenzen.
+Gültiger Implementierungsstand: UX-06.1 auf develop, auf Basis des integrierten UX-06 B und DEV-01 (#31–33). [ROADMAP](ROADMAP.md) enthält offene Produktphasen; geplante Architektur wird hier ausdrücklich als geplant bezeichnet. Typen und Validierung im Quellcode sind maßgeblich für die exakten Felder und Grenzen.
 
 ## Anwendung und Vertrauensgrenzen
 
@@ -14,11 +14,11 @@ Electron Forge, Vite, React, TypeScript und Zod; keine lokale Datenbank oder zus
 
 ## Studio und Editorpräsentation
 
-`StudioSteps` hält ausschließlich lokale Schritt-/Expertenansicht je erhaltenem Master-/Expressionformular. `App` bleibt Eigentümer des einen Projektsnapshots und der bestehenden Projekt-/Job-/Draft-Grenzen. Schrittwechsel versteckt Panels einschließlich der Masterfreigabe, ohne Formulare zu unmounten; ungespeicherte Master-/Qualitätsprüfnotizen fließen in die bestehende Projektwechsel-Warnung ein; echte Generierung/Import führt zur Ergebnisansicht Erzeugen. Es gibt keine neue Projektpersistenz oder IPC-Methode.
+`StudioSteps` hält ausschließlich lokale Schritt-/Expertenansicht je erhaltenem Master-/Expressionformular. `App` bleibt Eigentümer des einen Projektsnapshots und der bestehenden Projekt-/Job-/Draft-Grenzen. UX-06.1 rendert Auswahl, Erzeugen und Expertenfelder schrittspezifisch statt versteckter Formularbäume. Formularwerte bleiben im bestehenden Eigentümer; der Master-/Qualitätsprüfcontroller behält seinen Entwurf und rendert außerhalb der Prüfung keine Formulare; ungespeicherte Master-/Qualitätsprüfnotizen fließen in die bestehende Projektwechsel-Warnung ein; echte Generierung/Import führt zur Ergebnisansicht Erzeugen. Es gibt keine neue Projektpersistenz oder IPC-Methode.
 
-`EditorWorkspace` präsentiert Farb-, Regions-, Masken- und Lichteditoren über React-Portale außerhalb des inerten App-Roots. Kontextzähler verbergen übergeordnete Arbeitsflächen während eines Unterwerkzeugs; Zustand, Worker und Undo-Historie bleiben erhalten. Es gibt genau eine sichtbare Dialogfläche. Tastaturereignisse bleiben im aktuellen Workspace, Fokus kehrt nach dem Schließen zurück. Vorhandene Speichern-/Verwerfen- und Dirty-Prüfungen bleiben verantwortlich; Lichtentwurf-Verwerfen fragt jetzt ebenfalls nach.
+`EditorWorkspace` präsentiert Farb-, Regions-, Masken- und Lichteditoren über React-Portale außerhalb des inerten App-Roots. Kontextzähler verbergen übergeordnete Arbeitsflächen während eines Unterwerkzeugs; Zustand, Worker und Undo-Historie bleiben erhalten. Es gibt genau eine sichtbare Dialogfläche. Standard-Studiowerkzeuge sind direkt zugänglich; Prompt/Herkunft stehen als flache Abschnitte in der Expertenansicht. Masterhistorie verwendet eine ausdrückliche Versionsauswahl statt eines Accordions. Tastaturereignisse bleiben im aktuellen Workspace, Fokus kehrt nach dem Schließen zurück. Vorhandene Speichern-/Verwerfen- und Dirty-Prüfungen bleiben verantwortlich; Lichtentwurf-Verwerfen fragt jetzt ebenfalls nach.
 
-`PixelViewport` teilt die Darstellungskamera für Farbpipette, Farbauswahl und Lichtanzeige: begrenzter CSS-Zoom, Einpassen/1:1, Pan, Tastatur und Mausrad; keine zusätzlichen nativen Bildbuffer und keine Änderung des Exports. Maske und registrierter Vergleich behalten ihre spezialisierten Kameras/Interaktionen. Eine Vereinheitlichung ihrer Bildverarbeitung ist nicht vorgenommen; UX-07 bleibt getrennt.
+`PortraitPreview` lädt ausschließlich über die bestehende Preview-IPC. Characters sowie Auswahl/Erzeugen im Studio zeigen den Master beziehungsweise die Identitätsquelle groß mit Einpassen als Ausgangsansicht. `PixelViewport` teilt die Darstellungskamera für Portrait, Farbpipette, Farbauswahl und Lichtanzeige: begrenzter CSS-Zoom, Einpassen/1:1/200/400 und Zoomregler, Pan mit Alt/Leertaste/Hand, Tastatur und am Mauszeiger verankertes Mausrad; keine zusätzlichen nativen Bildbuffer und keine Änderung des Exports. Maske und registrierter Vergleich behalten ihre spezialisierten Kameras/Interaktionen. Eine Vereinheitlichung ihrer Bildverarbeitung ist nicht vorgenommen; UX-07 bleibt getrennt.
 
 ## Persistenz und unveränderliche Herkunft
 
