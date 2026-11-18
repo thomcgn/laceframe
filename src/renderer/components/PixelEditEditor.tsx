@@ -4,8 +4,7 @@ import type { ColorPixels } from "../../shared/color-consistency";
 import { extractPalette } from "../../shared/color-consistency";
 import {
   type PixelEdit,
-  type SnapAnalysis,
-  type SnapSettings,
+  type SpriteFusionSettings,
 } from "../../shared/pixel-snap";
 import { type RegionSelection } from "../../shared/color-region";
 import { EditorWorkspace } from "./EditorWorkspace";
@@ -82,7 +81,6 @@ export function PixelEditEditor({
   const [draft, setDraft] = useState<Draft>();
   const [past, setPast] = useState<Draft[]>([]),
     [future, setFuture] = useState<Draft[]>([]);
-  const [analysis, setAnalysis] = useState<SnapAnalysis>();
   const [result, setResult] = useState<{
     result: ColorPixels & { changed?: number; ambiguous?: number };
     sha256: string;
@@ -91,10 +89,7 @@ export function PixelEditEditor({
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const [region, setRegion] = useState<"selection" | "protect">();
-  const [automatic, setAutomatic] = useState(true);
   const [accepted, setAccepted] = useState(false);
-  const [zoom, setZoom] = useState<number>(),
-    [pan, setPan] = useState({ x: 0, y: 0 });
   const worker = useRef<Worker | undefined>(undefined),
     serial = useRef(0),
     dirty = useRef(false),
@@ -118,12 +113,8 @@ export function PixelEditEditor({
           edit:
             mode === "snap"
               ? {
-                  kind: "snap",
-                  settings: {
-                    grid: 4,
-
-                    strength: "gentle",
-                  },
+                  kind: "spritefusion",
+                  settings: { colors: 16 },
                 }
               : {
                   kind: "color",
@@ -164,44 +155,28 @@ export function PixelEditEditor({
         setError(e.data.error);
         return;
       }
-      if (e.data.analysis) {
-        setAnalysis(e.data.analysis);
-        if (automatic && e.data.analysis.grid)
-          setDraft((d) =>
-            d?.edit.kind === "snap"
-              ? {
-                  ...d,
-                  edit: {
-                    kind: "snap",
-                    settings: {
-                      ...d.edit.settings,
-                      grid: e.data.analysis.grid,
-                    },
-                  },
-                }
-              : d,
-          );
-      } else setResult(e.data);
+      setResult(e.data);
     };
     w.onerror = () => {
+      w.terminate();
+      worker.current = undefined;
       setBusy(false);
       setError("Pixel-Worker ausgefallen; nichts gespeichert.");
     };
     w.postMessage({ id: 0, source });
     return w;
   }
-  function run(analyze = false) {
+  function run() {
     if (!source || !draft) return;
     const w = worker.current ?? startWorker();
     setBusy(true);
     setError("");
     setResult(undefined);
-    if (!analyze) dirty.current = true;
+    dirty.current = true;
     w?.postMessage({
       id: ++serial.current,
-      ...(!analyze
-        ? { edit: draft.edit, protectedWeights: draft.protectedWeights }
-        : {}),
+      edit: draft.edit,
+      protectedWeights: draft.protectedWeights,
     });
   }
   function edit(d: Draft) {
@@ -255,7 +230,10 @@ export function PixelEditEditor({
     }
   }
   const settings =
-    draft?.edit.kind === "snap" ? draft.edit.settings : undefined;
+    draft?.edit.kind === "spritefusion" ? draft.edit.settings : undefined;
+  function updateSnap(settings: SpriteFusionSettings) {
+    if (draft) edit({ ...draft, edit: { kind: "spritefusion", settings } });
+  }
   const palette = useMemo(() => {
     if (!source) return [];
     try {
@@ -337,13 +315,9 @@ export function PixelEditEditor({
                         : v.label}
                     </figcaption>
                     <PixelViewport
-                      width={source.width}
-                      height={source.height}
-                      zoom={zoom}
-                      onZoom={setZoom}
-                      onFit={() => setZoom(undefined)}
-                      pan={pan}
-                      onPan={setPan}
+                      key={`${v.label}-${v.pixels.width}-${v.pixels.height}`}
+                      width={v.pixels.width}
+                      height={v.pixels.height}
                     >
                       <PixelCanvas pixels={v.pixels} label={v.label} />
                     </PixelViewport>
@@ -361,87 +335,93 @@ export function PixelEditEditor({
                       />
                       Motiv und freigestellte Silhouette geprüft
                     </label>
-                    <button disabled={busy || saving} onClick={() => run(true)}>
-                      Raster analysieren
-                    </button>
-                    {analysis && (
-                      <div role="status" aria-label="Pixelanalyse">
-                        <p>
-                          {analysis.grid
-                            ? `Rasterhinweis: ${analysis.grid} Pixel. ${analysis.offGrid ? "Unsaubere Kanten / uneinheitliche Cluster möglich." : "Pixelraster überwiegend konsistent."}`
-                            : "Raster nicht eindeutig bestimmbar. Manuelle Vorgabe erforderlich."}
-                        </p>
-                        <small>
-                          {analysis.edges} starke Nachbarwechsel ·{" "}
-                          {analysis.isolated} isolierte Clusterhinweise ·{" "}
-                          {analysis.partialAlpha} teiltransparente Pixel
-                          (bleiben unverändert). Heuristik, keine
-                          Identitätsbewertung.
-                        </small>
-                      </div>
-                    )}
+                    <p>
+                      Sprite Fusion Original-Engine · automatische
+                      Rastererkennung und Quantisierung in Rust/WASM. Keine
+                      separate Rasterdiagnose oder Confidence-Ausgabe.
+                    </p>
                     <label>
                       <input
                         type="checkbox"
-                        checked={automatic}
-                        onChange={(e) => {
-                          setAutomatic(e.target.checked);
-                          setResult(undefined);
-                        }}
+                        checked={settings.pixelSize === undefined}
+                        onChange={(e) =>
+                          updateSnap({
+                            ...settings,
+                            pixelSize: e.target.checked ? undefined : 4,
+                          })
+                        }
                       />
                       Automatische Rastervorgabe
                     </label>
+                    {settings.pixelSize !== undefined && (
+                      <label>
+                        Rastergröße
+                        <input
+                          type="number"
+                          min={1}
+                          max={Math.min(source.width, source.height) / 2}
+                          step={0.5}
+                          value={settings.pixelSize}
+                          onChange={(e) =>
+                            updateSnap({
+                              ...settings,
+                              pixelSize: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    )}
                     <label>
-                      Rastergröße
+                      Farbanzahl
                       <input
                         type="number"
-                        min={2}
-                        max={32}
-                        value={settings.grid}
+                        min={1}
+                        max={256}
+                        value={settings.colors}
+                        onChange={(e) =>
+                          updateSnap({
+                            ...settings,
+                            colors: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Benutzerdefinierte Palette (Hex, durch Komma getrennt)
+                      <input
+                        value={settings.palette?.join(", ") ?? ""}
+                        placeholder="#0d2b45, #ffecd6"
                         onChange={(e) => {
-                          setAutomatic(false);
-                          edit({
-                            ...draft,
-                            edit: {
-                              kind: "snap",
-                              settings: {
-                                ...settings,
-                                grid: Number(e.target.value),
-                              },
-                            },
+                          updateSnap({
+                            ...settings,
+                            palette: e.target.value.trim()
+                              ? e.target.value.split(",").map((c) => c.trim())
+                              : undefined,
                           });
                         }}
                       />
                     </label>
-                    <label>
-                      Kantenbereinigung
-                      <select
-                        value={settings.strength}
-                        onChange={(e) =>
-                          edit({
-                            ...draft,
-                            edit: {
-                              kind: "snap",
-                              settings: {
-                                ...settings,
-                                strength: e.target
-                                  .value as SnapSettings["strength"],
-                              },
-                            },
-                          })
-                        }
-                      >
-                        <option value="gentle">Behutsam</option>
-                        <option value="strong">Stärker</option>
-                      </select>
-                    </label>
-
+                    <small>
+                      Auch mit eigener Palette führt die Original-Engine
+                      zunächst K-Means mit der gewählten Farbanzahl aus. Raster
+                      und Farbquantisierung sind in diesem Originalpfad
+                      gekoppelt. Regionale Color Correction bleibt ein
+                      getrenntes Werkzeug.
+                    </small>
                     <p>
-                      Rust-Rasterwanderung folgt den Konturen. Nur nahe
-                      Minderheitsfarben in klar dominierten Rasterzellen.
-                      Kontrastreiche Details und Alpha bleiben erhalten;
-                      unsichere Konturen manuell prüfen.
+                      Das Original-Resampling kann Bildmaße, Transparenz und
+                      Details verändern. Original und Vorschau haben
+                      unabhängigen Zoom/Pan. Identität und transparente
+                      Außenbereiche manuell prüfen.
                     </p>
+                    {draft.protectedWeights.some(Boolean) && (
+                      <p role="alert" className="warning">
+                        Mit aktiven Schutzmasken gesperrt: Sprite Fusion
+                        verändert die Geometrie. Masken werden weder entfernt
+                        noch ungeprüft kopiert. Color Correction bleibt
+                        verfügbar.
+                      </p>
+                    )}
                   </>
                 )}
                 {draft.edit.kind === "color" && (
@@ -641,8 +621,6 @@ export function PixelEditEditor({
                     disabled={saving}
                     onClick={() => {
                       edit(initial.current!);
-                      setAnalysis(undefined);
-                      setAutomatic(true);
                     }}
                   >
                     Zurücksetzen
@@ -656,7 +634,7 @@ export function PixelEditEditor({
                   busy ||
                   saving ||
                   (mode === "snap" &&
-                    (!accepted || (automatic && !analysis?.grid)))
+                    (!accepted || draft.protectedWeights.some(Boolean)))
                 }
                 onClick={() => run()}
               >
@@ -677,6 +655,14 @@ export function PixelEditEditor({
                 >
                   Berechnung abbrechen
                 </button>
+              )}
+              {result && mode === "snap" && (
+                <span aria-label="Ergebnismaße">
+                  {result.result.width} × {result.result.height} PNG ·
+                  Skalierungsfaktor X{" "}
+                  {(result.result.width / source.width).toFixed(3)} / Y{" "}
+                  {(result.result.height / source.height).toFixed(3)}
+                </span>
               )}
               <span role="status">
                 {busy

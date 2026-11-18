@@ -1,8 +1,4 @@
-import {
-  analyzeSnap,
-  applyPixelEdit,
-  type PixelEdit,
-} from "../../shared/pixel-snap";
+import { applyPixelEdit, type PixelEdit } from "../../shared/pixel-snap";
 import type { ColorPixels } from "../../shared/color-consistency";
 const worker = self as unknown as {
   onmessage: (e: MessageEvent) => void;
@@ -24,10 +20,7 @@ worker.onmessage = async (
       return;
     }
     if (!source) throw new Error("Quelle fehlt.");
-    if (!e.data.edit) {
-      worker.postMessage({ id, analysis: analyzeSnap(source) });
-      return;
-    }
+    if (!e.data.edit) throw new Error("Bearbeitungsparameter fehlen.");
     const result = applyPixelEdit(
       source,
       e.data.edit,

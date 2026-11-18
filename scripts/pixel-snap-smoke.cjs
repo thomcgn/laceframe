@@ -96,22 +96,19 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
         exact: true,
       });
       await expect(
-        editor.getByRole("button", { name: "Raster analysieren", exact: true }),
+        editor.getByLabel("Farbanzahl", { exact: true }),
       ).toBeVisible();
       return editor;
     };
     let editor = await openSnap();
     const before = await fs.readFile(path.join(dir, "laceframe.json"));
-    await editor
-      .getByRole("button", { name: "Raster analysieren", exact: true })
-      .click();
-    await expect(
-      editor.getByLabel("Pixelanalyse", { exact: true }),
-    ).toBeVisible();
     expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
     await editor
       .getByLabel("Motiv und freigestellte Silhouette geprüft", { exact: true })
       .check();
+    await editor
+      .getByLabel("Automatische Rastervorgabe", { exact: true })
+      .uncheck();
     await editor.getByLabel("Rastergröße", { exact: true }).fill("8");
     await editor
       .getByRole("button", { name: "Pixel bereinigen", exact: true })
@@ -121,18 +118,21 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     ).toBeEnabled();
     await expect(
       editor.getByRole("status").filter({ hasText: /Vorschau bereit/ }),
-    ).toContainText("1 bereinigte Pixel");
-    // Actual worker preview bytes match the eventual stored opaque interior; no resize.
+    ).toContainText("Vorschau bereit");
+    await expect(
+      editor.getByLabel("Ergebnismaße", { exact: true }),
+    ).toContainText("65 × 81 PNG");
+    // Actual worker decodes the original engine PNG at its real, smaller dimensions.
     const preview = await editor
       .getByLabel("Pixel-Snap-Vorschau", { exact: true })
       .evaluate((c) => ({
         width: c.width,
         height: c.height,
-        pixel: [...c.getContext("2d").getImageData(105, 105, 1, 1).data],
+        pixel: [...c.getContext("2d").getImageData(14, 14, 1, 1).data],
       }));
     expect(preview).toEqual({
-      width: 512,
-      height: 640,
+      width: 65,
+      height: 81,
       pixel: [80, 60, 50, 255],
     });
     const cameras = editor.locator(".pixel-camera");
@@ -142,7 +142,11 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       .click();
     await expect(
       cameras.nth(1).getByLabel("Bildzoom", { exact: true }),
-    ).toHaveText("800%");
+    ).not.toHaveText("800%");
+    const rightBeforePan = await cameras
+      .nth(1)
+      .locator(".pixel-camera-stage")
+      .evaluate((n) => n.style.left);
     const vp = cameras.first().locator(".pixel-camera-viewport"),
       box = await vp.boundingBox();
     await cameras
@@ -156,7 +160,8 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     const lefts = await editor
       .locator(".pixel-camera-stage")
       .evaluateAll((nodes) => nodes.map((n) => n.style.left));
-    expect(lefts[0]).toBe(lefts[1]);
+    expect(lefts[0]).not.toBe(lefts[1]);
+    expect(lefts[1]).toBe(rightBeforePan);
     await cameras
       .first()
       .getByRole("button", { name: "Einpassen", exact: true })
@@ -210,6 +215,9 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     await editor
       .getByLabel("Motiv und freigestellte Silhouette geprüft", { exact: true })
       .check();
+    await editor
+      .getByLabel("Automatische Rastervorgabe", { exact: true })
+      .uncheck();
     await editor.getByLabel("Rastergröße", { exact: true }).fill("8");
     await editor
       .getByRole("button", { name: "Pixel bereinigen", exact: true })
@@ -230,7 +238,9 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     expect(p.masters).toHaveLength(1);
     expect(snap.sourceId).toBe(master.id);
     const snapBytes = await fs.readFile(path.join(dir, snap.file));
-    expect(PNG.sync.read(snapBytes).width).toBe(512);
+    expect(PNG.sync.read(snapBytes).width).toBe(65);
+    expect(PNG.sync.read(snapBytes).height).toBe(81);
+    expect(snap.pixelEdit.algorithm).toBe("spritefusion-original-wasm-v1");
     expect(snap.pixelEdit.pixelSha256).toBe(
       createHash("sha256").update(PNG.sync.read(snapBytes).data).digest("hex"),
     );
@@ -317,14 +327,14 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     const correctedBytes = await fs.readFile(path.join(dir, corrected.file)),
       decoded = PNG.sync.read(correctedBytes),
       clean = PNG.sync.read(snapBytes);
-    expect(decoded.width).toBe(512);
-    expect(decoded.height).toBe(640);
+    expect(decoded.width).toBe(clean.width);
+    expect(decoded.height).toBe(clean.height);
     const selection = PNG.sync.read(
       await fs.readFile(path.join(dir, corrected.pixelEdit.edit.mask.file)),
     );
     let alphaMismatch = 0,
       outsideMismatch = 0;
-    for (let i = 0; i < 512 * 640; i++) {
+    for (let i = 0; i < clean.width * clean.height; i++) {
       if (decoded.data[i * 4 + 3] !== clean.data[i * 4 + 3]) alphaMismatch++;
       if (!selection.data[i * 4])
         for (let c = 0; c < 4; c++)
@@ -388,6 +398,9 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     await editor
       .getByLabel("Motiv und freigestellte Silhouette geprüft", { exact: true })
       .check();
+    await editor
+      .getByLabel("Automatische Rastervorgabe", { exact: true })
+      .uncheck();
     await editor.getByLabel("Rastergröße", { exact: true }).fill("8");
     await editor
       .getByRole("button", { name: "Pixel bereinigen", exact: true })
@@ -432,9 +445,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     page = await app.firstWindow();
     page.setDefaultTimeout(15000);
     await choose(dir);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       page.getByRole("heading", { name: "Synthetic Pixel", exact: true }),
     ).toBeVisible();
@@ -452,7 +463,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     );
     expect(license).toContain("Copyright (c) 2025 Hugo Duprez");
     console.log(
-      "PASS PX-01: actual Rust WASM worker, analysis/discard without writes, native-size preview/import, synchronized camera, regional Color Correction and undo/redo, explicit Master/Expression approval, exact PNG export, restart, immutable original, sandboxed preload and shipped MIT notice. No live generation.",
+      "PASS Sprite Fusion: original Rust WASM worker, discard without writes, actual resized PNG preview/import, independent cameras, regional Color Correction and undo/redo, explicit Master/Expression approval, exact PNG export, restart, immutable original, sandboxed preload and shipped MIT notice. No live generation.",
     );
   } catch (e) {
     if (app) {
