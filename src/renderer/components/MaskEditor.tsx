@@ -1,3 +1,4 @@
+import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { EditorWorkspace } from "./EditorWorkspace";
 import { cutoutFrame } from "./cutout-preview";
 import { EditorTools, editorTools } from "./EditorTools";
@@ -235,6 +236,7 @@ export function MaskEditor({
       rubberBand.current.style.display = hand ? "none" : "";
     }
   }
+  useCanvasFocus(viewport);
   useEffect(() => {
     updateCursor();
   }, [tool, diameter, scale, pan, size, temporaryHand, polygon, strokeActive]);
@@ -1144,6 +1146,8 @@ export function MaskEditor({
                       : "crosshair",
               }}
               onWheel={(e) => {
+                if (!canvasOwnsFocus(e.currentTarget)) return;
+                e.preventDefault();
                 if (gesture.current) return;
                 if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY))
                   setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));

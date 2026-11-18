@@ -136,6 +136,34 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       pixel: [80, 60, 50, 255],
     });
     const cameras = editor.locator(".pixel-camera");
+    const leftCamera = cameras.first(),
+      rightCamera = cameras.nth(1);
+    const focusViewport = leftCamera.locator(".pixel-camera-viewport");
+    const idleZoom = await leftCamera
+      .getByLabel("Bildzoom", { exact: true })
+      .innerText();
+    await focusViewport.hover();
+    await page.mouse.wheel(0, -100);
+    await expect(leftCamera.getByLabel("Bildzoom", { exact: true })).toHaveText(
+      idleZoom,
+    );
+    await focusViewport.click({ position: { x: 30, y: 30 } });
+    await expect(focusViewport).toBeFocused();
+    await page.mouse.wheel(0, -100);
+    await expect(
+      leftCamera.getByLabel("Bildzoom", { exact: true }),
+    ).not.toHaveText(idleZoom);
+    await rightCamera
+      .locator(".pixel-camera-viewport")
+      .click({ position: { x: 30, y: 30 } });
+    await expect(focusViewport).not.toBeFocused();
+    await editor
+      .getByRole("heading", { name: "Pixel Snap", exact: true })
+      .click();
+    await expect(
+      rightCamera.locator(".pixel-camera-viewport"),
+    ).not.toBeFocused();
+
     await cameras
       .first()
       .getByRole("button", { name: "800%", exact: true })

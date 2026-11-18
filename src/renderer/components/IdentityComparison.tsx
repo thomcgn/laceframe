@@ -1,3 +1,4 @@
+import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { useEffect, useRef, useState } from "react";
 import {
   fullRegion,
@@ -101,6 +102,7 @@ function PortraitPane({
       scale: number;
     } | null>(null),
     held = useRef(false);
+  useCanvasFocus(viewport);
   const transform = identityTransform(region, size, view);
   const current = useRef({ view, region, size, setView });
   current.current = { view, region, size, setView };
@@ -115,6 +117,7 @@ function PortraitPane({
     resize();
     observer.observe(element);
     const wheel = (e: WheelEvent) => {
+      if (!canvasOwnsFocus(element)) return;
       e.preventDefault();
       const c = current.current,
         rect = element.getBoundingClientRect();

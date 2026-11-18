@@ -379,11 +379,11 @@ export function App() {
           {(
             [
               "Characters",
-              "Art Direction",
-              "Expressions",
               "Studio",
+              "Expressions",
               "Library",
               "Motion",
+              "Art Direction",
             ] as const
           ).map((name, i) => (
             <button
@@ -399,15 +399,6 @@ export function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-bottom">
-          <span className="badge">Offline · lokal</span>
-          <p>Deine Bilder bleiben auf diesem Gerät.</p>
-          <small>
-            Portrait Artistic
-            <br />
-            Originalauflösung bleibt erhalten.
-          </small>
-        </div>
       </aside>
       <main
         inert={importing || switchingProject}
@@ -549,7 +540,17 @@ export function App() {
                 </button>
                 <button
                   aria-pressed={studioMode === "expression"}
-                  onClick={() => setStudioMode("expression")}
+                  onClick={() =>
+                    character
+                      ? enterStudio({
+                          mode: "expression",
+                          characterId: character.id,
+                          ...(character.masterId
+                            ? { masterId: character.masterId }
+                            : {}),
+                        })
+                      : setStudioMode("expression")
+                  }
                 >
                   Expression erstellen
                 </button>

@@ -1,3 +1,4 @@
+import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { IdentityComparison } from "./IdentityComparison";
 import { usePreview } from "./useImagePreview";
 import { useEffect, useRef, useState } from "react";
@@ -43,6 +44,7 @@ function PixelComparison({
     y: number;
     pan: { x: number; y: number };
   } | null>(null);
+  useCanvasFocus(viewport);
   useEffect(() => {
     const element = viewport.current;
     if (!element) return;
@@ -91,11 +93,15 @@ function PixelComparison({
     if (!enhanced) return;
     const element = viewport.current!;
     const wheel = (e: WheelEvent) => {
+      if (!canvasOwnsFocus(element)) return;
       e.preventDefault();
       const r = element.getBoundingClientRect();
       pixelZoomRef.current(
         scaleRef.current * 100 * Math.exp(-e.deltaY * 0.001),
-        { x: e.clientX - r.left - element.clientLeft, y: e.clientY - r.top - element.clientTop },
+        {
+          x: e.clientX - r.left - element.clientLeft,
+          y: e.clientY - r.top - element.clientTop,
+        },
       );
     };
     const release = () => {
@@ -438,8 +444,7 @@ function PixelComparison({
           {beforeLabel} {master ? `${master.width} × ${master.height}` : "—"}
         </span>
         <span>
-          Entwurf{" "}
-          {candidate ? `${candidate.width} × ${candidate.height}` : "—"}
+          Entwurf {candidate ? `${candidate.width} × ${candidate.height}` : "—"}
         </span>
         <small>
           Gemeinsamer Ursprung (0, 0) · Zoom und Pan synchron · Ziehen oder

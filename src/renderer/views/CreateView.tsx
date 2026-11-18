@@ -196,7 +196,8 @@ export function CreateView({
         (a) => a.id === intent.candidateId && a.characterId === character.id,
       );
       if (image?.attemptId) setActiveId(image.attemptId);
-    } else setActiveId("");
+    }
+    // A fresh navigation intent must not discard an existing saved result or working draft.
   }, [intent?.serial]);
   const [activeId, setActiveId] = useState(latest?.id ?? "");
   const active = attempts.find((a) => a.id === activeId);

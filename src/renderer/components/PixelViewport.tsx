@@ -1,3 +1,4 @@
+import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { anchoredPan, fitScale } from "./editor-geometry";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 /** Camera only: native canvas pixels and export calculations are never changed. */
@@ -39,6 +40,7 @@ export function PixelViewport({
   } | null>(null);
   const moved = useRef(false);
   const held = useRef(false);
+  useCanvasFocus(ref);
   useEffect(() => {
     const node = ref.current!;
     const update = () =>
@@ -61,6 +63,7 @@ export function PixelViewport({
   };
   const wheel = useRef<(event: WheelEvent) => void>(() => {});
   wheel.current = (event) => {
+    if (!canvasOwnsFocus(ref.current)) return;
     event.preventDefault();
     const rect = ref.current!.getBoundingClientRect();
     setZoom(scale * Math.exp(-event.deltaY * 0.001), {
