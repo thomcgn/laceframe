@@ -74,6 +74,131 @@ const { nav } = require("./smoke-ui.cjs");
       .click();
     await expect(editor).not.toBeVisible();
   }
+  async function colorRegion(rename, brushCorrection = false) {
+    const editor = page.getByRole("dialog", {
+      name: "Auswahl nach Farbe",
+      exact: true,
+    });
+    await expect(editor).toBeVisible();
+    if (rename)
+      await editor.getByLabel("Regionname", { exact: true }).fill(rename);
+    const pick = async (x, y) => {
+      await editor
+        .getByLabel("Regionspipette x", { exact: true })
+        .fill(String(x));
+      await editor
+        .getByLabel("Regionspipette y", { exact: true })
+        .fill(String(y));
+      await editor
+        .getByRole("button", {
+          name: "Farbe an Koordinate aufnehmen",
+          exact: true,
+        })
+        .click();
+    };
+    await editor.getByLabel("Auswahltoleranz", { exact: true }).fill("0");
+    // A real canvas click picks the original pixel, accounting for contain letterboxing.
+    const canvas = editor.getByLabel("Farbauswahlfläche", { exact: true });
+    const box = await canvas.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await editor
+      .getByRole("button", { name: "Zur Region hinzufügen", exact: true })
+      .click();
+    await expect(
+      editor.getByLabel("Gespeicherte Farbschritte").locator("li"),
+    ).toHaveCount(1);
+    await pick(1, 1);
+    await editor
+      .getByRole("button", { name: "Zur Region hinzufügen", exact: true })
+      .click();
+    await expect(
+      editor.getByLabel("Gespeicherte Farbschritte").locator("li"),
+    ).toHaveCount(2);
+    await expect(
+      editor.getByLabel("Ausgewählte Regionsfarben").locator("button"),
+    ).not.toHaveCount(0);
+    await editor
+      .getByRole("button", { name: "Von Region entfernen", exact: true })
+      .click();
+    await expect(
+      editor.getByLabel("Gespeicherte Farbschritte").locator("li"),
+    ).toHaveCount(3);
+    await editor
+      .getByRole("button", { name: "Region rückgängig", exact: true })
+      .click();
+    await expect(
+      editor.getByLabel("Gespeicherte Farbschritte").locator("li"),
+    ).toHaveCount(2);
+    await editor
+      .getByRole("button", { name: "Region wiederholen", exact: true })
+      .click();
+    await expect(
+      editor.getByLabel("Gespeicherte Farbschritte").locator("li"),
+    ).toHaveCount(3);
+    await editor.getByLabel("Auswahltoleranz", { exact: true }).fill("8");
+    await editor
+      .getByRole("button", { name: "Zur Region hinzufügen", exact: true })
+      .click();
+    await expect(editor.getByLabel("Regionsabdeckung")).toContainText(
+      "900 sichtbare Pixel",
+    );
+    if (rename) {
+      for (const [width, height] of [
+        [960, 720],
+        [1440, 900],
+      ]) {
+        await app.evaluate(
+          ({ BrowserWindow }, { width, height }) =>
+            BrowserWindow.getAllWindows()[0].setSize(width, height),
+          { width, height },
+        );
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => document.documentElement.scrollWidth <= window.innerWidth,
+            ),
+          )
+          .toBe(true);
+        await expect
+          .poll(() =>
+            editor
+              .locator(".color-region-controls")
+              .evaluate((el) => el.scrollWidth <= el.clientWidth),
+          )
+          .toBe(true);
+        await fs.mkdir("artifacts/color-consistency", { recursive: true });
+        await page.screenshot({
+          path: `artifacts/color-consistency/region-${width}x${height}.png`,
+        });
+      }
+    }
+    if (brushCorrection) {
+      await editor
+        .getByRole("button", {
+          name: "Pinsel für Feinkorrekturen",
+          exact: true,
+        })
+        .click();
+      await paintMask("Farbregion");
+      await expect(
+        editor.getByRole("button", { name: "Region speichern", exact: true }),
+      ).toBeEnabled();
+      // The brush commit shares the color selection history, even if only hidden edge weights change.
+      await editor
+        .getByRole("button", { name: "Region rückgängig", exact: true })
+        .click();
+      await expect(
+        editor.getByRole("button", { name: "Region wiederholen", exact: true }),
+      ).toBeEnabled();
+      await editor
+        .getByRole("button", { name: "Region wiederholen", exact: true })
+        .click();
+    }
+    await editor
+      .getByRole("button", { name: "Region speichern", exact: true })
+      .click();
+    await expect(editor).not.toBeVisible();
+  }
   try {
     await launch();
     await choose(project);
@@ -152,7 +277,7 @@ const { nav } = require("./smoke-ui.cjs");
     await dialog
       .getByRole("button", { name: "Haare / Bart zuweisen", exact: true })
       .click();
-    await paintMask("Farbregion", "Manuell zugewiesene Haare");
+    await colorRegion("Manuell zugewiesene Haare", true);
     await dialog
       .getByRole("button", {
         name: "Masterpalette als neue Revision speichern",
@@ -165,12 +290,28 @@ const { nav } = require("./smoke-ui.cjs");
     await dialog
       .getByRole("button", { name: "Kandidatenregion zuordnen", exact: true })
       .click();
-    await paintMask("Farbregion");
+    await colorRegion();
     await expect(
       dialog.getByLabel("Farbmessungen", { exact: true }),
     ).toContainText("Farbabweichung");
     const before = await fs.readFile(path.join(project, "laceframe.json"));
-    await dialog.getByLabel("Ausgangsfarbe", { exact: true }).fill("#969696");
+    await expect(
+      dialog.getByLabel("Kandidatenpalette", { exact: true }).locator("button"),
+    ).not.toHaveCount(0);
+    await expect(
+      dialog
+        .getByLabel("Verbindliche Referenzfarben", { exact: true })
+        .locator("button"),
+    ).not.toHaveCount(0);
+    await dialog
+      .getByRole("button", {
+        name: "Masterpalette gezielt übertragen",
+        exact: true,
+      })
+      .click();
+    await expect(
+      dialog.getByLabel("Palettenübertragung", { exact: true }),
+    ).toContainText("Gruppenversatz");
     await dialog
       .getByLabel(
         "Helligkeitsversatz ausdrücklich mit korrigieren (z. B. aufgehellte Haare)",
@@ -201,9 +342,9 @@ const { nav } = require("./smoke-ui.cjs");
       .getByRole("button", { name: "Farbe rückgängig", exact: true })
       .click();
     await expect(save).toBeEnabled();
-    await expect.poll(preview).toEqual([
-      ...PNG.sync.read(Buffer.from(input)).data,
-    ]);
+    await expect
+      .poll(preview)
+      .toEqual([...PNG.sync.read(Buffer.from(input)).data]);
     await dialog
       .getByRole("button", { name: "Farbe wiederholen", exact: true })
       .click();
@@ -313,6 +454,32 @@ const { nav } = require("./smoke-ui.cjs");
       dialog.getByLabel("Masterpalette", { exact: true }),
     ).toHaveValue(after.masterPalettes[0].id);
     await dialog
+      .locator("summary")
+      .filter({ hasText: "Masterregionen manuell" })
+      .click();
+    await dialog
+      .getByRole("button", {
+        name: "Mastermaske Manuell zugewiesene Haare",
+        exact: true,
+      })
+      .click();
+    const restoredRegion = page.getByRole("dialog", {
+      name: "Auswahl nach Farbe",
+      exact: true,
+    });
+    await expect(
+      restoredRegion.getByLabel("Gespeicherte Farbschritte").locator("li"),
+    ).toHaveCount(4);
+    await expect(restoredRegion.getByLabel("Regionsabdeckung")).toContainText(
+      "900 sichtbare Pixel",
+    );
+    await restoredRegion
+      .getByRole("button", {
+        name: "Region verwerfen / schließen",
+        exact: true,
+      })
+      .click();
+    await dialog
       .getByRole("button", { name: "Schließen / verwerfen", exact: true })
       .click();
     await page
@@ -344,7 +511,7 @@ const { nav } = require("./smoke-ui.cjs");
     ).toEqual({ node: "undefined", fs: "undefined" });
     expect(errors).toEqual([]);
     console.log(
-      "PASS LF-03A: real manual region masks, measured light drift, live selective correction, undo/redo, no intermediate writes, immutable original/master, human approval, exact PNG export, 960/1440/1920 and reopen. No live ImageGen.",
+      "PASS color regions: multi-seed picker, swatches, tolerance, subtraction, picker/brush undo/redo, exact recipe reopen and regional palette transfer; measured light drift, live selective correction, undo/redo, no intermediate writes, immutable original/master, human approval, exact PNG export, 960/1440/1920 and reopen. No live ImageGen.",
     );
   } finally {
     await app?.close();

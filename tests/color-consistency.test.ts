@@ -1,3 +1,14 @@
+import {
+  appendColorSeed,
+  colorSeedMask,
+  emptyRegionSelection,
+  replayRegionSelection,
+  refineRegionSelection,
+  commitRegion,
+  undoRegion,
+  redoRegion,
+  type ColorSeed,
+} from "../src/shared/color-region";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -5,6 +16,7 @@ import path from "node:path";
 import os from "node:os";
 import {
   correctColors,
+  paletteTransferGroups,
   extractPalette,
   measureColors,
   lab,
@@ -513,5 +525,246 @@ describe("safe versioned palette/candidate persistence", () => {
     await fs.writeFile(path.join(root, "outside.png"), bytes);
     await fs.symlink(path.join(root, "outside.png"), f);
     await expect(new ProjectService().open(dir)).rejects.toThrow();
+  });
+});
+
+describe("color-picked regions and selective palette transfer", () => {
+  const p = pixels([
+    [60, 40, 30],
+    [65, 45, 35],
+    [200, 150, 120],
+    [60, 40, 30],
+    [20, 15, 10],
+  ]);
+  const seed = (values: Partial<ColorSeed> = {}): ColorSeed => ({
+    x: 0,
+    y: 0,
+    hex: "#3c281e",
+    tolerance: 0,
+    connected: false,
+    operation: "add",
+    ...values,
+  });
+  it("combines multiple hair colors, tolerance and subtraction without semantic segmentation", () => {
+    let d = appendColorSeed(p, emptyRegionSelection(new Uint8Array(5)), seed());
+    expect([...replayRegionSelection(p, d)]).toEqual([255, 0, 0, 255, 0]);
+    d = appendColorSeed(p, d, seed({ x: 1, hex: "#412d23" }));
+    expect([...replayRegionSelection(p, d)]).toEqual([255, 255, 0, 255, 0]);
+    d = appendColorSeed(p, d, seed({ operation: "subtract" }));
+    expect([...replayRegionSelection(p, d)]).toEqual([0, 255, 0, 0, 0]);
+    expect([...colorSeedMask(p, seed({ tolerance: 8 }))]).toEqual([
+      255, 255, 0, 255, 0,
+    ]);
+  });
+  it("separates connected from global and never crosses transparent pixels", () => {
+    expect([
+      ...colorSeedMask(p, seed({ connected: true, tolerance: 8 })),
+    ]).toEqual([255, 255, 0, 0, 0]);
+    const alpha = pixels([
+      [60, 40, 30],
+      [60, 40, 30],
+      [60, 40, 30],
+    ]);
+    alpha.data[7] = 0;
+    expect([...colorSeedMask(alpha, seed({ connected: true }))]).toEqual([
+      255, 0, 0,
+    ]);
+    expect([...colorSeedMask(alpha, seed())]).toEqual([255, 0, 255]);
+  });
+  it("replays brush corrections and picker actions through common undo/redo", () => {
+    let h = {
+      past: [],
+      present: emptyRegionSelection(new Uint8Array(5)),
+      future: [],
+    } as Parameters<typeof commitRegion>[0];
+    h = commitRegion(h, appendColorSeed(p, h.present, seed()));
+    const brush = replayRegionSelection(p, h.present);
+    brush[0] = 0;
+    brush[4] = 128;
+    h = commitRegion(h, refineRegionSelection(p, h.present, brush));
+    expect(replayRegionSelection(p, h.present)).toEqual(brush);
+    const restored = redoRegion(undoRegion(h));
+    expect(replayRegionSelection(p, restored.present)).toEqual(brush);
+    expect([...replayRegionSelection(p, undoRegion(h).present)]).toEqual([
+      255, 0, 0, 255, 0,
+    ]);
+    expect(replayRegionSelection(p, undoRegion(undoRegion(h)).present)).toEqual(
+      new Uint8Array(5),
+    );
+    h = commitRegion(h, appendColorSeed(p, h.present, seed()));
+    expect([...replayRegionSelection(p, h.present)]).toEqual([
+      255, 0, 0, 255, 128,
+    ]);
+  });
+  it("rejects invented/outside seeds, excessive operations and invalid override masks", () => {
+    expect(() => colorSeedMask(p, seed({ hex: "#000000" }))).toThrow(
+      "Originalpixel",
+    );
+    expect(() => colorSeedMask(p, seed({ x: 50 }))).toThrow("Originalpixel");
+    const d = emptyRegionSelection(new Uint8Array(5));
+    d.override[0] = 1;
+    expect(() => replayRegionSelection(p, d)).toThrow("Korrekturmasken");
+    expect(() =>
+      replayRegionSelection(p, {
+        ...emptyRegionSelection(new Uint8Array(5)),
+        seeds: Array(33).fill(seed()),
+      }),
+    ).toThrow();
+  });
+  it("transfers regional chroma while retaining extra dark shades, skin, clothing and protected pixels", () => {
+    const p = pixels([
+      [110, 75, 40],
+      [70, 45, 25],
+      [40, 25, 15],
+      [200, 150, 120],
+      [25, 80, 170],
+      [110, 75, 40],
+    ]);
+    const weights = new Uint8Array([255, 255, 255, 0, 0, 255]),
+      d = rule(p);
+    d.regions[0].weights = weights;
+    d.protectedWeights[5] = 255;
+    d.regions[0].transferGroups = paletteTransferGroups(
+      extractPalette(p, weights),
+      [
+        { hex: "#50382e", count: 100 },
+        { hex: "#302018", count: 50 },
+      ],
+    );
+    const out = correctColors(p, d);
+    expect(out.data.slice(12)).toEqual(p.data.slice(12));
+    expect(out.data.slice(0, 12)).not.toEqual(p.data.slice(0, 12));
+    for (const i of [0, 1, 2])
+      expect(
+        Math.abs(
+          lab(
+            "#" +
+              [...out.data.slice(i * 4, i * 4 + 3)]
+                .map((v) => v.toString(16).padStart(2, "0"))
+                .join(""),
+          )[0] -
+            lab(
+              "#" +
+                [...p.data.slice(i * 4, i * 4 + 3)]
+                  .map((v) => v.toString(16).padStart(2, "0"))
+                  .join(""),
+            )[0],
+        ),
+      ).toBeLessThan(0.5);
+    expect(new Set([0, 4, 8].map((i) => out.data[i])).size).toBe(3);
+  });
+  it("persists exact selection recipes and immutable revisions across a project restart", async () => {
+    const m = await s.analysisSource(masterId),
+      before = await fs.readFile(path.join(dir, "laceframe.json"));
+    const selection = appendColorSeed(
+      m,
+      emptyRegionSelection(new Uint8Array(m.width * m.height)),
+      {
+        x: 1,
+        y: 1,
+        hex: "#646464",
+        tolerance: 3,
+        connected: true,
+        operation: "add",
+      },
+    );
+    const picked = replayRegionSelection(m, selection);
+    picked[13] = 0;
+    const refined = refineRegionSelection(m, selection, picked);
+    await s.command({
+      type: "saveMasterPalette",
+      masterId,
+      masterSha256: m.sha256,
+      regions: [
+        {
+          id: regionId,
+          name: "Farbhaare",
+          role: "hair",
+          weights: picked,
+          selection: refined,
+        },
+      ],
+    });
+    expect(
+      await fs.readFile(
+        path.join(dir, "laceframe.v2.pre-color-selection.backup.json"),
+      ),
+    ).toEqual(before);
+    const saved = s.snapshot().project.masterPalettes.at(-1)!;
+    expect(saved.revision).toBe(2);
+    expect(
+      s.snapshot().project.masterPalettes[0].regions[0].selection,
+    ).toBeUndefined();
+    const reopened = new ProjectService();
+    await reopened.open(dir);
+    const restored = await reopened.colorPalette(saved.id);
+    expect(restored.regions[0].selection).toEqual(refined);
+    expect(restored.regions[0].weights).toEqual(picked);
+    expect(replayRegionSelection(m, restored.regions[0].selection!)).toEqual(
+      picked,
+    );
+    const record = saved.regions[0].selection!;
+    for (const ref of [record.base, record.override, record.values]) {
+      expect(ref.file).toMatch(/^assets\/color-masks\/[a-f0-9]{64}\.png$/);
+      expect((await fs.stat(path.join(dir, ref.file))).mode & 0o222).toBe(0);
+    }
+  });
+  it("rejects mismatched replay and tampered recipe paths without changing an existing palette", async () => {
+    const before = await fs.readFile(path.join(dir, "laceframe.json")),
+      m = await s.analysisSource(masterId);
+    await expect(
+      s.command({
+        type: "saveMasterPalette",
+        masterId,
+        masterSha256: m.sha256,
+        regions: [
+          {
+            id: regionId,
+            name: "Wrong",
+            role: "hair",
+            weights: full(m),
+            selection: emptyRegionSelection(new Uint8Array(m.width * m.height)),
+          },
+        ],
+      }),
+    ).rejects.toThrow("überein");
+    expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
+    await s.command({
+      type: "saveMasterPalette",
+      masterId,
+      masterSha256: m.sha256,
+      regions: [
+        {
+          id: regionId,
+          name: "Hair",
+          role: "hair",
+          weights: full(m),
+          selection: emptyRegionSelection(full(m)),
+        },
+      ],
+    });
+    const project = s.snapshot().project;
+    project.masterPalettes.at(-1)!.regions[0].selection!.base.file =
+      "../outside.png";
+    expect(projectSchema.safeParse(project).success).toBe(false);
+  });
+  it("persists group offsets, validates every target and reproduces exact exported PNG", async () => {
+    const d = await draft();
+    d.regions[0].transferGroups = [
+      { sourceColor: "#969696", targetColor: "#646464" },
+    ];
+    await save(d);
+    const q = s.snapshot().project.qualityAssets.at(-1)!;
+    const reopened = new ProjectService();
+    await reopened.open(dir);
+    expect(await reopened.colorRecipe(q.id)).toEqual(d);
+    const bytes = await fs.readFile(path.join(dir, q.file));
+    expect(new Uint8Array(decodePixels(bytes).data)).toEqual(
+      correctColors(await reopened.analysisSource(sourceId), d).data,
+    );
+    d.regions[0].transferGroups[0].targetColor = "#ff0000";
+    const before = await fs.readFile(path.join(dir, "laceframe.json"));
+    await expect(save(d)).rejects.toThrow("Masterregion");
+    expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
   });
 });
