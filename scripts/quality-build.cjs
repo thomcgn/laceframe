@@ -26,6 +26,7 @@ async function inputHash(root = process.cwd()) {
     "coverage",
     "docs",
     "tests",
+    "scripts",
     ".github",
     ".vscode",
   ]);
