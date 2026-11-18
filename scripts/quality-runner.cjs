@@ -1,9 +1,7 @@
-/* global module, performance, clearTimeout, structuredClone */
+/* global module, performance, clearTimeout */
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
-const { changedFiles, rank, GROUPS } = require("./quality-classifier.cjs");
-const { profilePlan } = require("./quality-plan.cjs");
 const { reusableBuild, recordBuild } = require("./quality-build.cjs");
 function execute(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -73,32 +71,40 @@ function execute(command, args, options = {}) {
 }
 async function runProfile(profile, options = {}) {
   const cwd = options.cwd ?? process.cwd();
-  const classification = structuredClone(
-    options.classification ?? changedFiles(cwd),
-  );
-  const floor = process.env.QUALITY_RISK_FLOOR;
-  if (floor !== undefined) {
-    if (!Object.hasOwn(rank, floor)) throw new Error("Invalid CI risk floor");
-    if (rank[floor] > rank[classification.risk]) {
-      classification.risk = floor;
-      classification.groups = GROUPS;
-    }
-  }
-  const plan = profilePlan(
-      profile,
-      classification,
-      fs.existsSync(path.join(cwd, "scripts", "packs-smoke.cjs")),
-    ),
+  const scripts = {
+    creator: "creator-smoke.cjs",
+    expressions: "expression-designer-smoke.cjs",
+    color: "color-consistency-smoke.cjs",
+    cutout: "smart-cutout-smoke.cjs",
+    relighting: "relighting-smoke.cjs",
+    desktop: "desktop-smoke.cjs",
+    quality: "quality-smoke.cjs",
+    "cutout-stability": "cutout-stability-smoke.cjs",
+    style: "style-analysis-smoke.cjs",
+    packs: "packs-smoke.cjs",
+    native: "native-smoke.cjs",
+  };
+  if (!["dev", "smoke", "full"].includes(profile))
+    throw new Error("Unknown profile; use dev, smoke <workflow>, or full");
+  if (
+    profile === "smoke"
+      ? !Object.hasOwn(scripts, options.workflow)
+      : options.workflow !== undefined
+  )
+    throw new Error(
+      `Select exactly one smoke workflow: ${Object.keys(scripts).join(", ")}`,
+    );
+  const build = profile !== "dev",
     records = [];
   const run = options.execute ?? execute,
     canReuse = options.reusableBuild ?? reusableBuild,
     saveBuild = options.recordBuild ?? recordBuild;
   const report = {
     requested: profile,
-    risk: classification.risk,
-    profile: plan.profile,
-    desktop: plan.build ? "required" : "not-required",
-    packaging: plan.build ? "required" : "not-required",
+    profile,
+    workflow: options.workflow,
+    desktop: build ? "required" : "not-required",
+    packaging: build ? "required" : "not-required",
     commands: records,
     status: "running",
   };
@@ -115,17 +121,21 @@ async function runProfile(profile, options = {}) {
       },
     });
   console.log(
-    `Quality profile ${plan.profile}; Git risk ${classification.risk}; groups ${classification.groups.join(",") || "none"}`,
+    `Quality profile ${profile}${options.workflow ? ` / ${options.workflow}` : ""}`,
   );
   try {
-    if (plan.fast) {
+    if (profile !== "smoke") {
       await step("npm", ["run", "typecheck"]);
-      await step("npm", ["run", "lint"]);
+      if (profile === "full") await step("npm", ["run", "lint"]);
       await step("npm", ["test", "--", "--maxWorkers=2"]);
-      await step("git", ["diff", "--check", classification.base ?? "HEAD"]);
+      await step("git", [
+        "diff",
+        "--check",
+        process.env.QUALITY_DIFF_BASE || "HEAD",
+      ]);
       await step("git", ["diff", "--cached", "--check"]);
     }
-    if (plan.build) {
+    if (build) {
       if (await canReuse(cwd)) {
         report.packaging = "reused-verified";
         console.log(
@@ -136,12 +146,10 @@ async function runProfile(profile, options = {}) {
         await saveBuild(cwd);
         report.packaging = "built";
       }
-      if (plan.full) {
+      if (profile === "full") {
         await step("npm", ["run", "test:desktop"]);
         await step("npm", ["run", "test:desktop:native"]);
-      } else
-        for (const script of plan.scripts)
-          await step("node", [`scripts/${script}`]);
+      } else await step("node", [`scripts/${scripts[options.workflow]}`]);
     } else
       console.log(
         "Desktop/packaging not required for this profile; not reported as passed.",
@@ -158,13 +166,14 @@ async function runProfile(profile, options = {}) {
 module.exports = { execute, runProfile };
 if (require.main === module) {
   const args = process.argv.slice(2);
-  if (args.length !== 1 || !["fast", "targeted", "full"].includes(args[0])) {
-    console.error(
-      "Usage: quality-runner.cjs fast|targeted|full; no skip/level/groups overrides",
-    );
+  if (
+    !(["dev", "full"].includes(args[0]) && args.length === 1) &&
+    !(args[0] === "smoke" && args.length === 2)
+  ) {
+    console.error("Usage: quality-runner.cjs dev|full|smoke <workflow>");
     process.exitCode = 1;
   } else
-    runProfile(args[0]).catch((error) => {
+    runProfile(args[0], { workflow: args[1] }).catch((error) => {
       console.error(error.message);
       process.exitCode = 1;
     });

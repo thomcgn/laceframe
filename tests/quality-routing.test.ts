@@ -3,14 +3,6 @@ import * as fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { execFileSync, spawnSync } from "node:child_process";
-import {
-  classifyPaths,
-  changedFiles,
-  parseNameStatus,
-  GROUPS,
-} from "../scripts/quality-classifier.cjs";
-import { profilePlan } from "../scripts/quality-plan.cjs";
-import { assertGate } from "../scripts/quality-gate.cjs";
 import { runProfile, type CommandResult } from "../scripts/quality-runner.cjs";
 import {
   recordBuild,
@@ -26,7 +18,7 @@ const git = (...args: string[]) =>
     stdio: ["pipe", "pipe", "pipe"],
   }).trim();
 beforeEach(async () => {
-  vi.stubEnv("QUALITY_RISK_FLOOR", undefined);
+  vi.stubEnv("QUALITY_DIFF_BASE", undefined);
   temp = await fs.mkdtemp(path.join(os.tmpdir(), "laceframe-quality-routing-"));
   repo = path.join(temp, "synthetic-git");
   await fs.mkdir(repo);
@@ -45,186 +37,18 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   await fs.rm(temp, { recursive: true, force: true });
 });
-describe("deterministic changed-path risk", () => {
-  it.each([
-    ["src/renderer/styles.css", "LOW"],
-    ["src/renderer/components/MaskEditor.css", "LOW"],
-    ["README.md", "LOW"],
-    ["docs/TESTING.md", "LOW"],
-    ["src/renderer/icons/add.svg", "LOW"],
-    ["src/renderer/components/ImagePreview.tsx", "MEDIUM"],
-    ["src/renderer/views/ExpressionDesigner.tsx", "MEDIUM"],
-    ["src/renderer/views/CharacterCreator.tsx", "MEDIUM"],
-    ["src/renderer/App.tsx", "MEDIUM"],
-    ["src/shared/smart-cutout.ts", "HIGH"],
-    ["src/preload/preload.ts", "HIGH"],
-    ["src/main/project-service.ts", "HIGH"],
-    ["src/shared/domain.ts", "HIGH"],
-    ["src/main/services/codex/app-server.ts", "HIGH"],
-    ["src/main/asset-export.ts", "HIGH"],
-    ["src/renderer/components/MaskEditor.tsx", "HIGH"],
-    ["src/renderer/workers/relighting.worker.ts", "HIGH"],
-    ["package-lock.json", "HIGH"],
-    ["package.json", "HIGH"],
-    [".github/workflows/quality.yml", "HIGH"],
-    ["scripts/quality-classifier.cjs", "HIGH"],
-    ["scripts/desktop-smoke.cjs", "HIGH"],
-    ["tests/project-service.test.ts", "HIGH"],
-    ["vite.main.config.mts", "HIGH"],
-    [".gitignore", "HIGH"],
-    ["src/new-runtime.unknown", "HIGH"],
-    ["src/renderer/unknown.ts", "HIGH"],
-  ])("%s → %s", (file, risk) => {
-    expect(classifyPaths([file]).risk).toBe(risk);
-  });
-  it("uses the highest mixed risk and unions groups without labels/branch heuristics", () => {
-    expect(classifyPaths(["README.md", "src/shared/domain.ts"]).risk).toBe(
-      "HIGH",
-    );
-    expect(
-      classifyPaths([
-        "src/renderer/views/ExpressionDesigner.tsx",
-        "src/renderer/views/CharacterCreator.tsx",
-      ]).groups,
-    ).toEqual(["creator", "expressions", "native"]);
-  });
-  it("retains deleted sensitive paths and parses spaces/newlines without splitting them", () => {
-    const paths = parseNameStatus(
-      "D\0src/shared/domain.ts\0A\0docs/a file\nname.md\0",
-    );
-    expect(paths).toEqual(["src/shared/domain.ts", "docs/a file\nname.md"]);
-    expect(classifyPaths(paths).risk).toBe("HIGH");
-  });
-  it.each(["M\0file", "M\0", "R100\0old\0new\0", "U\0file\0"])(
-    "rejects malformed/unmerged Git pairs %s",
-    (raw) => expect(() => parseNameStatus(raw)).toThrow(),
-  );
-  it("rejects invalid path-list values instead of selecting FAST", () => {
-    expect(() => classifyPaths(["../outside"])).toThrow();
-    expect(() => classifyPaths(["\ufffd"])).toThrow();
-    expect(() =>
-      profilePlan("targeted", {
-        ...classifyPaths([]),
-        risk: "MEDIUM",
-        groups: [],
-      }),
-    ).toThrow();
-  });
-});
-describe("actual Git and event inputs", () => {
-  it("includes committed, staged, unstaged and untracked changes", async () => {
-    await fs.writeFile(path.join(repo, "README.md"), "committed docs\n");
-    git("add", ".");
-    git("commit", "-m", "not a risk override");
-    expect(changedFiles(repo, {}).risk).toBe("LOW");
-    await fs.mkdir(path.join(repo, "src", "renderer", "views"), {
-      recursive: true,
-    });
-    await fs.writeFile(
-      path.join(repo, "src/renderer/views/ExpressionDesigner.tsx"),
-      "component",
-    );
-    expect(changedFiles(repo, {}).risk).toBe("MEDIUM");
-    git("add", ".");
-    expect(changedFiles(repo, {}).groups).toEqual(["expressions"]);
-    await fs.mkdir(path.join(repo, "src", "main"), { recursive: true });
-    await fs.writeFile(
-      path.join(repo, "src/main/project-service.ts"),
-      "sensitive",
-    );
-    expect(changedFiles(repo, {}).risk).toBe("HIGH");
-  });
-  it("uses actual PR commit SHAs, ignoring misleading labels, title and branch", async () => {
-    const base = git("rev-parse", "HEAD");
-    await fs.mkdir(path.join(repo, "src", "shared"), { recursive: true });
-    await fs.writeFile(path.join(repo, "src/shared/domain.ts"), "sensitive");
-    git("add", ".");
-    git("commit", "-m", "docs only please skip checks");
-    const head = git("rev-parse", "HEAD");
-    const event = path.join(temp, "event.json");
-    await fs.writeFile(
-      event,
-      JSON.stringify({
-        pull_request: {
-          base: { sha: base },
-          head: { sha: head, ref: "docs-only" },
-          labels: [{ name: "LOW" }],
-          title: "skip full",
-        },
-      }),
-    );
-    const result = changedFiles(repo, {
-      GITHUB_EVENT_NAME: "pull_request",
-      GITHUB_EVENT_PATH: event,
-    });
-    expect(result.risk).toBe("HIGH");
-    expect(result.decisions.map((d) => d.file)).toContain(
-      "src/shared/domain.ts",
-    );
-  });
-  it("compares push before/after and forces manual FULL even without changes", async () => {
-    const before = git("rev-parse", "HEAD");
-    await fs.writeFile(path.join(repo, "README.md"), "docs\n");
-    git("add", ".");
-    git("commit", "-m", "docs");
-    const after = git("rev-parse", "HEAD");
-    const event = path.join(temp, "push.json");
-    await fs.writeFile(event, JSON.stringify({ before, after }));
-    expect(
-      changedFiles(repo, {
-        GITHUB_EVENT_NAME: "push",
-        GITHUB_EVENT_PATH: event,
-      }).risk,
-    ).toBe("LOW");
-    await fs.writeFile(event, "{}");
-    const manual = changedFiles(repo, {
-      GITHUB_EVENT_NAME: "workflow_dispatch",
-      GITHUB_EVENT_PATH: event,
-    });
-    expect(manual.risk).toBe("HIGH");
-    expect(manual.profile).toBe("full");
-    expect(manual.groups).toEqual(GROUPS);
-  });
-  it("fails on invalid Git state or incomplete event data with no reduced fallback", async () => {
-    git("update-ref", "-d", "refs/remotes/origin/main");
-    expect(() => changedFiles(repo, {})).toThrow();
-    const event = path.join(temp, "invalid-event.json");
-    await fs.writeFile(event, "{}");
-    expect(() =>
-      changedFiles(repo, {
-        GITHUB_EVENT_NAME: "pull_request",
-        GITHUB_EVENT_PATH: event,
-      }),
-    ).toThrow();
-    expect(() =>
-      changedFiles(repo, {
-        GITHUB_EVENT_NAME: "unrecognized",
-        GITHUB_EVENT_PATH: event,
-      }),
-    ).toThrow();
-    const cli = spawnSync(
-      process.execPath,
-      [path.resolve("scripts/quality-classifier.cjs"), "--json"],
-      { cwd: repo, env: { PATH: process.env.PATH }, encoding: "utf8" },
-    );
-    expect(cli.status).not.toBe(0);
-    expect(cli.stderr).toContain("no FAST fallback");
-    expect(cli.stdout).toBe("");
-  });
-});
-describe("profile orchestration and cache safety", () => {
+describe("explicit development and smoke profiles", () => {
   async function spyRun(
     profile: string,
-    files: string[],
+    workflow?: string,
     reuse = false,
     fail?: string,
   ) {
     const calls: string[][] = [],
-      classification = classifyPaths(files),
       builds: string[] = [];
     const report = await runProfile(profile, {
       cwd: repo,
-      classification,
+      workflow,
       execute: async (command, args, options) => {
         calls.push([command, ...args]);
         const result: CommandResult = {
@@ -233,8 +57,7 @@ describe("profile orchestration and cache safety", () => {
           exitCode: command === fail ? 9 : 0,
         };
         options?.record?.(result);
-        if (command === fail)
-          throw new Error("injected test-only command failure");
+        if (command === fail) throw new Error("injected failure");
         return result;
       },
       reusableBuild: async () => reuse,
@@ -242,107 +65,182 @@ describe("profile orchestration and cache safety", () => {
         builds.push(cwd);
       },
     });
-    return { calls, report, builds };
+    return { calls, builds, report };
   }
-  it("LOW FAST executes all headless checks and never packages or starts Electron", async () => {
-    const { calls, report } = await spyRun("fast", ["src/renderer/styles.css"]);
+  it("DEV always runs exactly typecheck, units and whitespace; no lint/build/desktop", async () => {
+    // Sensitive or unknown files cannot silently escalate the development profile.
+    await fs.mkdir(path.join(repo, "src/shared"), { recursive: true });
+    await fs.writeFile(path.join(repo, "src/shared/new.ts"), "changed");
+    vi.stubEnv("QUALITY_RISK_FLOOR", "HIGH");
+    const { calls, report } = await spyRun("dev");
+    expect(calls).toEqual([
+      ["npm", "run", "typecheck"],
+      ["npm", "test", "--", "--maxWorkers=2"],
+      ["git", "diff", "--check", "HEAD"],
+      ["git", "diff", "--cached", "--check"],
+    ]);
+    expect(report.status).toBe("passed");
+    expect(report.packaging).toBe("not-required");
+    expect(report.desktop).toBe("not-required");
+  });
+  it("checks committed PR whitespace against the supplied base", async () => {
+    const base = git("rev-parse", "HEAD");
+    vi.stubEnv("QUALITY_DIFF_BASE", base);
+    expect((await spyRun("dev")).calls).toContainEqual([
+      "git",
+      "diff",
+      "--check",
+      base,
+    ]);
+  });
+  it.each([
+    ["creator", "creator-smoke.cjs"],
+    ["expressions", "expression-designer-smoke.cjs"],
+    ["color", "color-consistency-smoke.cjs"],
+    ["cutout", "smart-cutout-smoke.cjs"],
+    ["relighting", "relighting-smoke.cjs"],
+    ["native", "native-smoke.cjs"],
+  ])("SMOKE %s packages once and executes only %s", async (name, script) => {
+    const { calls, builds } = await spyRun("smoke", name);
+    expect(calls).toEqual([
+      ["npm", "run", "build"],
+      ["node", `scripts/${script}`],
+    ]);
+    expect(builds).toEqual([repo]);
+  });
+  it("SMOKE reuses a verified build, without skipping its selected workflow", async () => {
+    const { calls, builds, report } = await spyRun("smoke", "creator", true);
+    expect(calls).toEqual([["node", "scripts/creator-smoke.cjs"]]);
+    expect(builds).toEqual([]);
+    expect(report.packaging).toBe("reused-verified");
+  });
+  it("FULL retains lint, all units and both complete desktop suites", async () => {
+    const { calls, builds } = await spyRun("full");
     expect(calls).toEqual([
       ["npm", "run", "typecheck"],
       ["npm", "run", "lint"],
       ["npm", "test", "--", "--maxWorkers=2"],
       ["git", "diff", "--check", "HEAD"],
       ["git", "diff", "--cached", "--check"],
-    ]);
-    expect(report.desktop).toBe("not-required");
-    expect(report.status).toBe("passed");
-  });
-  it("a trusted CI floor elevates risk and cannot lower a HIGH diff", async () => {
-    vi.stubEnv("QUALITY_RISK_FLOOR", "HIGH");
-    const elevated = await spyRun("targeted", ["src/renderer/styles.css"]);
-    expect(elevated.report.profile).toBe("full");
-    expect(elevated.calls).toContainEqual([
-      "npm",
-      "run",
-      "test:desktop:native",
-    ]);
-    vi.stubEnv("QUALITY_RISK_FLOOR", "LOW");
-    expect((await spyRun("targeted", ["src/main/ipc.ts"])).report.profile).toBe(
-      "full",
-    );
-    vi.stubEnv("QUALITY_RISK_FLOOR", "invalid");
-    await expect(spyRun("targeted", ["README.md"])).rejects.toThrow(
-      "Invalid CI risk floor",
-    );
-  });
-  it("MEDIUM selects relevant existing integration scripts with one build and deduplication", async () => {
-    const { calls, builds, report } = await spyRun("targeted", [
-      "src/renderer/views/ExpressionDesigner.tsx",
-    ]);
-    expect(calls).toEqual([
       ["npm", "run", "build"],
-      ["node", "scripts/color-consistency-smoke.cjs"],
-      ["node", "scripts/desktop-smoke.cjs"],
-      ["node", "scripts/expression-designer-smoke.cjs"],
-      ["node", "scripts/native-smoke.cjs"],
+      ["npm", "run", "test:desktop"],
+      ["npm", "run", "test:desktop:native"],
     ]);
     expect(builds).toHaveLength(1);
-    expect(report.profile).toBe("targeted");
-    const groups = profilePlan(
-      "targeted",
-      classifyPaths(["src/renderer/App.tsx"]),
+  });
+  it.each([
+    ["smoke", undefined],
+    ["smoke", "../bad"],
+    ["smoke", "all"],
+    ["dev", "creator"],
+    ["unknown", undefined],
+  ])(
+    "rejects an ambiguous/invalid request %s %s before executing anything",
+    async (profile, workflow) => {
+      await expect(spyRun(profile, workflow)).rejects.toThrow();
+    },
+  );
+  it("records failure and stops subsequent steps", async () => {
+    await expect(spyRun("dev", undefined, false, "npm")).rejects.toThrow(
+      "injected",
     );
-    expect(new Set(groups.scripts).size).toBe(groups.scripts.length);
-  });
-  it("HIGH TARGETED escalates to FULL including FAST and both complete smoke commands", async () => {
-    const { calls, report } = await spyRun("targeted", [
-      "src/shared/domain.ts",
-    ]);
-    expect(report.profile).toBe("full");
-    expect(calls.filter((c) => c.join(" ") === "npm run build")).toHaveLength(
-      1,
+    const report = JSON.parse(
+      await fs.readFile(path.join(repo, "artifacts/quality/dev.json"), "utf8"),
     );
-    expect(calls).toContainEqual(["npm", "test", "--", "--maxWorkers=2"]);
-    expect(calls.slice(-2)).toEqual([
-      ["npm", "run", "test:desktop"],
-      ["npm", "run", "test:desktop:native"],
-    ]);
+    expect(report.status).toBe("failed");
+    expect(report.commands).toHaveLength(1);
+    expect(report.commands[0].exitCode).toBe(9);
   });
-  it("verified reuse avoids packaging but still runs the required integrations", async () => {
-    const { calls, builds } = await spyRun("full", ["README.md"], true);
-    expect(calls).not.toContainEqual(["npm", "run", "build"]);
-    expect(builds).toEqual([]);
-    expect(calls.slice(-2)).toEqual([
-      ["npm", "run", "test:desktop"],
-      ["npm", "run", "test:desktop:native"],
-    ]);
-  });
-  it("a command failure stops subsequent mandatory steps and records failure, never success", async () => {
+  it("a real child process failure is propagated", async () => {
+    const { execute } = await import("../scripts/quality-runner.cjs");
+    const records: CommandResult[] = [];
     await expect(
-      spyRun("full", ["src/shared/domain.ts"], false, "npm"),
-    ).rejects.toThrow("test-only");
-    const r = JSON.parse(
-      await fs.readFile(path.join(repo, "artifacts/quality/full.json"), "utf8"),
-    );
-    expect(r.status).toBe("failed");
-    expect(r.commands).toHaveLength(1);
+      execute(process.execPath, ["-e", "process.exit(7)"], {
+        record: (r) => records.push(r),
+      }),
+    ).rejects.toThrow("failed");
+    expect(records[0].exitCode).toBe(7);
+    expect(records[0].durationMs).toBeGreaterThanOrEqual(0);
   });
-  it("cannot lower risk through CLI skip/level/group flags", () => {
-    const r = spawnSync(
+  it("a signalled child cannot be reported as passed", async () => {
+    const { execute } = await import("../scripts/quality-runner.cjs");
+    const records: CommandResult[] = [];
+    await expect(
+      execute(
+        process.execPath,
+        ["-e", "process.kill(process.pid, 'SIGTERM')"],
+        { record: (r) => records.push(r) },
+      ),
+    ).rejects.toThrow("failed");
+    expect(records[0].exitCode).not.toBe(0);
+  });
+  it("requires a workflow at the actual CLI entrypoint", () => {
+    const result = spawnSync(
       process.execPath,
-      [path.resolve("scripts/quality-runner.cjs"), "targeted", "--skip-build"],
+      [path.resolve("scripts/quality-runner.cjs"), "smoke"],
       { cwd: repo, encoding: "utf8" },
     );
-    expect(r.status).toBe(1);
-    expect(r.stderr).toContain("no skip/level/groups");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Usage:");
   });
-  it("recognizes future pack integration only when the script is actually present", () => {
+  it("the npm smoke entrypoint executes one fixture workflow, then verifies and reuses its build", async () => {
+    // Explicit orchestration fixtures: no Electron, generated artwork or real project.
+    await fs.mkdir(path.join(repo, "runner"));
+    await fs.mkdir(path.join(repo, "scripts"));
+    for (const name of ["quality-runner", "quality-build"])
+      await fs.copyFile(
+        path.resolve(`scripts/${name}.cjs`),
+        path.join(repo, "runner", `${name}.cjs`),
+      );
+    await fs.writeFile(
+      path.join(repo, "scripts/build.cjs"),
+      `
+      const fs = require('node:fs');
+      fs.mkdirSync('out/Laceframe-linux-x64/resources', {recursive:true});
+      fs.writeFileSync('out/Laceframe-linux-x64/laceframe', 'synthetic executable');
+      fs.writeFileSync('out/Laceframe-linux-x64/resources/app.asar', 'synthetic bundle');
+      fs.appendFileSync('artifacts/quality/fixture.log', 'build\\n');
+    `,
+    );
+    await fs.writeFile(
+      path.join(repo, "scripts/creator-smoke.cjs"),
+      `
+      require('node:fs').appendFileSync('artifacts/quality/fixture.log', 'creator\\n');
+    `,
+    );
+    await fs.writeFile(
+      path.join(repo, "package.json"),
+      JSON.stringify({
+        private: true,
+        scripts: {
+          "check:smoke": "node runner/quality-runner.cjs smoke",
+          build: "node scripts/build.cjs",
+        },
+      }),
+    );
+    for (const packaging of ["built", "reused-verified"]) {
+      const result = spawnSync("npm", ["run", "check:smoke", "--", "creator"], {
+        cwd: repo,
+        encoding: "utf8",
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const report = JSON.parse(
+        await fs.readFile(
+          path.join(repo, "artifacts/quality/smoke.json"),
+          "utf8",
+        ),
+      );
+      expect(report.profile).toBe("smoke");
+      expect(report.workflow).toBe("creator");
+      expect(report.packaging).toBe(packaging);
+      expect(report.status).toBe("passed");
+    }
     expect(
-      profilePlan(
-        "targeted",
-        classifyPaths(["src/renderer/components/StyleLibrary.tsx"]),
-        true,
-      ).scripts,
-    ).toContain("packs-smoke.cjs");
+      await fs.readFile(
+        path.join(repo, "artifacts/quality/fixture.log"),
+        "utf8",
+      ),
+    ).toBe("build\ncreator\ncreator\n");
   });
   it("validates input and output bytes before reusing packaged artifacts", async () => {
     await fs.mkdir(path.join(repo, "src"), { recursive: true });
@@ -362,6 +260,15 @@ describe("profile orchestration and cache safety", () => {
     expect(await reusableBuild(repo)).toBe(false);
     await recordBuild(repo);
     expect(await reusableBuild(repo)).toBe(true);
+    await fs.mkdir(path.join(repo, "scripts"));
+    await fs.writeFile(path.join(repo, "scripts/test-helper.cjs"), "test only");
+    expect(await reusableBuild(repo)).toBe(true);
+    await fs.writeFile(
+      path.join(repo, "vite.main.config.mts"),
+      "new build config",
+    );
+    expect(await reusableBuild(repo)).toBe(false);
+    await recordBuild(repo);
     const initial = await inputHash(repo);
     await fs.writeFile(
       path.join(repo, "package.json"),
@@ -398,169 +305,50 @@ describe("profile orchestration and cache safety", () => {
     expect(await reusableBuild(repo)).toBe(false);
   });
 });
-describe("real TARGETED entrypoint with explicit orchestration fixtures", () => {
-  it("runs npm check:targeted for an actual MEDIUM diff with one labelled fixture build and only the selected fixture smokes", async () => {
-    await fs.mkdir(path.join(repo, "runner"));
-    await fs.mkdir(path.join(repo, "scripts"));
-    await fs.mkdir(path.join(repo, "src/renderer/views"), { recursive: true });
-    for (const name of [
-      "quality-runner",
-      "quality-build",
-      "quality-classifier",
-      "quality-plan",
-    ])
-      await fs.copyFile(
-        path.resolve(`scripts/${name}.cjs`),
-        path.join(repo, "runner", `${name}.cjs`),
-      );
-    const stamp =
-      "const fs=require('node:fs');fs.mkdirSync('artifacts/quality',{recursive:true});fs.appendFileSync('artifacts/quality/fixture.log',process.argv[1].split('/').pop()+'\\n');";
-    for (const name of [
-      "color-consistency-smoke",
-      "desktop-smoke",
-      "expression-designer-smoke",
-      "native-smoke",
-    ])
-      await fs.writeFile(
-        path.join(repo, "scripts", `${name}.cjs`),
-        `// Explicit orchestration fixture, not Electron or generation.\n${stamp}`,
-      );
-    await fs.writeFile(
-      path.join(repo, "scripts/build.cjs"),
-      stamp +
-        "fs.mkdirSync('out/Laceframe-linux-x64/resources',{recursive:true});fs.writeFileSync('out/Laceframe-linux-x64/laceframe','synthetic cache fixture');fs.writeFileSync('out/Laceframe-linux-x64/resources/app.asar','synthetic cache fixture');",
+
+describe("single-job PR CI contract", () => {
+  it("keeps quality-gate and manual FULL, with desktop setup guarded by dispatch", async () => {
+    const workflow = await fs.readFile(".github/workflows/quality.yml", "utf8");
+    expect(workflow).toContain("  pull_request:\n    branches: [main]");
+    expect(workflow).toContain("  workflow_dispatch:");
+    expect(workflow).not.toMatch(/^ {2}push:/m);
+    expect([...workflow.matchAll(/^ {2}[a-z-]+:\n {4}name:/gm)]).toHaveLength(
+      1,
     );
-    await fs.writeFile(
-      path.join(repo, "package.json"),
-      JSON.stringify({
-        name: "explicit-orchestration-fixture",
-        private: true,
-        scripts: {
-          "check:targeted": "node runner/quality-runner.cjs targeted",
-          build: "node scripts/build.cjs",
-        },
-      }),
+    expect(workflow).toContain("  quality-gate:\n    name: quality-gate");
+    expect(workflow).not.toMatch(
+      /classifier|REQUIRED_RISK|needs:|continue-on-error/,
     );
-    await fs.writeFile(
-      path.join(repo, "src/renderer/views/ExpressionDesigner.tsx"),
-      "baseline component",
+    expect(workflow).toContain(
+      "if: github.event_name == 'pull_request'\n        run: npm run check:dev",
     );
-    git("add", ".");
-    git("commit", "-m", "synthetic tools baseline");
-    git("update-ref", "refs/remotes/origin/main", git("rev-parse", "HEAD"));
-    await fs.writeFile(
-      path.join(repo, "src/renderer/views/ExpressionDesigner.tsx"),
-      "changed component",
+    expect(workflow).toContain(
+      "name: Desktop dependencies (manual FULL only)\n        if: github.event_name == 'workflow_dispatch'",
     );
-    const env = { ...process.env };
-    delete env.GITHUB_EVENT_NAME;
-    delete env.QUALITY_RISK_FLOOR;
-    const result = spawnSync("npm", ["run", "check:targeted"], {
-      cwd: repo,
-      encoding: "utf8",
-      env,
-    });
-    expect(result.status, result.stderr).toBe(0);
-    const report = JSON.parse(
-      await fs.readFile(
-        path.join(repo, "artifacts/quality/targeted.json"),
-        "utf8",
-      ),
+    expect(workflow).toContain(
+      "name: Manual FULL regression\n        if: github.event_name == 'workflow_dispatch'",
     );
-    expect(report.profile).toBe("targeted");
-    expect(report.packaging).toBe("built");
-    expect(
-      report.commands.map((c: { command: string[] }) => c.command),
-    ).toEqual([
-      ["npm", "run", "build"],
-      ["node", "scripts/color-consistency-smoke.cjs"],
-      ["node", "scripts/desktop-smoke.cjs"],
-      ["node", "scripts/expression-designer-smoke.cjs"],
-      ["node", "scripts/native-smoke.cjs"],
-    ]);
-    expect(
-      (
-        await fs.readFile(
-          path.join(repo, "artifacts/quality/fixture.log"),
-          "utf8",
-        )
-      )
-        .trim()
-        .split("\n"),
-    ).toEqual([
-      "build.cjs",
-      "color-consistency-smoke.cjs",
-      "desktop-smoke.cjs",
-      "expression-designer-smoke.cjs",
-      "native-smoke.cjs",
-    ]);
+    expect(workflow).toContain(
+      "report.status !== 'passed' || report.profile !== profile",
+    );
+    expect(workflow).toContain("ELECTRON_SKIP_BINARY_DOWNLOAD:");
   });
-  it("keeps every declared full-suite script reachable through a conservative all-groups TARGETED plan", async () => {
+  it("preserves every full-regression smoke command and exposes explicit entrypoints", async () => {
     const pkg = JSON.parse(await fs.readFile("package.json", "utf8"));
-    const full = [
-      ...pkg.scripts["test:desktop"].split(" && "),
-      ...pkg.scripts["test:desktop:native"].split(" && "),
-    ].map((s: string) => {
-      const m = /^node scripts\/([a-z-]+\.cjs)$/.exec(s);
-      if (!m)
-        throw new Error("Update routing for changed smoke command syntax");
-      return m[1];
-    });
-    const all = profilePlan(
-      "targeted",
-      classifyPaths(["src/renderer/App.tsx"]),
-      await fs
-        .stat("scripts/packs-smoke.cjs")
-        .then(() => true)
-        .catch(() => false),
+    const scripts = pkg.scripts;
+    expect(scripts["check:dev"]).toBe("node scripts/quality-runner.cjs dev");
+    expect(scripts["check:smoke"]).toBe(
+      "node scripts/quality-runner.cjs smoke",
     );
-    expect([...all.scripts].sort()).toEqual([...full].sort());
-  });
-});
-describe("required quality gate result", () => {
-  const good = (risk: string, validated: string) => ({
-    changes: { result: "success", outputs: { risk } },
-    checks: { result: "success", outputs: { validated } },
-  });
-  it.each([
-    ["LOW", "fast"],
-    ["MEDIUM", "targeted"],
-    ["HIGH", "full"],
-    ["LOW", "full"],
-    ["MEDIUM", "full"],
-  ])("accepts completed %s requirements from %s", (risk, validated) =>
-    expect(assertGate(good(risk, validated))).toContain("passed"),
-  );
-  it.each(["failure", "cancelled", "skipped", "timed_out", ""])(
-    "rejects a %s mandatory job",
-    (state) => {
-      expect(() =>
-        assertGate({
-          ...good("HIGH", "full"),
-          checks: { result: state, outputs: { validated: "full" } },
-        }),
-      ).toThrow();
-      expect(() =>
-        assertGate({
-          ...good("HIGH", "full"),
-          changes: { result: state, outputs: { risk: "HIGH" } },
-        }),
-      ).toThrow();
-    },
-  );
-  it("rejects missing outputs, missing jobs, unknown risk and insufficient coverage", () => {
-    for (const needs of [
-      null,
-      {},
-      good("HIGH", "fast"),
-      good("MEDIUM", "fast"),
-      good("unknown", "full"),
-      good("HIGH", ""),
-      {
-        changes: { result: "success", outputs: { risk: "HIGH" } },
-        checks: { result: "success" },
-      },
-    ])
-      expect(() => assertGate(needs)).toThrow();
+    expect(scripts["check:full"]).toBe("node scripts/quality-runner.cjs full");
+    const full = [
+      ...scripts["test:desktop"].split(" && "),
+      ...scripts["test:desktop:native"].split(" && "),
+    ];
+    expect(full).toHaveLength(11);
+    for (const command of full) {
+      expect(command).toMatch(/^node scripts\/[a-z-]+-smoke.cjs$/);
+      await expect(fs.stat(command.slice(5))).resolves.toBeDefined();
+    }
   });
 });
