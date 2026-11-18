@@ -27,8 +27,6 @@
   "md941d8fb01": " · Master gesperrt",
   "m8d5242b1c0": " · Entwurf",
   "m79b5c36470": "Studio Modus",
-  "m91efb055fb": "Master erstellen",
-  "m1e9e71c620": "Expression erstellen",
   "md42458a59e": "Zurück zum Studio",
   "m1d12ae2efa": "PORTRAIT ARTISTIC",
   "m29f9eecd72": "Master V",
@@ -309,7 +307,6 @@
   "meb718207ad": "Qualität",
   "m004f657191": "Stilprüfung",
   "m84e45ee734": "Bearbeiten",
-  "m4bdc165968": "Freigeben",
   "m6f62337731": "Bild konnte nicht geladen werden",
   "m09841f4a4e": "Identität",
   "m5f5821a731": "Master freigegeben.",
@@ -441,5 +438,12 @@
   "m121ae51aad": "nicht gesichert",
   "m9f3337276d": "nicht vorgegeben",
   "m0316ff637a": "ohne Abschluss",
-  "m3336e07a17": "Codex-Ergebnis konnte nicht sicher verarbeitet werden. Version, Bilddatei und Projekt prüfen."
+  "m3336e07a17": "Codex-Ergebnis konnte nicht sicher verarbeitet werden. Version, Bilddatei und Projekt prüfen.",
+  "masterMode": "Master-Workflow",
+  "expressionMode": "Expression-Workflow",
+  "generateMaster": "Master generieren",
+  "generateExpression": "Expression generieren",
+  "switchExpressions": "Zu Expressions wechseln",
+  "switchMaster": "Zum Master wechseln",
+  "workflowPreparing": "Der Workflow wird vorbereitet. Bitte die Aktion erneut wählen."
 }

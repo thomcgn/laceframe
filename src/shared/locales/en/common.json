@@ -27,8 +27,6 @@
   "md941d8fb01": " · Master locked",
   "m8d5242b1c0": " · Draft",
   "m79b5c36470": "Studio mode",
-  "m91efb055fb": "Create master",
-  "m1e9e71c620": "Create expression",
   "md42458a59e": "Back to Studio",
   "m1d12ae2efa": "PORTRAIT ARTISTIC",
   "m29f9eecd72": "Master V",
@@ -309,7 +307,6 @@
   "meb718207ad": "Quality",
   "m004f657191": "Style check",
   "m84e45ee734": "Edit",
-  "m4bdc165968": "Approve",
   "m6f62337731": "Image could not be loaded",
   "m09841f4a4e": "Identity",
   "m5f5821a731": "Master approved.",
@@ -441,5 +438,12 @@
   "m121ae51aad": "not saved",
   "m9f3337276d": "unspecified",
   "m0316ff637a": "not completed",
-  "m3336e07a17": "Codex result could not be processed safely. Check version, image file and project."
+  "m3336e07a17": "Codex result could not be processed safely. Check version, image file and project.",
+  "masterMode": "Master workflow",
+  "expressionMode": "Expression workflow",
+  "generateMaster": "Generate master",
+  "generateExpression": "Generate expression",
+  "switchExpressions": "Switch to expressions",
+  "switchMaster": "Switch to master",
+  "workflowPreparing": "The workflow is initializing. Please select the action again."
 }

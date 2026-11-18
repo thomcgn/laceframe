@@ -1,3 +1,5 @@
+import { studioSteps } from "../src/renderer/components/StudioSteps";
+import { setLanguage, uiLabel } from "../src/shared/locales";
 import { describe, expect, it } from "vitest";
 import {
   updateStudioPrompt,
@@ -141,4 +143,31 @@ describe("Library IDs and historical character/master separation", () => {
   });
   it("returns an empty library for an unknown character", () =>
     expect(libraryAssets(p, "missing")).toEqual([]));
+});
+
+it("keeps internal Studio steps stable while translating presentation", async () => {
+  try {
+    await setLanguage("en");
+    expect(studioSteps).toEqual([
+      "Auswählen",
+      "Erzeugen",
+      "Bearbeiten",
+      "Freigeben",
+    ]);
+    expect(studioSteps.map(uiLabel)).toEqual([
+      "Select",
+      "Generate",
+      "Edit",
+      "Approve",
+    ]);
+    await setLanguage("de");
+    expect(studioSteps.map(uiLabel)).toEqual([
+      "Auswählen",
+      "Erzeugen",
+      "Bearbeiten",
+      "Freigeben",
+    ]);
+  } finally {
+    await setLanguage("de");
+  }
 });

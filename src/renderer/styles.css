@@ -3433,3 +3433,6 @@ button.text-link {
   background: #324841;
   color: #f0e5d3;
 }
+
+.studio-context { flex-wrap:wrap; }
+.studio-mode-label { align-self:center; color:var(--sage); }

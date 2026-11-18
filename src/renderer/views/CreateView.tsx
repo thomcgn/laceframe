@@ -1,3 +1,5 @@
+import { useImperativeHandle, type Ref } from "react";
+import type { StudioGenerationAction } from "../../shared/studio";
 import { uiLabel } from "../../shared/locales";
 import { i18n } from "../../shared/locales";
 import { displayMessage } from "../../shared/locales";
@@ -64,11 +66,15 @@ export function CreateView({
   onArtDirection,
   onEditExpression,
   contextControlled = false,
+  actionRef,
+  actionSlot,
 }: {
   onEditExpression: (intent: Omit<StudioIntent, "serial">) => void;
   intent?: StudioIntent;
   onArtDirection: (id?: string) => void;
   contextControlled?: boolean;
+  actionRef?: Ref<StudioGenerationAction>;
+  actionSlot: HTMLElement | null;
   snapshot: Snapshot;
   busy: boolean;
   perform: Perform;
@@ -79,6 +85,8 @@ export function CreateView({
   onRunningChange: (running: boolean) => void;
   visible: boolean;
 }) {
+  const [showRequirements, setShowRequirements] = useState(false);
+  const starting = useRef(false);
   const flow = useStudioSteps();
   const { step, expert } = flow;
   const [qualityDirty, setQualityDirty] = useState(false);
@@ -304,8 +312,17 @@ export function CreateView({
     };
   }, [codex.state, onSnapshot]);
   function generate() {
-    if (!draft || !valid || !discardReview()) return;
+    if (busy || running || starting.current) return;
+    if (!draft || !valid || providerId !== "codex-native") {
+      setShowRequirements(true);
+      flow.setExpert(true);
+      flow.setStep("Erzeugen");
+      return;
+    }
+    if (!discardReview()) return;
     flow.setStep("Erzeugen");
+    setShowRequirements(false);
+    starting.current = true;
     void perform(
       () =>
         window.laceframe.startGeneration({
@@ -320,7 +337,9 @@ export function CreateView({
         setComposer((old) => ({ ...old, saved: true }));
         onRunningChange(value.state === "running");
       },
-    );
+    ).finally(() => {
+      starting.current = false;
+    });
   }
   const draft: GenerationDraft | undefined =
     master && character && variant
@@ -364,21 +383,21 @@ export function CreateView({
     (provider?.capabilities.canImportResult ||
       ((codex.available ?? provider?.capabilities.canGenerate) &&
         codex.state !== "running")) &&
-      editMode !== "soft" &&
-      (editMode !== "hard" ||
-        Boolean(
-          selectedMask &&
-            hardFormat === true &&
-            master?.format === "png" &&
-            master.width * master.height <= MAX_MASK_PIXELS,
-        )) &&
-      draft &&
-      generationDraftSchema.safeParse(draft).success &&
-      composer.pendingBase === undefined &&
-      (promptMode === "expert" || composer.base === base) &&
-      (providerId !== "codex-native" ||
-        styleReferences.length === 0 ||
-        codex.multipleReferences === true),
+    editMode !== "soft" &&
+    (editMode !== "hard" ||
+      Boolean(
+        selectedMask &&
+        hardFormat === true &&
+        master?.format === "png" &&
+        master.width * master.height <= MAX_MASK_PIXELS,
+      )) &&
+    draft &&
+    generationDraftSchema.safeParse(draft).success &&
+    composer.pendingBase === undefined &&
+    (promptMode === "expert" || composer.base === base) &&
+    (providerId !== "codex-native" ||
+      styleReferences.length === 0 ||
+      codex.multipleReferences === true),
   );
   const matches =
     active && draft ? sameDraft(draftFromAttempt(active), draft) : false;
@@ -560,6 +579,11 @@ export function CreateView({
       ? (codex.execution ?? active?.execution)
       : active?.execution;
   const requirements: Requirement[] = [];
+  if (providerId !== "codex-native")
+    requirements.push({
+      message: tr("studio.nativeRequired"),
+      target: "provider",
+    });
   if (busy && !running)
     requirements.push({
       message: tr("studio.mb632c4ceb4"),
@@ -609,7 +633,8 @@ export function CreateView({
       message: tr("studio.mad802ee11a"),
       target: "prompt-builder",
     });
-  const slot = document.getElementById("create-action-slot");
+  const slot = actionSlot;
+  useImperativeHandle(visible ? actionRef : undefined, () => ({ generate }));
   const codexLabels = {
     "not-installed": tr("studio.m36a2abb0cf"),
     "not-authenticated": tr("studio.m3af1e1869e"),
@@ -632,7 +657,6 @@ export function CreateView({
     >
       {slot &&
         (visible || running) &&
-        (step === "Erzeugen" || running) &&
         createPortal(
           <div className="create-action-bar">
             <div className="job-status">
@@ -656,7 +680,7 @@ export function CreateView({
                   {executionLabel(timing, running)}
                 </output>
               )}
-              {!running && (
+              {!running && (showRequirements || step === "Erzeugen") && (
                 <GenerationRequirements
                   items={requirements}
                   onFix={(target) => {
@@ -672,7 +696,7 @@ export function CreateView({
               )}
             </div>
             <div className="button-row">
-              {providerId === "codex-native" && (
+              {providerId === "codex-native" && !actionRef && !running && (
                 <button
                   className="primary"
                   disabled={busy || !valid || running}

@@ -220,5 +220,6 @@
   "mdcb265d778": "Global template: {{v0}} / {{v1}}",
   "m998f222286": "Registered master canvas and saved style/composition rules; no automatic cropping.",
   "m8e9913b620": "Explicit Expert Override; technical rules preserved.",
-  "m52d4bf5584": "Reference shown in file manager. Manually attach image in browser."
+  "m52d4bf5584": "Reference shown in file manager. Manually attach image in browser.",
+  "nativeRequired": "Select the native Codex provider for direct image generation."
 }

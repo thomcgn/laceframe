@@ -4,8 +4,8 @@ import { useState } from "react";
 export const studioSteps = [
   "Auswählen",
   "Erzeugen",
-  tr("common.m84e45ee734"),
-  tr("common.m4bdc165968"),
+  "Bearbeiten",
+  "Freigeben",
 ] as const;
 export type StudioStep = (typeof studioSteps)[number];
 export function useStudioSteps() {

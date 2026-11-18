@@ -224,5 +224,7 @@
   "m7368bfb0c9": "Editierbarer Outfitentwurf dieser Figur; unabhängig vom Stil.",
   "mb9c43542ea": "Neutraler Master; keine persönliche Emotionsperformance.",
   "md09bc927e2": "Pose, Framing, Hintergrund und Auflösungsziel aus diesem Figurenerstellung-Entwurf.",
-  "m1c49a5fb66": "Expertenüberschreibung mit verbindlichen Systemregeln."
+  "m1c49a5fb66": "Expertenüberschreibung mit verbindlichen Systemregeln.",
+  "confirmRebuild": "Eine neue Masterversion vorbereiten? Der bisherige Master bleibt unverändert. Generierung und Freigabe erfolgen anschließend ausdrücklich.",
+  "chooseRebuild": "Neue Masterversion vorbereiten …"
 }

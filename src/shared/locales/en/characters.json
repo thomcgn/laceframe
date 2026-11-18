@@ -224,5 +224,7 @@
   "m7368bfb0c9": "Editable outfit draft for this character; independent of style.",
   "mb9c43542ea": "Neutral master; no personal emotional performance.",
   "md09bc927e2": "Pose, framing, background and target resolution from this Creator draft.",
-  "m1c49a5fb66": "Expert Override with mandatory system rules."
+  "m1c49a5fb66": "Expert Override with mandatory system rules.",
+  "confirmRebuild": "Prepare a new master version? The existing master stays unchanged. Generation and approval remain separate explicit actions.",
+  "chooseRebuild": "Prepare new master version …"
 }

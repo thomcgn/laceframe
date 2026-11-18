@@ -1,10 +1,15 @@
+import { useImperativeHandle, type Ref } from "react";
+import type { StudioGenerationAction } from "../../shared/studio";
 import { i18n } from "../../shared/locales";
 import { displayMessage } from "../../shared/locales";
 import { tr } from "../../shared/locales/index";
 import { PortraitPreview } from "../components/PortraitPreview";
 import { StudioSteps, useStudioSteps } from "../components/StudioSteps";
 import { MasterApproval } from "../components/MasterApproval";
-import { GenerationRequirements } from "../components/GenerationRequirements";
+import {
+  GenerationRequirements,
+  focusGenerationRequirement,
+} from "../components/GenerationRequirements";
 import {
   updateStudioPrompt,
   promptRequirements,
@@ -58,12 +63,16 @@ export function CharacterCreator({
   onDirtyChange,
   intent,
   contextControlled = false,
+  actionRef,
+  actionSlot,
 }: {
   onLibrary: (id: string) => void;
   onArtDirection: (id?: string) => void;
   onDirtyChange: (dirty: boolean) => void;
   intent?: StudioIntent;
   contextControlled?: boolean;
+  actionRef?: Ref<StudioGenerationAction>;
+  actionSlot: HTMLElement | null;
   snapshot: Snapshot;
   visible: boolean;
   busy: boolean;
@@ -73,6 +82,8 @@ export function CharacterCreator({
   onClose: () => void;
   onExpressions: () => void;
 }) {
+  const [showRequirements, setShowRequirements] = useState(false);
+  const starting = useRef(false);
   const flow = useStudioSteps();
   const { step, expert } = flow;
   const [reviewDirty, setReviewDirty] = useState(false);
@@ -275,15 +286,15 @@ export function CharacterCreator({
   const running = codex.state === "running";
   const valid = Boolean(
     targetValid &&
-      draft &&
-      !transparencyConflicts(
-        draft.prompt.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, ""),
-      ) &&
-      characterCreationDraftSchema.safeParse(draft).success &&
-      composer.pendingBase === undefined &&
-      (promptMode === "expert" || composer.base === base) &&
-      codex.available &&
-      (identities.length + styleRefs.length <= 1 || codex.multipleReferences),
+    draft &&
+    !transparencyConflicts(
+      draft.prompt.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, ""),
+    ) &&
+    characterCreationDraftSchema.safeParse(draft).success &&
+    composer.pendingBase === undefined &&
+    (promptMode === "expert" || composer.base === base) &&
+    codex.available &&
+    (identities.length + styleRefs.length <= 1 || codex.multipleReferences),
   );
   const wasRunning = useRef(false);
   useEffect(() => {
@@ -371,13 +382,26 @@ export function CharacterCreator({
     );
   }
   function generate() {
-    if (!valid || !draft) return;
+    if (busy || running || starting.current) return;
+    if (!valid || !draft) {
+      setShowRequirements(true);
+      const missing = requirements.find((r) => r.target);
+      if (missing?.target)
+        focusGenerationRequirement(missing.target, (target) => {
+          flow.setExpert(true);
+          flow.setStep(target.includes("prompt") ? "Erzeugen" : "Auswählen");
+        });
+      else flow.setStep("Auswählen");
+      return;
+    }
     if (
       (reviewDirty || qualityDirty) &&
       !window.confirm(tr("characters.me3b279a3ad"))
     )
       return;
     flow.setStep("Erzeugen");
+    setShowRequirements(false);
+    starting.current = true;
     void perform(
       () => window.laceframe.startGeneration(draft as CharacterCreationDraft),
       (s) => {
@@ -388,7 +412,9 @@ export function CharacterCreator({
         setComposer((c) => ({ ...c, saved: true }));
         onRunningChange(s.state === "running");
       },
-    );
+    ).finally(() => {
+      starting.current = false;
+    });
   }
   const requirements: Requirement[] = [];
   if (busy && !running)
@@ -403,6 +429,7 @@ export function CharacterCreator({
   if (!targetValid)
     requirements.push({
       message: tr("characters.m2a35544f50"),
+      target: "creator-rebuild",
     });
   const promptConflict = transparencyConflicts(
     `${identityNotes} ${outfit} ${composition.pose} ${composition.framing} ${creative} ${promptMode === "expert" ? composer.text.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, "") : ""}`,
@@ -455,7 +482,8 @@ export function CharacterCreator({
       message: tr("characters.mad802ee11a"),
       target: "creator-prompt-builder",
     });
-  const slot = document.getElementById("create-action-slot");
+  const slot = actionSlot;
+  useImperativeHandle(visible ? actionRef : undefined, () => ({ generate }));
   const timing =
     codex.attemptId === activeId
       ? (codex.execution ?? active?.execution)
@@ -464,7 +492,6 @@ export function CharacterCreator({
     <div className="character-creator" data-step={step}>
       {slot &&
         (visible || running) &&
-        (step === "Erzeugen" || running) &&
         createPortal(
           <div className="create-action-bar">
             <div className="job-status">
@@ -490,7 +517,7 @@ export function CharacterCreator({
                   {executionLabel(timing, running)}
                 </output>
               )}
-              {!running && (
+              {!running && (showRequirements || step === "Erzeugen") && (
                 <GenerationRequirements
                   items={requirements}
                   onFix={(target) => {
@@ -503,13 +530,15 @@ export function CharacterCreator({
               )}
               <small>{tr("characters.m11fb8fbc15")}</small>
             </div>
-            <button
-              className="primary"
-              disabled={busy || running || !valid}
-              onClick={generate}
-            >
-              {tr("characters.m44c4da2293")}
-            </button>
+            {!actionRef && !running && (
+              <button
+                className="primary"
+                disabled={busy || running || !valid}
+                onClick={generate}
+              >
+                {tr("characters.m44c4da2293")}
+              </button>
+            )}
             {running && (
               <button
                 className="danger"
@@ -576,7 +605,7 @@ export function CharacterCreator({
           </label>
         </>
       )}
-      {step === "Auswählen" && (
+      {step === "Auswählen" && !character && (
         <section className="creator-new-character">
           <h3>{tr("characters.md558f02a7b")}</h3>
           <form
@@ -617,13 +646,34 @@ export function CharacterCreator({
               : tr("characters.md75675ed46")}
           </p>
           {character.masterId && (
-            <p className="warning">
-              {tr("characters.m7b5a81f16c")}
-              {currentMaster?.version} {tr("characters.m68a75ad27e")}{" "}
-              {rebuilding
-                ? tr("characters.mb414452505")
-                : tr("characters.m9984970ec2")}
-            </p>
+            <div className="warning" data-focus-target="creator-rebuild">
+              <p>
+                {tr("characters.m7b5a81f16c")}
+                {currentMaster?.version} {tr("characters.m68a75ad27e")}{" "}
+                {rebuilding
+                  ? tr("characters.mb414452505")
+                  : tr("characters.m9984970ec2")}
+              </p>
+              {!rebuilding && (
+                <button
+                  onClick={() => {
+                    if (
+                      currentMaster &&
+                      window.confirm(tr("characters.confirmRebuild"))
+                    ) {
+                      setTarget({
+                        mode: "rebuild",
+                        baseMasterId: currentMaster.id,
+                        baseMasterSha256: currentMaster.sha256,
+                      });
+                      flow.setStep("Auswählen");
+                    }
+                  }}
+                >
+                  {tr("characters.chooseRebuild")}
+                </button>
+              )}
+            </div>
           )}
           {step === "Auswählen" && (
             <div className="creator-grid">

@@ -8,7 +8,12 @@ import { useAppLifecycle } from "./useAppLifecycle";
 import { ExpressionDesigner } from "./views/ExpressionDesigner";
 import { StyleLibrary } from "./components/StyleLibrary";
 import { AssetLibrary } from "./views/AssetLibrary";
-import type { StudioIntent, StudioMode, Workspace } from "../shared/studio";
+import type {
+  StudioIntent,
+  StudioMode,
+  Workspace,
+  StudioGenerationAction,
+} from "../shared/studio";
 import { CharacterCreator } from "./views/CharacterCreator";
 import { ImagePreview } from "./components/ImagePreview";
 import { CreateView } from "./views/CreateView";
@@ -30,6 +35,9 @@ export function App() {
   useTranslation();
   const { lifecycle, state: lifecycleState } = useAppLifecycle();
   const workLock = useRef(false);
+  const masterAction = useRef<StudioGenerationAction>(null);
+  const expressionAction = useRef<StudioGenerationAction>(null);
+  const [actionSlot, setActionSlot] = useState<HTMLDivElement | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [projectSession, setProjectSession] = useState(0);
   const [view, setView] = useState<View>("Characters");
@@ -449,6 +457,7 @@ export function App() {
         )}
         <div
           id="create-action-slot"
+          ref={setActionSlot}
           hidden={view !== "Studio" && !generationRunning}
         />
         <fieldset
@@ -540,27 +549,44 @@ export function App() {
                 role="group"
                 aria-label={tr("common.m79b5c36470")}
               >
+                <span className="studio-mode-label">
+                  {tr(
+                    studioMode === "master"
+                      ? "common.masterMode"
+                      : "common.expressionMode",
+                  )}
+                </span>
                 <button
-                  aria-pressed={studioMode === "master"}
-                  onClick={() => setStudioMode("master")}
+                  className="primary"
+                  disabled={busy || generationRunning}
+                  onClick={() => {
+                    const action =
+                      studioMode === "master"
+                        ? masterAction.current
+                        : expressionAction.current;
+                    if (action) action.generate();
+                    else setError(tr("common.workflowPreparing"));
+                  }}
                 >
-                  {tr("common.m91efb055fb")}
+                  {tr(
+                    studioMode === "master"
+                      ? "common.generateMaster"
+                      : "common.generateExpression",
+                  )}
                 </button>
                 <button
-                  aria-pressed={studioMode === "expression"}
+                  disabled={busy || generationRunning}
                   onClick={() =>
-                    character
-                      ? enterStudio({
-                          mode: "expression",
-                          characterId: character.id,
-                          ...(character.masterId
-                            ? { masterId: character.masterId }
-                            : {}),
-                        })
-                      : setStudioMode("expression")
+                    setStudioMode(
+                      studioMode === "master" ? "expression" : "master",
+                    )
                   }
                 >
-                  {tr("common.m1e9e71c620")}
+                  {tr(
+                    studioMode === "master"
+                      ? "common.switchExpressions"
+                      : "common.switchMaster",
+                  )}
                 </button>
               </div>
             </section>
@@ -572,6 +598,8 @@ export function App() {
               hidden={view !== "Studio"}
             >
               <CharacterCreator
+                actionRef={masterAction}
+                actionSlot={actionSlot}
                 contextControlled
                 snapshot={snapshot!}
                 visible={view === "Studio" && !expressionRunning}
@@ -607,6 +635,12 @@ export function App() {
                       hidden={!active || studioMode !== "expression"}
                     >
                       <CreateView
+                        actionRef={
+                          active && studioMode === "expression"
+                            ? expressionAction
+                            : undefined
+                        }
+                        actionSlot={actionSlot}
                         contextControlled
                         intent={
                           studioIntent?.characterId === c.id
@@ -644,6 +678,12 @@ export function App() {
                       hidden={!active || studioMode !== "master"}
                     >
                       <CharacterCreator
+                        actionRef={
+                          active && studioMode === "master"
+                            ? masterAction
+                            : undefined
+                        }
+                        actionSlot={actionSlot}
                         contextControlled
                         intent={
                           studioIntent?.characterId === c.id

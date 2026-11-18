@@ -8,6 +8,8 @@ export type Workspace =
   | "Studio"
   | "Library"
   | "Motion";
+/** Current form owns validation and submission; header holds no draft state. */
+export type StudioGenerationAction = { generate(): void };
 export type StudioMode = "master" | "expression";
 export type PromptMode = "automatic" | "supplement" | "expert";
 /** Ephemeral navigation intent. IDs select existing records; never alter historical references. */

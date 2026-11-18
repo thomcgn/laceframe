@@ -220,5 +220,6 @@
   "mdcb265d778": "Globale Vorlage: {{v0}} / {{v1}}",
   "m998f222286": "Registrierter Master-Canvas und gespeicherte Stil-/Kompositionsregeln; kein automatischer Zuschnitt.",
   "m8e9913b620": "Expliziter Expertenüberschreibung; technische Regeln bleiben erhalten.",
-  "m52d4bf5584": "Referenz im Dateimanager angezeigt. Das Bild manuell im Browser beifügen."
+  "m52d4bf5584": "Referenz im Dateimanager angezeigt. Das Bild manuell im Browser beifügen.",
+  "nativeRequired": "Für direkte Bildgenerierung den nativen Codex-Provider auswählen."
 }
