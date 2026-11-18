@@ -1,3 +1,4 @@
+import { RASTER_VERSION } from "../shared/raster-snap";
 import { z } from "zod";
 import {
   draftReferencesSchema,
@@ -969,7 +970,8 @@ export class ProjectService {
             profile.revision++;
             if (!target) p.artDirections.push(profile);
             this.archiveStyle(p, profile, false);
-            if (!p.defaultArtDirectionId && !data.creator) p.defaultArtDirectionId = profile.id;
+            if (!p.defaultArtDirectionId && !data.creator)
+              p.defaultArtDirectionId = profile.id;
           } else {
             const f = pack.families.find((f) => f.id === row.key)!;
             const target =
@@ -1192,9 +1194,13 @@ export class ProjectService {
         if (hashBytes(output.data) !== cmd.previewPixelSha256)
           throw new Error(tr("errors.md10143792a"));
         if (
-          cmd.edit.kind === "spritefusion" &&
+          ["spritefusion", "raster"].includes(cmd.edit.kind) &&
           !p.qualityAssets.some(
-            (q) => q.pixelEdit?.algorithm === SPRITEFUSION_VERSION,
+            (q) =>
+              q.pixelEdit?.algorithm ===
+              (cmd.edit.kind === "raster"
+                ? RASTER_VERSION
+                : SPRITEFUSION_VERSION),
           ) &&
           !this.legacyBytes
         ) {
@@ -1202,7 +1208,10 @@ export class ProjectService {
             await safePath(this.directory, "laceframe.json"),
             MAX_MANIFEST_BYTES,
           );
-          this.legacyBackupName = "laceframe.v2.pre-spritefusion.backup.json";
+          this.legacyBackupName =
+            cmd.edit.kind === "raster"
+              ? "laceframe.v2.pre-raster-target.backup.json"
+              : "laceframe.v2.pre-spritefusion.backup.json";
         }
         if (!p.qualityAssets.some((q) => q.pixelEdit) && !this.legacyBytes) {
           this.legacyBytes = await readLimited(
@@ -1250,9 +1259,11 @@ export class ProjectService {
             status: "candidate",
             pixelEdit: {
               algorithm:
-                cmd.edit.kind === "spritefusion"
-                  ? SPRITEFUSION_VERSION
-                  : "spritefusion-native-rgba-v1",
+                cmd.edit.kind === "raster"
+                  ? RASTER_VERSION
+                  : cmd.edit.kind === "spritefusion"
+                    ? SPRITEFUSION_VERSION
+                    : "spritefusion-native-rgba-v1",
               revision:
                 p.qualityAssets.filter(
                   (q) => q.sourceId === source.id && q.operation === operation,

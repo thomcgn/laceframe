@@ -86,7 +86,9 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     const master = (await manifest()).masters[0],
       masterBytes = await fs.readFile(path.join(dir, master.file));
     await nav(page, "Library");
-    await field(page, "Bibliothek Asset", { exact: true }).selectOption(master.id);
+    await field(page, "Bibliothek Asset", { exact: true }).selectOption(
+      master.id,
+    );
     const openSnap = async () => {
       await page
         .getByRole("button", { name: "Pixel Snap öffnen", exact: true })
@@ -104,12 +106,21 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     const before = await fs.readFile(path.join(dir, "laceframe.json"));
     expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
     await editor
-      .getByLabel("Motiv und freigestellte Silhouette geprüft", { exact: true })
-      .check();
+      .getByLabel("Rastermodus", { exact: true })
+      .selectOption("auto");
     await editor
-      .getByLabel("Automatische Rastervorgabe", { exact: true })
-      .uncheck();
-    await editor.getByLabel("Rastergröße", { exact: true }).fill("8");
+      .getByRole("button", { name: "Rastervorschläge ermitteln", exact: true })
+      .click();
+    await expect(editor.locator(".raster-suggestions")).toContainText(
+      /Unsichere Laceframe-Heuristik|Kein belegbarer Rasterkandidat/,
+    );
+    await expect(
+      editor.getByRole("button", { name: "Ergebnis übernehmen", exact: true }),
+    ).toBeDisabled();
+    await editor
+      .getByLabel("Rastermodus", { exact: true })
+      .selectOption("manual");
+    await editor.getByLabel("Zielbreite", { exact: true }).fill("64");
     await editor
       .getByRole("button", { name: "Pixel bereinigen", exact: true })
       .click();
@@ -121,8 +132,8 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     ).toContainText("Vorschau bereit");
     await expect(
       editor.getByLabel("Ergebnismaße", { exact: true }),
-    ).toContainText("65 × 81 PNG");
-    // Actual worker decodes the original engine PNG at its real, smaller dimensions.
+    ).toContainText("64 × 80 PNG");
+    // Production worker returns real target RGBA; canvas retains native output dimensions.
     const preview = await editor
       .getByLabel("Pixel-Snap-Vorschau", { exact: true })
       .evaluate((c) => ({
@@ -130,68 +141,73 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
         height: c.height,
         pixel: [...c.getContext("2d").getImageData(14, 14, 1, 1).data],
       }));
+    expect(
+      await editor
+        .getByLabel("Pixel-Snap-Vorschau", { exact: true })
+        .evaluate((c) => window.getComputedStyle(c).imageRendering),
+    ).toBe("pixelated");
     expect(preview).toEqual({
-      width: 65,
-      height: 81,
+      width: 64,
+      height: 80,
       pixel: [80, 60, 50, 255],
     });
+    // Parameter changes invalidate results; cancelled work cannot be adopted.
+    await editor.getByLabel("Farbanzahl", { exact: true }).selectOption("64");
+    await editor.getByLabel("Zielbreite", { exact: true }).fill("256");
+    await expect(
+      editor.getByRole("button", { name: "Ergebnis übernehmen", exact: true }),
+    ).toBeDisabled();
+    await editor
+      .getByRole("button", { name: "Pixel bereinigen", exact: true })
+      .click();
+    await editor
+      .getByRole("button", { name: "Berechnung abbrechen", exact: true })
+      .click();
+    await expect(
+      editor.getByRole("button", { name: "Ergebnis übernehmen", exact: true }),
+    ).toBeDisabled();
+    await editor.getByLabel("Farbanzahl", { exact: true }).selectOption("16");
+    await editor.getByLabel("Zielbreite", { exact: true }).fill("64");
+    await editor
+      .getByRole("button", { name: "Pixel bereinigen", exact: true })
+      .click();
+    await expect(
+      editor.getByRole("button", { name: "Ergebnis übernehmen", exact: true }),
+    ).toBeEnabled();
     const cameras = editor.locator(".pixel-camera");
-    const leftCamera = cameras.first(),
-      rightCamera = cameras.nth(1);
-    const focusViewport = leftCamera.locator(".pixel-camera-viewport");
-    const idleZoom = await leftCamera
-      .getByLabel("Bildzoom", { exact: true })
-      .innerText();
+    const stages = editor.locator(".pixel-camera-stage");
+    const focusViewport = cameras.first().locator(".pixel-camera-viewport");
+    const cameraState = () =>
+      stages.evaluateAll((nodes) =>
+        nodes.map((n) => ({
+          width: n.style.width,
+          left: n.style.left,
+          top: n.style.top,
+        })),
+      );
+    const idle = await cameraState();
     await focusViewport.hover();
     await page.mouse.wheel(0, -100);
-    await expect(leftCamera.getByLabel("Bildzoom", { exact: true })).toHaveText(
-      idleZoom,
-    );
+    expect(await cameraState()).toEqual(idle);
     await focusViewport.click({ position: { x: 30, y: 30 } });
     await expect(focusViewport).toBeFocused();
     await page.mouse.wheel(0, -100);
-    await expect(
-      leftCamera.getByLabel("Bildzoom", { exact: true }),
-    ).not.toHaveText(idleZoom);
-    await rightCamera
-      .locator(".pixel-camera-viewport")
-      .click({ position: { x: 30, y: 30 } });
-    await expect(focusViewport).not.toBeFocused();
-    await editor
-      .getByRole("heading", { name: "Pixel Snap", exact: true })
-      .click();
-    await expect(
-      rightCamera.locator(".pixel-camera-viewport"),
-    ).not.toBeFocused();
-
-    await cameras
-      .first()
-      .getByRole("button", { name: "800%", exact: true })
-      .click();
-    await expect(
-      cameras.nth(1).getByLabel("Bildzoom", { exact: true }),
-    ).not.toHaveText("800%");
-    const rightBeforePan = await cameras
-      .nth(1)
-      .locator(".pixel-camera-stage")
-      .evaluate((n) => n.style.left);
-    const vp = cameras.first().locator(".pixel-camera-viewport"),
-      box = await vp.boundingBox();
-    await cameras
-      .first()
-      .getByRole("button", { name: "Ansicht verschieben", exact: true })
-      .click();
-    await page.mouse.move(box.x + 60, box.y + 60);
+    await expect
+      .poll(async () => (await cameraState())[0].width)
+      .not.toBe(idle[0].width);
+    let views = await cameraState();
+    expect(views[0]).toEqual(views[1]);
+    await editor.getByRole("button", { name: "800%", exact: true }).click();
+    const vp = await focusViewport.boundingBox();
+    await page.keyboard.down("Alt");
+    await page.mouse.move(vp.x + 60, vp.y + 60);
     await page.mouse.down();
-    await page.mouse.move(box.x + 90, box.y + 80);
+    await page.mouse.move(vp.x + 90, vp.y + 80);
     await page.mouse.up();
-    const lefts = await editor
-      .locator(".pixel-camera-stage")
-      .evaluateAll((nodes) => nodes.map((n) => n.style.left));
-    expect(lefts[0]).not.toBe(lefts[1]);
-    expect(lefts[1]).toBe(rightBeforePan);
-    await cameras
-      .first()
+    await page.keyboard.up("Alt");
+    views = await cameraState();
+    expect(views[0]).toEqual(views[1]);
+    await editor
       .getByRole("button", { name: "Einpassen", exact: true })
       .click();
     for (const [width, height] of [
@@ -233,6 +249,21 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
         }),
       ).toBeInViewport();
     }
+    // Inspect the actual Chromium presentation at integer output-pixel zoom.
+    await editor.getByRole("button", {name:"400%", exact:true}).click();
+    const enlargedCanvas = editor.getByLabel("Pixel-Snap-Vorschau", {exact:true});
+    await expect.poll(async () => Math.round((await enlargedCanvas.boundingBox()).width)).toBe(256);
+    const enlargedPNG = PNG.sync.read(await enlargedCanvas.screenshot());
+    // Playwright captures enclosing device pixels for a fractional CSS origin.
+    expect(enlargedPNG.width).toBeGreaterThanOrEqual(256);
+    expect(enlargedPNG.width).toBeLessThanOrEqual(257);
+    expect(enlargedPNG.height).toBeGreaterThanOrEqual(320);
+    expect(enlargedPNG.height).toBeLessThanOrEqual(321);
+    const displayColors = new Set();
+    for(let i=0;i<enlargedPNG.data.length;i+=4) displayColors.add(enlargedPNG.data.subarray(i,i+3).toString("hex"));
+    // Five opaque fixture colors plus the two existing checkerboard colors, no blends.
+    expect(displayColors.size).toBe(7);
+    await editor.getByRole("button", {name:"Einpassen",exact:true}).click();
     // Discard a computed draft: no manifest/assets adopted.
     page.once("dialog", (d) => d.accept());
     await editor
@@ -240,19 +271,27 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       .click();
     expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
     editor = await openSnap();
-    await editor
-      .getByLabel("Motiv und freigestellte Silhouette geprüft", { exact: true })
-      .check();
-    await editor
-      .getByLabel("Automatische Rastervorgabe", { exact: true })
-      .uncheck();
-    await editor.getByLabel("Rastergröße", { exact: true }).fill("8");
+    await editor.getByLabel("Zielbreite", { exact: true }).fill("64");
     await editor
       .getByRole("button", { name: "Pixel bereinigen", exact: true })
       .click();
     await expect(
       editor.getByRole("button", { name: "Ergebnis übernehmen", exact: true }),
     ).toBeEnabled();
+    const previewHash = await editor
+      .getByLabel("Pixel-Snap-Vorschau", { exact: true })
+      .evaluate(async (c) =>
+        [
+          ...new Uint8Array(
+            await window.crypto.subtle.digest(
+              "SHA-256",
+              c.getContext("2d").getImageData(0, 0, c.width, c.height).data,
+            ),
+          ),
+        ]
+          .map((v) => v.toString(16).padStart(2, "0"))
+          .join(""),
+      );
     await editor
       .getByRole("button", { name: "Ergebnis übernehmen", exact: true })
       .click();
@@ -265,10 +304,11 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     expect(snap.status).toBe("candidate");
     expect(p.masters).toHaveLength(1);
     expect(snap.sourceId).toBe(master.id);
+    expect(snap.pixelEdit.pixelSha256).toBe(previewHash);
     const snapBytes = await fs.readFile(path.join(dir, snap.file));
-    expect(PNG.sync.read(snapBytes).width).toBe(65);
-    expect(PNG.sync.read(snapBytes).height).toBe(81);
-    expect(snap.pixelEdit.algorithm).toBe("spritefusion-original-wasm-v1");
+    expect(PNG.sync.read(snapBytes).width).toBe(64);
+    expect(PNG.sync.read(snapBytes).height).toBe(80);
+    expect(snap.pixelEdit.algorithm).toBe("laceframe-raster-spritefusion-v1");
     expect(snap.pixelEdit.pixelSha256).toBe(
       createHash("sha256").update(PNG.sync.read(snapBytes).data).digest("hex"),
     );
@@ -421,13 +461,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       page.locator(".studio-editor:visible .create-result > .master-compare"),
     ).toBeVisible();
     editor = await openSnap();
-    await editor
-      .getByLabel("Motiv und freigestellte Silhouette geprüft", { exact: true })
-      .check();
-    await editor
-      .getByLabel("Automatische Rastervorgabe", { exact: true })
-      .uncheck();
-    await editor.getByLabel("Rastergröße", { exact: true }).fill("8");
+    await editor.getByLabel("Zielbreite", { exact: true }).fill("64");
     await editor
       .getByRole("button", { name: "Pixel bereinigen", exact: true })
       .click();
@@ -489,7 +523,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     );
     expect(license).toContain("Copyright (c) 2025 Hugo Duprez");
     console.log(
-      "PASS Sprite Fusion: original Rust WASM worker, discard without writes, actual resized PNG preview/import, independent cameras, regional Color Correction and undo/redo, explicit Master/Expression approval, exact PNG export, restart, immutable original, sandboxed preload and shipped MIT notice. No live generation.",
+      "PASS target raster + original Rust quantizer: production worker, discard without writes, actual resized PNG preview/import, synchronized cameras, regional Color Correction and undo/redo, explicit Master/Expression approval, exact PNG export, restart, immutable original, sandboxed preload and shipped MIT notice. No live generation.",
     );
   } catch (e) {
     if (app) {

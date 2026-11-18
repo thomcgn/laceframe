@@ -12,7 +12,13 @@ export function PixelViewport({
   pan: sharedPan,
   onPan,
   onFit,
+  hideTools = false,
+  cameraWidth = width,
+  cameraHeight = height,
 }: {
+  hideTools?: boolean;
+  cameraWidth?: number;
+  cameraHeight?: number;
   width: number;
   height: number;
   children: ReactNode;
@@ -51,14 +57,23 @@ export function PixelViewport({
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  const fit = fitScale(size, { width, height });
+  const fit = fitScale(size, { width: cameraWidth, height: cameraHeight });
   const scale = zoom ?? localZoom ?? fit;
   const setZoom = (
     value: number,
     point = { x: size.width / 2, y: size.height / 2 },
   ) => {
     const next = Math.max(0.01, Math.min(32, value));
-    setPan(anchoredPan(size, { width, height }, pan, scale, next, point));
+    setPan(
+      anchoredPan(
+        size,
+        { width: cameraWidth, height: cameraHeight },
+        pan,
+        scale,
+        next,
+        point,
+      ),
+    );
     if (onZoom) onZoom(next);
     else setLocalZoom(next);
   };
@@ -81,6 +96,7 @@ export function PixelViewport({
   return (
     <div className="pixel-camera">
       <div
+        hidden={hideTools}
         className="pixel-camera-tools"
         role="toolbar"
         aria-label={tr("editing.mdc6710c419")}
@@ -213,10 +229,10 @@ export function PixelViewport({
         <div
           className="pixel-camera-stage"
           style={{
-            width: width * scale,
-            height: height * scale,
-            left: (size.width - width * scale) / 2 + pan.x,
-            top: (size.height - height * scale) / 2 + pan.y,
+            width: cameraWidth * scale,
+            height: cameraHeight * scale,
+            left: (size.width - cameraWidth * scale) / 2 + pan.x,
+            top: (size.height - cameraHeight * scale) / 2 + pan.y,
           }}
         >
           {children}

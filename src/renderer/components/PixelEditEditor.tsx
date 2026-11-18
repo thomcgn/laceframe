@@ -1,3 +1,4 @@
+import { type RasterSettings, visibleColors } from "../../shared/raster-snap";
 import { displayMessage } from "../../shared/locales";
 import { tr } from "../../shared/locales/index";
 import type { PixelReview } from "../../shared/pixel-review";
@@ -5,10 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project, Snapshot } from "../../shared/domain";
 import type { ColorPixels } from "../../shared/color-consistency";
 import { extractPalette } from "../../shared/color-consistency";
-import {
-  type PixelEdit,
-  type SpriteFusionSettings,
-} from "../../shared/pixel-snap";
+import { type PixelEdit, type SnapAnalysis } from "../../shared/pixel-snap";
 import { type RegionSelection } from "../../shared/color-region";
 import { EditorWorkspace } from "./EditorWorkspace";
 import { PixelViewport } from "./PixelViewport";
@@ -93,9 +91,14 @@ export function PixelEditEditor({
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const [region, setRegion] = useState<"selection" | "protect">();
-  const [analysis, setAnalysis] = useState<{ grid?: number }>();
+  const [analysis, setAnalysis] = useState<SnapAnalysis>();
+  const [automatic, setAutomatic] = useState(false);
+  const [aspect, setAspect] = useState(true);
+  const [expert, setExpert] = useState(false);
+  const [zoom, setZoom] = useState<number>();
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [difference, setDifference] = useState(false);
-  const [accepted, setAccepted] = useState(false);
+
   const worker = useRef<Worker | undefined>(undefined),
     serial = useRef(0),
     dirty = useRef(false),
@@ -119,8 +122,25 @@ export function PixelEditEditor({
           edit:
             mode === "snap"
               ? {
-                  kind: "spritefusion",
-                  settings: { colors: 16 },
+                  kind: "raster",
+                  settings: {
+                    width: Math.min(128, r.value.width),
+                    height: Math.min(
+                      r.value.height,
+                      Math.max(
+                        1,
+                        Math.round(
+                          (Math.min(128, r.value.width) * r.value.height) /
+                            r.value.width,
+                        ),
+                      ),
+                    ),
+                    sampling: "dominant",
+                    offsetX: 0,
+                    offsetY: 0,
+                    colors: 16,
+                    alpha: "binary",
+                  },
                 }
               : {
                   kind: "color",
@@ -237,9 +257,21 @@ export function PixelEditEditor({
     }
   }
   const settings =
-    draft?.edit.kind === "spritefusion" ? draft.edit.settings : undefined;
-  function updateSnap(settings: SpriteFusionSettings) {
-    if (draft) edit({ ...draft, edit: { kind: "spritefusion", settings } });
+    draft?.edit.kind === "raster" ? draft.edit.settings : undefined;
+  function updateSnap(settings: RasterSettings) {
+    if (draft) edit({ ...draft, edit: { kind: "raster", settings } });
+  }
+  function dimensions(width: number, height?: number) {
+    if (!settings || !source) return;
+    updateSnap({
+      ...settings,
+      width,
+      height:
+        height ??
+        (aspect
+          ? Math.max(1, Math.round((width * source.height) / source.width))
+          : settings.height),
+    });
   }
   const palette = useMemo(() => {
     if (!source) return [];
@@ -260,7 +292,7 @@ export function PixelEditEditor({
       className="pixel-edit-workspace"
     >
       <section
-        className="pixel-edit-editor"
+        className={`pixel-edit-editor ${mode === "snap" ? "raster-editor" : ""}`}
         ref={modal}
         tabIndex={-1}
         onKeyDown={(e) => {
@@ -313,6 +345,250 @@ export function PixelEditEditor({
         )}
         {source && draft && (
           <>
+            {settings && (
+              <div className="raster-controls">
+                <label>
+                  {tr("raster.mode")}
+                  <select
+                    aria-label={tr("raster.mode")}
+                    value={automatic ? "auto" : "manual"}
+                    onChange={(e) => setAutomatic(e.target.value === "auto")}
+                  >
+                    <option value="manual">{tr("raster.manual")}</option>
+                    <option value="auto">{tr("raster.auto")}</option>
+                  </select>
+                </label>
+                <label>
+                  {tr("raster.width")}
+                  <input
+                    type="number"
+                    min={1}
+                    max={source.width}
+                    value={settings.width}
+                    onChange={(e) => dimensions(Number(e.target.value))}
+                  />
+                </label>
+                <span>×</span>
+                <label>
+                  {tr("raster.height")}
+                  <input
+                    type="number"
+                    min={1}
+                    max={source.height}
+                    value={settings.height}
+                    onChange={(e) => {
+                      const height = Number(e.target.value);
+                      dimensions(
+                        aspect
+                          ? Math.max(
+                              1,
+                              Math.round(
+                                (height * source.width) / source.height,
+                              ),
+                            )
+                          : settings.width,
+                        height,
+                      );
+                    }}
+                  />
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={aspect}
+                    onChange={(e) => setAspect(e.target.checked)}
+                  />
+                  {tr("raster.aspect")}
+                </label>
+                <label>
+                  {tr("raster.preset")}
+                  <select
+                    aria-label={tr("raster.preset")}
+                    value=""
+                    onChange={(e) => dimensions(Number(e.target.value))}
+                  >
+                    <option value="">—</option>
+                    {[64, 128, 256, 512].map((n) => (
+                      <option
+                        key={n}
+                        value={n}
+                        disabled={
+                          n > source.width ||
+                          (aspect &&
+                            Math.round((n * source.height) / source.width) >
+                              source.height)
+                        }
+                      >
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {tr("editing.m3933e9485c")}
+                  <select
+                    aria-label={tr("editing.m3933e9485c")}
+                    value={
+                      settings.colors === undefined
+                        ? "original"
+                        : [16, 32, 64].includes(settings.colors)
+                          ? settings.colors
+                          : "custom"
+                    }
+                    onChange={(e) =>
+                      updateSnap({
+                        ...settings,
+                        colors:
+                          e.target.value === "original"
+                            ? undefined
+                            : e.target.value === "custom"
+                              ? 24
+                              : Number(e.target.value),
+                        palette: undefined,
+                      })
+                    }
+                  >
+                    <option value="original">
+                      {tr("raster.originalColors")}
+                    </option>
+                    {[16, 32, 64].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                    <option value="custom">{tr("raster.custom")}</option>
+                  </select>
+                </label>
+                {settings.colors !== undefined &&
+                  ![16, 32, 64].includes(settings.colors) && (
+                    <input
+                      aria-label={tr("raster.customColors")}
+                      type="number"
+                      min={1}
+                      max={256}
+                      value={settings.colors}
+                      onChange={(e) =>
+                        updateSnap({
+                          ...settings,
+                          colors: Number(e.target.value),
+                        })
+                      }
+                    />
+                  )}
+                <label>
+                  {tr("raster.alpha")}
+                  <select
+                    aria-label={tr("raster.alpha")}
+                    value={settings.alpha}
+                    onChange={(e) =>
+                      updateSnap({
+                        ...settings,
+                        alpha: e.target.value as RasterSettings["alpha"],
+                      })
+                    }
+                  >
+                    <option value="binary">{tr("raster.binary")}</option>
+                    <option value="preserve">{tr("raster.preserve")}</option>
+                  </select>
+                </label>
+                <button
+                  disabled={
+                    busy || saving || draft.protectedWeights.some(Boolean)
+                  }
+                  onClick={() => run()}
+                >
+                  {tr("editing.me619dba5ff")}
+                </button>
+                {automatic && (
+                  <div className="raster-suggestions">
+                    <button disabled={busy || saving} onClick={() => run(true)}>
+                      {tr("raster.suggest")}
+                    </button>
+                    {analysis && (
+                      <>
+                        <span>
+                          {tr(
+                            analysis.grid
+                              ? "raster.uncertain"
+                              : "raster.noGrid",
+                          )}
+                        </span>
+                        {analysis.grid &&
+                          [
+                            ...new Set([
+                              Math.max(2, analysis.grid - 1),
+                              analysis.grid,
+                              analysis.grid + 1,
+                            ]),
+                          ].map((grid) => {
+                            const width = Math.max(
+                                1,
+                                Math.round(source.width / grid),
+                              ),
+                              height = Math.max(
+                                1,
+                                Math.round(source.height / grid),
+                              );
+                            return (
+                              <button
+                                key={grid}
+                                onClick={() => dimensions(width, height)}
+                              >
+                                {width} × {height}
+                              </button>
+                            );
+                          })}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {mode === "snap" && (
+              <div
+                className="raster-camera-controls"
+                role="toolbar"
+                aria-label={tr("editing.mdc6710c419")}
+              >
+                <button
+                  onClick={() => {
+                    setZoom(undefined);
+                    setPan({ x: 0, y: 0 });
+                  }}
+                >
+                  {tr("editing.m6697a0f7da")}
+                </button>
+                <button
+                  onClick={() => {
+                    setZoom(
+                      (result?.result.width ??
+                        settings?.width ??
+                        source.width) / source.width,
+                    );
+                    setPan({ x: 0, y: 0 });
+                  }}
+                >
+                  1:1
+                </button>
+                {[2, 4, 8].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() =>
+                      setZoom(
+                        (n *
+                          (result?.result.width ??
+                            settings?.width ??
+                            source.width)) /
+                          source.width,
+                      )
+                    }
+                  >
+                    {n * 100}%
+                  </button>
+                ))}
+                <span>{tr("raster.sync")}</span>
+              </div>
+            )}
             <div className="pixel-edit-body">
               <div
                 className="pixel-edit-pair"
@@ -335,6 +611,21 @@ export function PixelEditEditor({
                         : v.label}
                     </figcaption>
                     <PixelViewport
+                      hideTools={mode === "snap"}
+                      zoom={mode === "snap" ? zoom : undefined}
+                      onZoom={mode === "snap" ? setZoom : undefined}
+                      pan={mode === "snap" ? pan : undefined}
+                      onPan={mode === "snap" ? setPan : undefined}
+                      onFit={
+                        mode === "snap"
+                          ? () => {
+                              setZoom(undefined);
+                              setPan({ x: 0, y: 0 });
+                            }
+                          : undefined
+                      }
+                      cameraWidth={mode === "snap" ? source.width : undefined}
+                      cameraHeight={mode === "snap" ? source.height : undefined}
                       key={`${v.label}-${v.pixels.width}-${v.pixels.height}`}
                       width={v.pixels.width}
                       height={v.pixels.height}
@@ -350,91 +641,89 @@ export function PixelEditEditor({
                     <label>
                       <input
                         type="checkbox"
-                        checked={accepted}
-                        onChange={(e) => setAccepted(e.target.checked)}
+                        checked={expert}
+                        onChange={(e) => setExpert(e.target.checked)}
                       />
-                      {tr("editing.m4fcb9fafa8")}
+                      {tr("raster.expert")}
                     </label>
-                    <p>{tr("editing.m7ef7ef8f51")}</p>
-                    <button disabled={busy || saving} onClick={() => run(true)}>
-                      {tr("editing.m6ead2fa53d")}
-                    </button>
-                    {analysis && (
-                      <p>
-                        {tr("editing.m2d7dc7a5d9")}{" "}
-                        {analysis.grid
-                          ? tr("editing.m2e41819239", { v0: analysis.grid })
-                          : tr("editing.mecf06dc251")}
-                        {tr("common.m8cce3dcaa2")}
-                      </p>
-                    )}
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={settings.pixelSize === undefined}
-                        onChange={(e) =>
-                          updateSnap({
-                            ...settings,
-                            pixelSize: e.target.checked ? undefined : 4,
-                          })
-                        }
-                      />
-                      {tr("editing.m70f2467a73")}
-                    </label>
-                    {settings.pixelSize !== undefined && (
-                      <label>
-                        {tr("editing.m050dc910c3")}
-                        <input
-                          type="number"
-                          min={1}
-                          max={Math.min(source.width, source.height) / 2}
-                          step={0.5}
-                          value={settings.pixelSize}
-                          onChange={(e) =>
-                            updateSnap({
-                              ...settings,
-                              pixelSize: Number(e.target.value),
-                            })
-                          }
-                        />
-                      </label>
-                    )}
-                    <label>
-                      {tr("editing.m3933e9485c")}
-                      <input
-                        type="number"
-                        min={1}
-                        max={256}
-                        value={settings.colors}
-                        onChange={(e) =>
-                          updateSnap({
-                            ...settings,
-                            colors: Number(e.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      {tr("editing.m2847c55cb9")}
-                      <input
-                        value={settings.palette?.join(", ") ?? ""}
-                        placeholder="#0d2b45, #ffecd6"
-                        onChange={(e) => {
-                          updateSnap({
-                            ...settings,
-                            palette: e.target.value.trim()
-                              ? e.target.value.split(",").map((c) => c.trim())
-                              : undefined,
-                          });
-                        }}
-                      />
-                    </label>
-                    <small>{tr("editing.m795017b9c0")}</small>
-                    <p>{tr("editing.mb1622e965f")}</p>
-                    {draft.protectedWeights.some(Boolean) && (
-                      <p role="alert" className="warning">
-                        {tr("editing.me25a7d50aa")}
-                      </p>
+                    {expert && (
+                      <>
+                        <label>
+                          {tr("raster.sampling")}
+                          <select
+                            aria-label={tr("raster.sampling")}
+                          value={settings.sampling}
+                            onChange={(e) =>
+                              updateSnap({
+                                ...settings,
+                                sampling: e.target
+                                  .value as RasterSettings["sampling"],
+                              })
+                            }
+                          >
+                            <option value="dominant">
+                              {tr("raster.dominant")}
+                            </option>
+                            <option value="nearest">
+                              {tr("raster.nearest")}
+                            </option>
+                          </select>
+                        </label>
+                        {(["offsetX", "offsetY"] as const).map((k) => (
+                          <label key={k}>
+                            {tr(
+                              k === "offsetX"
+                                ? "raster.offsetX"
+                                : "raster.offsetY",
+                            )}
+                            <input
+                              type="number"
+                              min={-0.5}
+                              max={0.5}
+                              step={0.05}
+                              value={settings[k]}
+                              onChange={(e) =>
+                                updateSnap({
+                                  ...settings,
+                                  [k]: Number(e.target.value),
+                                })
+                              }
+                            />
+                          </label>
+                        ))}
+                        <label>
+                          {tr("editing.m2847c55cb9")}
+                          <input
+                            value={settings.palette?.join(", ") ?? ""}
+                            placeholder="#0d2b45, #ffecd6"
+                            onChange={(e) =>
+                              updateSnap({
+                                ...settings,
+                                palette: e.target.value.trim()
+                                  ? e.target.value
+                                      .split(",")
+                                      .map((c) => c.trim())
+                                  : undefined,
+                              })
+                            }
+                          />
+                        </label>
+                        <p>{tr("raster.limits")}</p>
+                        {result && (
+                          <p>
+                            {tr("raster.alphaStats", {
+                              before: result.review.before.partial,
+                              after: result.review.after.partial,
+                            })}
+                          </p>
+                        )}
+                        <button
+                          disabled={busy || saving}
+                          onClick={() => setRegion("protect")}
+                        >
+                          {tr("editing.md60d518d6b")}
+                        </button>
+                      </>
                     )}
                   </>
                 )}
@@ -602,7 +891,7 @@ export function PixelEditEditor({
                     <p>{tr("editing.m4a2db1d6bc")}</p>
                   </>
                 )}
-                {result && (
+                {result && mode === "color" && (
                   <section aria-label={tr("editing.m88686ca551")}>
                     <p>
                       {tr("editing.m0aa47ca8f5")}
@@ -633,12 +922,14 @@ export function PixelEditEditor({
                     )}
                   </section>
                 )}
-                <button
-                  disabled={busy || saving}
-                  onClick={() => setRegion("protect")}
-                >
-                  {tr("editing.md60d518d6b")}
-                </button>
+                {mode === "color" && (
+                  <button
+                    disabled={busy || saving}
+                    onClick={() => setRegion("protect")}
+                  >
+                    {tr("editing.md60d518d6b")}
+                  </button>
+                )}
                 <div className="button-row">
                   <button
                     disabled={!past.length || saving}
@@ -673,20 +964,20 @@ export function PixelEditEditor({
                 </div>
               </aside>
             </div>
+            {mode === "snap" && draft.protectedWeights.some(Boolean) && (
+              <p role="alert" className="warning">
+                {tr("editing.me25a7d50aa")}
+              </p>
+            )}
             <footer>
-              <button
-                disabled={
-                  busy ||
-                  saving ||
-                  (mode === "snap" &&
-                    (!accepted || draft.protectedWeights.some(Boolean)))
-                }
-                onClick={() => run()}
-              >
-                {mode === "snap"
-                  ? tr("editing.me619dba5ff")
-                  : tr("editing.md6f5c040c1")}
-              </button>
+              {mode === "color" && (
+                <button
+                  disabled={busy || saving || false}
+                  onClick={() => run()}
+                >
+                  {tr("editing.md6f5c040c1")}
+                </button>
+              )}
               {busy && (
                 <button
                   onClick={() => {
@@ -706,9 +997,11 @@ export function PixelEditEditor({
                   {result.result.width} × {result.result.height}{" "}
                   {tr("editing.m90de0a3633")}{" "}
                   {(result.result.width / source.width).toFixed(3)} / Y{" "}
-                  {(result.result.height / source.height).toFixed(3)}
+                  {(result.result.height / source.height).toFixed(3)} ·{" "}
+                  {visibleColors(result.result)} {tr("raster.colors")}
                 </span>
               )}
+              {mode === "snap" && result && <span>{tr("raster.uniform")}</span>}
               <span role="status">
                 {busy
                   ? tr("editing.m569a057a06")

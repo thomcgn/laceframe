@@ -14,7 +14,7 @@ node scripts/build-spritefusion.cjs
 
 The normal `npm run build` needs neither Rust nor network access for this module. Cargo uses `--locked`; toolchain, original commit and generated WASM SHA are recorded. Maximum WASM linear memory is 512 MiB; admission bounds are 4,194,304 pixels and 67,108,864 input pixels × requested colors. Output has the original engine's actual dimensions, not an imposed 64×64 size. A trap fails the job; a trapped Main runtime requires app restart. Renderer cancel/discard terminates the worker. Bounded Main recomputation/PNG verification may briefly block; this is not a whole-application RAM or latency guarantee.
 
-## Replaced versus retained
+## Historical original-engine integration (recipes retained)
 
 | Before | Current behavior |
 | --- | --- |
@@ -24,7 +24,7 @@ The normal `npm run build` needs neither Rust nor network access for this module
 | Regional Lab correction and masks | Existing separate color tool remains. Whole-image original snapping is disabled for every nonzero explicit/inherited protection mask; no geometric mask transfer or naive source-pixel copy. |
 | Preview / persistence | Computed original PNG stays temporarily in memory; no intermediate file or project mutation. Discard releases the draft/worker. Adopt recomputes in Main, verifies pixel SHA, stores exact engine PNG bytes and a versioned source-bound candidate. Human approval remains separate. |
 
-The new record version is `spritefusion-original-wasm-v1`. Masks refer to **source dimensions**, outputs to their new dimensions. First new-version write makes a byte-exact `laceframe.v2.pre-spritefusion.backup.json`, unless an earlier pending migration already owns backup priority. Old projects open without writes. Older strict binaries need the original backup and full asset tree.
+The historical original-engine record version is `spritefusion-original-wasm-v1`. Masks refer to **source dimensions**, outputs to their new dimensions. First new-version write makes a byte-exact `laceframe.v2.pre-spritefusion.backup.json`, unless an earlier pending migration already owns backup priority. Old projects open without writes. Older strict binaries need the original backup and full asset tree.
 
 ## Upstream limitations kept honestly
 

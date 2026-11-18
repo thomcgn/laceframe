@@ -3436,3 +3436,31 @@ button.text-link {
 
 .studio-context { flex-wrap:wrap; }
 .studio-mode-label { align-self:center; color:var(--sage); }
+
+/* Raster editor: visual pair owns the space; diagnostics are opt-in, never a sidebar. */
+.raster-editor .raster-controls { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:end; flex:none; }
+.raster-controls label { display:flex; flex-direction:column; gap:3px; font-size:12px; }
+.raster-controls label:has(input[type="checkbox"]) { flex-direction:row; align-items:center; }
+.raster-controls input[type="number"] { width:76px; }
+.raster-controls select { max-width:180px; }
+.raster-suggestions { flex-basis:100%; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.raster-editor .pixel-edit-body { display:flex; flex-direction:column; gap:8px; }
+.raster-editor .pixel-edit-pair { flex:1; min-height:150px; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.raster-editor .pixel-edit-body aside { flex:none; display:flex; flex-direction:row; flex-wrap:wrap; gap:8px; max-height:25vh; overflow:auto; }
+.raster-editor .pixel-edit-body aside > * { flex:initial; }
+.raster-editor .pixel-edit-body aside label { display:flex; flex-direction:row; align-items:center; }
+.raster-editor .pixel-edit-pair .pixel-camera-tools { min-height:40px; }
+.raster-editor .pixel-camera-tools[hidden] { display:none; }
+.raster-editor .pixel-edit-pair figure:nth-child(2) figcaption { min-height:56px; }
+.raster-editor footer { margin-top:auto; font-size:12px; }
+@media(max-width:1000px) { .raster-editor { padding:8px; gap:6px; } .raster-editor .pixel-edit-pair .pixel-camera-tools { gap:2px; } .raster-editor .pixel-camera-tools input[type="range"] { display:none; } }
+.raster-camera-controls { display:flex; flex-wrap:wrap; align-items:center; gap:6px; flex:none; font-size:12px; }
+.raster-editor .pixel-edit-pair figure:nth-child(2) figcaption { min-height:initial; }
+.raster-editor header { padding-bottom:6px; }
+.raster-controls label { margin:0; }
+.raster-controls input[type="checkbox"] { width:auto; }
+.raster-editor button { padding:6px 10px; }
+.raster-editor footer > button:last-child { margin-left:auto; }
+@media(max-width:1000px) {
+  .raster-editor footer > span:nth-of-type(2) { display:none; }
+}

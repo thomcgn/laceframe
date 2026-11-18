@@ -260,6 +260,64 @@ async function save(
   });
 }
 describe("safe project pixel pipeline", () => {
+  it("saves exact target raster preview, rejects stale hash, backs up, reopens and approves without source changes", async () => {
+    const source = await s.pixelEditSource(sourceId),
+      original = await imageBytes(sourceId);
+    const before = await fs.readFile(path.join(dir, "laceframe.json"));
+    const edit: PixelEdit = {
+      kind: "raster",
+      settings: {
+        width: 8,
+        height: 6,
+        sampling: "dominant",
+        offsetX: 0,
+        offsetY: 0,
+        alpha: "binary",
+        colors: 8,
+      },
+    };
+    const out = applyPixelEdit(source, edit, source.protectedWeights);
+    await expect(
+      s.command({
+        type: "createPixelEdit",
+        sourceId,
+        sourceSha256: source.sha256,
+        edit,
+        protectedWeights: source.protectedWeights,
+        previewPixelSha256: "0".repeat(64),
+      }),
+    ).rejects.toThrow();
+    expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
+    await save(sourceId, edit);
+    expect(
+      await fs.readFile(
+        path.join(dir, "laceframe.v2.pre-raster-target.backup.json"),
+      ),
+    ).toEqual(before);
+    const q = s.snapshot().project.qualityAssets.at(-1)!;
+    expect(q.pixelEdit!.algorithm).toBe("laceframe-raster-spritefusion-v1");
+    expect([q.width, q.height]).toEqual([8, 6]);
+    expect(new Uint8Array(decodePixels(await imageBytes(q.id)).data)).toEqual(
+      out.data,
+    );
+    expect(q.status).toBe("candidate");
+    const saved = await fs.readFile(path.join(dir, "laceframe.json"));
+    await s.open(dir);
+    expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(saved);
+    expect((await s.pixelEditSource(q.id)).protectedWeights.length).toBe(48);
+    await s.command({
+      type: "reviewQuality",
+      id: q.id,
+      status: "approved",
+      notes: "Exact raster reviewed",
+      confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
+    });
+    expect(s.snapshot().project.assets.at(-1)!.qualitySourceId).toBe(q.id);
+    await s.open(dir);
+    expect(await imageBytes(sourceId)).toEqual(original);
+  });
+
   it("stores exact original-engine PNG at its new dimensions, preserves legacy recipes, reopens and approves explicitly", async () => {
     const source = await s.pixelEditSource(sourceId),
       original = await imageBytes(sourceId);

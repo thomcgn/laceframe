@@ -1,3 +1,4 @@
+import { RASTER_VERSION, rasterEditSchema, rasterPixels } from "./raster-snap";
 import { tr } from "./locales/index";
 import { spriteFusionPixels } from "./spritefusion-runtime";
 import { rasterGrid, rasterClean } from "./pixel-snap-runtime";
@@ -53,6 +54,7 @@ export const pixelEditInputSchema = z
     protectedWeights: weights,
     edit: z.discriminatedUnion("kind", [
       fusionEdit,
+      rasterEditSchema,
       z
         .object({ kind: z.literal("snap"), settings: snapSettingsSchema })
         .strict(),
@@ -64,12 +66,13 @@ export const pixelEditInputSchema = z
   .strict();
 export const pixelEditRecordSchema = z
   .object({
-    algorithm: z.enum([SNAP_VERSION, SPRITEFUSION_VERSION]),
+    algorithm: z.enum([SNAP_VERSION, SPRITEFUSION_VERSION, RASTER_VERSION]),
     revision: z.number().int().positive(),
     pixelSha256: sha,
     protectedMask: mask,
     edit: z.discriminatedUnion("kind", [
       fusionEdit,
+      rasterEditSchema,
       z
         .object({ kind: z.literal("snap"), settings: snapSettingsSchema })
         .strict(),
@@ -82,7 +85,8 @@ export const pixelEditRecordSchema = z
   .refine(
     (r) =>
       (r.algorithm === SPRITEFUSION_VERSION) ===
-      (r.edit.kind === "spritefusion"),
+        (r.edit.kind === "spritefusion") &&
+      (r.algorithm === RASTER_VERSION) === (r.edit.kind === "raster"),
     "Pixel algorithm/kind mismatch",
   );
 export type PixelEdit = z.infer<typeof pixelEditInputSchema>["edit"];
@@ -179,6 +183,11 @@ export function applyPixelEdit(
   protectedWeights: Uint8Array,
 ): ColorPixels & { png?: Uint8Array } {
   validateSnap(p, protectedWeights);
+  if (edit.kind === "raster") {
+    if (protectedWeights.some(Boolean))
+      throw new Error(tr("editing.m75c1b7520a"));
+    return rasterPixels(p, edit.settings);
+  }
   if (edit.kind === "spritefusion") {
     if (protectedWeights.some(Boolean))
       throw new Error(tr("editing.m75c1b7520a"));
