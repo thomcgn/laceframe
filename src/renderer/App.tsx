@@ -271,6 +271,17 @@ export function App() {
     setStyleIntent((old) => ({ id, serial: (old?.serial ?? 0) + 1 }));
     setView("Art Direction");
   }
+  function selectStudioMode(mode: StudioMode) {
+    setStudioMode(mode);
+    // Both buttons select an editor, they do not trigger generation. Even
+    // reselecting the active mode should bring its workspace into view.
+    requestAnimationFrame(() => {
+      const editor = document.querySelector<HTMLElement>(
+        `.studio-editor[data-operation="${mode}"]:not([hidden])`,
+      );
+      editor?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
   return (
     <div
       className="app"
@@ -439,13 +450,13 @@ export function App() {
               >
                 <button
                   aria-pressed={studioMode === "master"}
-                  onClick={() => setStudioMode("master")}
+                  onClick={() => selectStudioMode("master")}
                 >
                   Master erstellen
                 </button>
                 <button
                   aria-pressed={studioMode === "expression"}
-                  onClick={() => setStudioMode("expression")}
+                  onClick={() => selectStudioMode("expression")}
                 >
                   Expression erstellen
                 </button>
