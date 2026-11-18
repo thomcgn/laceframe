@@ -393,6 +393,10 @@ describe("non-destructive v1 migration", () => {
     await expect(
       reload.command({ type: "prepareAttempt", draft }),
     ).rejects.toThrow("anderem Inhalt");
+    // Opening a legacy project owns a required migration even after an operation fails.
+    await expect(
+      reload.command({ type: "addCharacter", name: "Must remain blocked" }),
+    ).rejects.toThrow("laceframe.v1.backup.json");
     expect(await fs.readFile(path.join(root, "laceframe.json"))).toEqual(bytes);
   });
 });

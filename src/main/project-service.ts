@@ -823,6 +823,22 @@ export class ProjectService {
     this.diskHash = hashBytes(bytes);
   }
   async command(input: unknown): Promise<Snapshot> {
+    const previousBytes = this.legacyBytes,
+      previousName = this.legacyBackupName,
+      previousHash = this.diskHash;
+    try {
+      return await this.applyCommand(input);
+    } catch (error) {
+      // A failed feature operation must not attach its migration to the next command.
+      // Keep pending migrations from opening an old project; never roll back a committed save.
+      if (this.diskHash === previousHash) {
+        this.legacyBytes = previousBytes;
+        this.legacyBackupName = previousName;
+      }
+      throw error;
+    }
+  }
+  private async applyCommand(input: unknown): Promise<Snapshot> {
     const cmd = commandSchema.parse(input);
     const p = this.snapshot().project;
     const character = (id: string) => {
@@ -1196,32 +1212,27 @@ export class ProjectService {
         );
         if (hashBytes(output.data) !== cmd.previewPixelSha256)
           throw new Error(tr("errors.md10143792a"));
-        if (
-          ["spritefusion", "raster"].includes(cmd.edit.kind) &&
-          !p.qualityAssets.some(
-            (q) =>
-              q.pixelEdit?.algorithm ===
-              (cmd.edit.kind === "raster"
-                ? RASTER_VERSION
-                : SPRITEFUSION_VERSION),
-          ) &&
-          !this.legacyBytes
-        ) {
-          this.legacyBytes = await readLimited(
-            await safePath(this.directory, "laceframe.json"),
-            MAX_MANIFEST_BYTES,
+        if (["spritefusion", "raster"].includes(cmd.edit.kind)) {
+          const algorithm =
+            cmd.edit.kind === "raster" ? RASTER_VERSION : SPRITEFUSION_VERSION;
+          if (
+            !p.qualityAssets.some((q) => q.pixelEdit?.algorithm === algorithm)
+          ) {
+            await this.prepareFeatureBackup(
+              cmd.edit.kind === "raster"
+                ? "laceframe.v2.pre-raster-target.backup.json"
+                : "laceframe.v2.pre-spritefusion.backup.json",
+              (previous) =>
+                !previous.qualityAssets.some(
+                  (q) => q.pixelEdit?.algorithm === algorithm,
+                ),
+            );
+          }
+        } else if (!p.qualityAssets.some((q) => q.pixelEdit)) {
+          await this.prepareFeatureBackup(
+            "laceframe.v2.pre-pixel-edit.backup.json",
+            (previous) => !previous.qualityAssets.some((q) => q.pixelEdit),
           );
-          this.legacyBackupName =
-            cmd.edit.kind === "raster"
-              ? "laceframe.v2.pre-raster-target.backup.json"
-              : "laceframe.v2.pre-spritefusion.backup.json";
-        }
-        if (!p.qualityAssets.some((q) => q.pixelEdit) && !this.legacyBytes) {
-          this.legacyBytes = await readLimited(
-            await safePath(this.directory, "laceframe.json"),
-            MAX_MANIFEST_BYTES,
-          );
-          this.legacyBackupName = "laceframe.v2.pre-pixel-edit.backup.json";
         }
         const protectedMask = await this.storeColorMask(
           source.width,
@@ -2710,6 +2721,18 @@ export class ProjectService {
    * A format migration can already have saved it before the first feature operation.
    * Conflicting/corrupt/foreign snapshots remain errors; no backup is overwritten.
    */
+  private async prepareFeatureBackup(
+    name: string,
+    beforeFeature: (p: Project) => boolean,
+  ) {
+    if (this.legacyBytes || (await this.hasFeatureBackup(name, beforeFeature)))
+      return;
+    this.legacyBytes = await readLimited(
+      await safePath(this.directory, manifestName),
+      MAX_MANIFEST_BYTES,
+    );
+    this.legacyBackupName = name;
+  }
   private async hasFeatureBackup(
     name: string,
     beforeFeature: (p: Project) => boolean,

@@ -260,6 +260,104 @@ async function save(
   });
 }
 describe("safe project pixel pipeline", () => {
+  const raster: PixelEdit = {
+    kind: "raster",
+    settings: {
+      width: 8,
+      height: 6,
+      sampling: "dominant",
+      offsetX: 0,
+      offsetY: 0,
+      alpha: "binary",
+      colors: 8,
+    },
+  };
+  it("reuses a pre-raster snapshot after another edit and restart when adopting an Expression", async () => {
+    const backup = path.join(dir, "laceframe.v2.pre-raster-target.backup.json");
+    const before = await fs.readFile(path.join(dir, "laceframe.json")),
+      master = await imageBytes(masterId),
+      original = await imageBytes(sourceId);
+    await fs.writeFile(backup, before, { flag: "wx" });
+    await s.command({ type: "addCharacter", name: "Unrelated edit" });
+    await s.open(dir);
+    await save(sourceId, raster);
+    const q = s.snapshot().project.qualityAssets.at(-1)!;
+    expect(q.sourceId).toBe(sourceId);
+    expect(q.characterId).toBe(s.snapshot().project.assets[0].characterId);
+    expect(q.status).toBe("candidate");
+    expect([q.width, q.height]).toEqual([8, 6]);
+    expect(await fs.readFile(backup)).toEqual(before);
+    await s.open(dir);
+    expect(await imageBytes(sourceId)).toEqual(original);
+    expect(await imageBytes(masterId)).toEqual(master);
+  });
+  it("keeps one original backup when snapping a Master then an Expression and regenerating", async () => {
+    await save(masterId, raster);
+    const backup = path.join(dir, "laceframe.v2.pre-raster-target.backup.json"),
+      before = await fs.readFile(backup);
+    await s.open(dir);
+    await save(sourceId, raster);
+    await save(sourceId, raster);
+    expect(s.snapshot().project.qualityAssets.map((q) => q.sourceId)).toEqual([
+      masterId,
+      sourceId,
+      sourceId,
+    ]);
+    expect(await fs.readFile(backup)).toEqual(before);
+  });
+  it("does not let a failed review's pending migration block Expression Pixel Snap", async () => {
+    await save(masterId, raster);
+    const q = s.snapshot().project.qualityAssets.at(-1)!;
+    const backup = path.join(dir, "laceframe.v2.pre-raster-review.backup.json");
+    await fs.writeFile(backup, "conflicting review snapshot");
+    await expect(
+      s.command({
+        type: "reviewQuality",
+        id: q.id,
+        status: "approved",
+        notes: "Review blocked",
+        confirmStyleAndSilhouette: true,
+        rasterConfirmed: true,
+      }),
+    ).rejects.toThrow("pre-raster-review");
+    expect(s.snapshot().project.qualityAssets.at(-1)!.status).toBe("candidate");
+    await save(sourceId, raster);
+    expect(s.snapshot().project.qualityAssets).toHaveLength(2);
+    expect(await fs.readFile(backup, "utf8")).toBe(
+      "conflicting review snapshot",
+    );
+    await s.open(dir);
+  });
+  it.each(["corrupt", "foreign", "symlink"])(
+    "rejects a %s raster backup without poisoning later commands",
+    async (kind) => {
+      const backup = path.join(
+          dir,
+          "laceframe.v2.pre-raster-target.backup.json",
+        ),
+        file = path.join(dir, "laceframe.json");
+      const before = await fs.readFile(file);
+      const raw = JSON.parse(before.toString());
+      if (kind === "foreign") raw.id = randomUUID();
+      if (kind === "symlink") {
+        const target = path.join(root, "outside.json");
+        await fs.writeFile(target, before);
+        await fs.symlink(target, backup);
+      } else
+        await fs.writeFile(
+          backup,
+          kind === "corrupt" ? "other" : JSON.stringify(raw),
+        );
+      const archive = await fs.readFile(backup);
+      await expect(save(sourceId, raster)).rejects.toThrow();
+      expect(await fs.readFile(file)).toEqual(before);
+      await s.command({ type: "addCharacter", name: "Safe unrelated change" });
+      await expect(save(sourceId, raster)).rejects.toThrow();
+      expect(await fs.readFile(backup)).toEqual(archive);
+      expect(s.snapshot().project.qualityAssets).toHaveLength(0);
+    },
+  );
+
   it("saves exact target raster preview, rejects stale hash, backs up, reopens and approves without source changes", async () => {
     const source = await s.pixelEditSource(sourceId),
       original = await imageBytes(sourceId);
