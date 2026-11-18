@@ -1,4 +1,9 @@
 import {
+  replayRegionSelection,
+  type RegionSelectionRecord,
+  type RegionSelection,
+} from "../shared/color-region";
+import {
   COLOR_VERSION,
   extractPalette,
   correctColors,
@@ -400,7 +405,7 @@ export class ProjectService {
       const pixels = decodePixels(bytes);
       if (pixels.width !== width || pixels.height !== height)
         throw new Error("Falsche Farbmaskengröße.");
-      return maskWeights(pixels);
+      return new Uint8Array(maskWeights(pixels));
     };
     for (const palette of project.masterPalettes) {
       const master = project.masters.find((m) => m.id === palette.masterId)!;
@@ -413,6 +418,32 @@ export class ProjectService {
           master.width,
           master.height,
         );
+        if (r.selection) {
+          const selection = {
+            ...r.selection,
+            base: await readColorMask(
+              r.selection.base,
+              master.width,
+              master.height,
+            ),
+            override: await readColorMask(
+              r.selection.override,
+              master.width,
+              master.height,
+            ),
+            values: await readColorMask(
+              r.selection.values,
+              master.width,
+              master.height,
+            ),
+          };
+          if (
+            !Buffer.from(replayRegionSelection(pixels, selection)).equals(
+              Buffer.from(weights),
+            )
+          )
+            throw new Error("Farbauswahl-Rezept verändert.");
+        }
         if (
           JSON.stringify(extractPalette(pixels, weights)) !==
           JSON.stringify(r.colors)
@@ -947,15 +978,41 @@ export class ProjectService {
         if (new Set(cmd.regions.map((r) => r.id)).size !== cmd.regions.length)
           throw new Error("Doppelte Farbregion.");
         const pixels = await this.analysisSource(master.id);
-        const colors = cmd.regions.map((r) =>
-          extractPalette(pixels, r.weights),
-        );
+        const colors = cmd.regions.map((r) => {
+          if (
+            r.selection &&
+            !Buffer.from(replayRegionSelection(pixels, r.selection)).equals(
+              Buffer.from(r.weights),
+            )
+          )
+            throw new Error(
+              "Farbauswahl stimmt nicht mit der gespeicherten Region überein.",
+            );
+          return extractPalette(pixels, r.weights);
+        });
         await this.colorBackup();
+        if (
+          cmd.regions.some((r) => r.selection) &&
+          !p.masterPalettes.some((p) => p.regions.some((r) => r.selection)) &&
+          !p.qualityAssets.some((q) =>
+            q.colorCorrection?.regions.some((r) => r.transferGroups),
+          )
+        )
+          await this.colorSelectionBackup();
         const regions = [];
         for (const [i, r] of cmd.regions.entries()) {
-          const { weights, ...meta } = r;
+          const { weights, selection, ...meta } = r;
           regions.push({
             ...meta,
+            ...(selection
+              ? {
+                  selection: await this.storeRegionSelection(
+                    master.width,
+                    master.height,
+                    selection,
+                  ),
+                }
+              : {}),
             colors: colors[i],
             mask: await this.storeColorMask(
               master.width,
@@ -1019,6 +1076,14 @@ export class ProjectService {
               weights,
             ),
           });
+        if (
+          cmd.regions.some((r) => r.transferGroups) &&
+          !p.masterPalettes.some((p) => p.regions.some((r) => r.selection)) &&
+          !p.qualityAssets.some((q) =>
+            q.colorCorrection?.regions.some((r) => r.transferGroups),
+          )
+        )
+          await this.colorSelectionBackup();
         const protectedMask = await this.storeColorMask(
           source.width,
           source.height,
@@ -2292,7 +2357,11 @@ export class ProjectService {
   }
   private async validateColorTargets(
     paletteId: string,
-    rules: { paletteRegionId: string; targetColor: string }[],
+    rules: {
+      paletteRegionId: string;
+      targetColor: string;
+      transferGroups?: { sourceColor: string; targetColor: string }[];
+    }[],
   ) {
     const { palette, regions: referenceRegions } =
       await this.colorPalette(paletteId);
@@ -2301,19 +2370,68 @@ export class ProjectService {
       const ref = referenceRegions.find((r) => r.id === rule.paletteRegionId);
       if (!ref)
         throw new Error("Farbregion fehlt in der gespeicherten Masterpalette.");
-      let found = false;
-      for (let i = 0; i < ref.weights.length; i++)
-        if (
-          ref.weights[i] >= 128 &&
-          master.data[i * 4 + 3] >= 128 &&
-          rgbHex(master.data.subarray(i * 4, i * 4 + 3)) === rule.targetColor
-        ) {
-          found = true;
-          break;
-        }
-      if (!found)
+      const targets = new Set([
+        rule.targetColor,
+        ...(rule.transferGroups ?? []).map((g) => g.targetColor),
+      ]);
+      for (let i = 0; i < ref.weights.length && targets.size; i++)
+        if (ref.weights[i] >= 128 && master.data[i * 4 + 3] >= 128)
+          targets.delete(rgbHex(master.data.subarray(i * 4, i * 4 + 3)));
+      if (targets.size)
         throw new Error(
           "Referenzfarbe muss aus der zugeordneten Masterregion stammen.",
+        );
+    }
+  }
+
+  private async readRegionSelection(
+    r: RegionSelectionRecord,
+    width: number,
+    height: number,
+  ): Promise<RegionSelection> {
+    return {
+      ...r,
+      base: await this.colorMask(r.base, width, height),
+      override: await this.colorMask(r.override, width, height),
+      values: await this.colorMask(r.values, width, height),
+    };
+  }
+  private async storeRegionSelection(
+    width: number,
+    height: number,
+    r: RegionSelection,
+  ): Promise<RegionSelectionRecord> {
+    return {
+      ...r,
+      base: await this.storeColorMask(width, height, r.base),
+      override: await this.storeColorMask(width, height, r.override),
+      values: await this.storeColorMask(width, height, r.values),
+    };
+  }
+  private async colorSelectionBackup() {
+    const bytes = await readLimited(
+      await safePath(this.directory, manifestName),
+      MAX_MANIFEST_BYTES,
+    );
+    const file = path.join(
+      this.directory,
+      "laceframe.v2.pre-color-selection.backup.json",
+    );
+    try {
+      await fs.writeFile(file, bytes, { flag: "wx", mode: 0o600 });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      if (
+        !Buffer.from(
+          await readLimited(
+            await safePath(this.directory, path.basename(file)),
+            MAX_MANIFEST_BYTES,
+          ),
+        ).equals(Buffer.from(bytes))
+      )
+        throw new Error(
+          "Farbauswahl-Backupkonflikt; bestehendes Backup bleibt unverändert.",
+          { cause: e },
         );
     }
   }
@@ -2352,7 +2470,21 @@ export class ProjectService {
         JSON.stringify(r.colors)
       )
         throw new Error("Referenzpalette passt nicht zum Master.");
-      regions.push({ ...r, weights });
+      const selection = r.selection
+        ? await this.readRegionSelection(
+            r.selection,
+            master.width,
+            master.height,
+          )
+        : undefined;
+      if (
+        selection &&
+        !Buffer.from(replayRegionSelection(master, selection)).equals(
+          Buffer.from(weights),
+        )
+      )
+        throw new Error("Farbauswahl-Rezept verändert.");
+      regions.push({ ...r, weights, selection });
     }
     return { palette, regions };
   }

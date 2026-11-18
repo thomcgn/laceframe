@@ -322,8 +322,13 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       master.width * master.height > MAX_COLOR_PIXELS ||
       new Set(palette.regions.map((r) => r.id)).size !==
         palette.regions.length ||
-      palette.regions.some(
-        (r) => r.mask.file !== assetFile("color-masks", r.mask.sha256, "png"),
+      palette.regions.some((r) =>
+        [
+          r.mask,
+          ...(r.selection
+            ? [r.selection.base, r.selection.override, r.selection.values]
+            : []),
+        ].some((m) => m.file !== assetFile("color-masks", m.sha256, "png")),
       )
     )
       fail("Invalid master palette");

@@ -1255,3 +1255,55 @@ button.text-link { border:0; background:transparent; padding:2px 0; color:var(--
 .color-actions { position:sticky; bottom:0; padding:.6rem 0; background:#141820; z-index:1; }
 .color-consistency-entry { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
 @media(max-width:750px){ .color-layout {grid-template-columns:1fr;} .color-controls {max-height:200px;} .color-review {max-height:50vh;} }
+
+/* Color-based assignment shares the existing mask editor for brush corrections. */
+.color-region-dialog {
+  width: min(1200px, 98vw);
+  max-height: 96vh;
+  overflow: auto;
+  background: #141820;
+  color: #f0e5d3;
+  border: 1px solid #8fada6;
+  border-radius: 12px;
+  padding: 16px;
+}
+.color-region-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 350px) minmax(0, 1fr);
+  gap: 16px;
+}
+.color-region-controls {
+  display: grid;
+  gap: 8px;
+  max-height: 62vh;
+  overflow: auto;
+}
+.color-region-layout figure { min-width: 0; margin: 0; }
+.color-region-layout canvas {
+  width: 100%;
+  max-height: 62vh;
+  object-fit: contain;
+  image-rendering: pixelated;
+  cursor: crosshair;
+  background: #242d3a;
+}
+.color-region-controls ol { max-height: 100px; overflow: auto; }
+@media (max-width: 750px) {
+  .color-region-layout { grid-template-columns: minmax(0, 1fr); }
+  .color-region-controls { max-height: 40vh; }
+  .color-region-layout canvas { max-height: 32vh; }
+}
+.color-region-controls {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  scrollbar-gutter: stable;
+}
+.color-region-controls > * { min-width: 0; max-width: 100%; }
+.color-region-controls .button-row { justify-content: flex-start; }
+.color-region-controls button { white-space: normal; }
+.color-region-controls label:has(input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+}
+.color-region-controls input[type="checkbox"] { width: auto; }
+.color-region-controls input[type="range"] { margin: 0; }

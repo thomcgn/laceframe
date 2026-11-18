@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import type { RegionSelection } from "../../shared/color-region";
+import { ColorRegionEditor } from "./ColorRegionEditor";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project, Snapshot } from "../../shared/domain";
 import {
   type ColorDraft,
@@ -7,6 +9,8 @@ import {
   type ColorMeasurement,
   type colorRoleSchema,
   rgbHex,
+  extractPalette,
+  paletteTransferGroups,
 } from "../../shared/color-consistency";
 import type { z } from "zod";
 import { MaskEditor } from "./MaskEditor";
@@ -15,6 +19,7 @@ type Region = {
   name: string;
   role: z.infer<typeof colorRoleSchema>;
   weights: Uint8Array<ArrayBuffer>;
+  selection?: RegionSelection;
 };
 const roles = {
   hair: "Haare / Bart",
@@ -291,7 +296,17 @@ function ColorEditor({
   }, [source, draft, palette]);
   const region = draft?.regions.find((r) => r.paletteRegionId === selected),
     refRegion = palette?.regions.find((r) => r.id === selected);
+  const candidateColors = useMemo(() => {
+    if (!source || !region) return [];
+    try {
+      return extractPalette(source, region.weights);
+    } catch {
+      return [];
+    }
+  }, [source, region]);
   function updateRule(values: Partial<NonNullable<typeof region>>) {
+    if ("sourceColor" in values || "targetColor" in values)
+      values = { ...values, transferGroups: undefined };
     if (draft && region)
       edit({
         ...draft,
@@ -309,12 +324,15 @@ function ColorEditor({
         type: "saveMasterPalette",
         masterId: master.id,
         masterSha256: master.sha256,
-        regions: masterRegions.map(({ id, name, role, weights }) => ({
-          id,
-          name,
-          role,
-          weights,
-        })),
+        regions: masterRegions.map(
+          ({ id, name, role, weights, selection }) => ({
+            id,
+            name,
+            role,
+            weights,
+            selection,
+          }),
+        ),
       });
       if (!r.ok) throw new Error(r.error);
       onSnapshot(r.value);
@@ -383,7 +401,10 @@ function ColorEditor({
         tabIndex={-1}
         ref={modal}
         onKeyDown={(e) => {
-          if (e.target instanceof Element && e.target.closest(".mask-editor"))
+          if (
+            e.target instanceof Element &&
+            e.target.closest(".mask-editor, .color-region-dialog")
+          )
             return;
           if (e.key === "Escape" && !mask) {
             e.preventDefault();
@@ -593,6 +614,7 @@ function ColorEditor({
                             }
                           />
                         </label>
+                        <strong>Masterpalette · gewählte Region</strong>
                         <div
                           className="button-row"
                           aria-label="Verbindliche Referenzfarben"
@@ -609,6 +631,53 @@ function ColorEditor({
                             </button>
                           ))}
                         </div>
+                        <strong>
+                          Kandidatenpalette · Original der gewählten Region
+                        </strong>
+                        <div
+                          className="button-row"
+                          aria-label="Kandidatenpalette"
+                        >
+                          {candidateColors.map((c) => (
+                            <button
+                              key={c.hex}
+                              aria-label={`Kandidatenfarbe ${c.hex}`}
+                              title={`${c.count} Pixel in Farbgruppe`}
+                              style={{ borderBottom: `6px solid ${c.hex}` }}
+                              onClick={() => updateRule({ sourceColor: c.hex })}
+                            >
+                              {c.hex}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          disabled={
+                            !candidateColors.length || !refRegion?.colors.length
+                          }
+                          onClick={() => {
+                            if (refRegion)
+                              updateRule({
+                                transferGroups: paletteTransferGroups(
+                                  candidateColors,
+                                  refRegion.colors,
+                                ),
+                                strength: 1,
+                              });
+                          }}
+                        >
+                          Masterpalette gezielt übertragen
+                        </button>
+                        {region.transferGroups && (
+                          <p aria-label="Palettenübertragung">
+                            {region.transferGroups
+                              .map((g) => `${g.sourceColor} → ${g.targetColor}`)
+                              .join(" · ")}{" "}
+                            · Gruppenversatz innerhalb der zugewiesenen Region;
+                            zusätzliche Schatten behalten ihre Helligkeit.
+                            Helligkeitskorrektur nur nach ausdrücklicher
+                            Auswahl.
+                          </p>
+                        )}
                         <p>
                           Referenz: {region.targetColor} · per Masterpipette
                           oder Palettenfarbe wählen.
@@ -854,64 +923,89 @@ function ColorEditor({
             </div>
           </>
         )}
-        {mask && source && masterPixels && (
-          <MaskEditor
-            contextLabel={{
-              title:
-                mask.kind === "protected" ? "Farbschutzmaske" : "Farbregion",
-              description:
-                mask.kind === "protected"
-                  ? "Weiß oder Grau schützt den Originalpixel vollständig vor Farbkorrektur. Schwarz lässt Korrekturen zu."
-                  : "Weiß wählt Pixel für die regionale Farbprüfung und Korrektur aus. Schwarz lässt sie unverändert. Keine automatische Haar-/Hauterkennung.",
-              saveLabel: "In Farbentwurf übernehmen",
-              readOnlyName: mask.kind !== "master",
-            }}
-            master={
-              mask.kind === "master"
-                ? master
-                : { id: sourceId, width: source.width, height: source.height }
-            }
+        {mask && mask.kind !== "protected" && source && masterPixels && (
+          <ColorRegionEditor
+            key={mask.kind + mask.id}
+            pixels={mask.kind === "master" ? masterPixels : source}
+            assetId={mask.kind === "master" ? master.id : sourceId}
             initialName={
-              mask.kind === "protected"
-                ? "Geschützte Pixel (weiß schützt)"
-                : (masterRegions.find((r) => r.id === mask.id)?.name ??
-                  refRegion?.name ??
-                  "Farbregion")
+              masterRegions.find((r) => r.id === mask.id)?.name ??
+              refRegion?.name ??
+              "Farbregion"
             }
             initialWeights={
-              mask.kind === "master"
+              (mask.kind === "master"
                 ? masterRegions.find((r) => r.id === mask.id)?.weights
-                : mask.kind === "protected"
-                  ? draft?.protectedWeights
-                  : draft?.regions.find((r) => r.paletteRegionId === mask.id)
-                      ?.weights
+                : draft?.regions.find((r) => r.paletteRegionId === mask.id)
+                    ?.weights) ?? new Uint8Array(0)
             }
-            onClose={() => setMask(undefined)}
-            onSave={async (weights, name) => {
+            initialSelection={
+              mask.kind === "master"
+                ? masterRegions.find((r) => r.id === mask.id)?.selection
+                : undefined
+            }
+            onClose={() => {
+              if (mask.kind === "master")
+                setMasterRegions((old) =>
+                  old.filter(
+                    (r) =>
+                      r.id !== mask.id ||
+                      r.selection ||
+                      r.weights.some(Boolean),
+                  ),
+                );
+              setMask(undefined);
+            }}
+            onSave={(weights, name, selection) => {
               if (mask.kind === "master") {
                 setMasterRegions((old) =>
                   old.map((r) =>
                     r.id === mask.id
-                      ? { ...r, name, weights: new Uint8Array(weights) }
+                      ? {
+                          ...r,
+                          name,
+                          weights: new Uint8Array(weights),
+                          selection,
+                        }
                       : r,
                   ),
                 );
                 dirty.current = true;
               } else if (draft) {
-                edit(
-                  mask.kind === "protected"
-                    ? { ...draft, protectedWeights: new Uint8Array(weights) }
-                    : {
-                        ...draft,
-                        regions: draft.regions.map((r) =>
-                          r.paletteRegionId === mask.id
-                            ? { ...r, weights: new Uint8Array(weights) }
-                            : r,
-                        ),
-                      },
-                );
+                edit({
+                  ...draft,
+                  regions: draft.regions.map((r) =>
+                    r.paletteRegionId === mask.id
+                      ? { ...r, weights: new Uint8Array(weights) }
+                      : r,
+                  ),
+                });
                 setConfirmed(false);
               }
+              setMask(undefined);
+            }}
+          />
+        )}
+        {mask && mask.kind === "protected" && source && draft && (
+          <MaskEditor
+            contextLabel={{
+              title: "Farbschutzmaske",
+              description:
+                "Weiß oder Grau schützt den Originalpixel vollständig vor Farbkorrektur. Schwarz lässt Korrekturen zu.",
+              saveLabel: "In Farbentwurf übernehmen",
+              readOnlyName: true,
+            }}
+            master={{
+              id: sourceId,
+              width: source.width,
+              height: source.height,
+            }}
+            initialName="Geschützte Pixel (weiß schützt)"
+            initialWeights={draft.protectedWeights}
+            onClose={() => setMask(undefined)}
+            onSave={async (weights) => {
+              edit({ ...draft, protectedWeights: new Uint8Array(weights) });
+              setConfirmed(false);
               setMask(undefined);
             }}
           />

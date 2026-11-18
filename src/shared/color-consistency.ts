@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  regionSelectionInputSchema,
+  regionSelectionRecordSchema,
+} from "./color-region";
 export const COLOR_VERSION = "regional-lab-offset-v1" as const;
 export const MAX_COLOR_PIXELS = 4_194_304;
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
@@ -19,7 +23,15 @@ export const paletteInputSchema = z
   .object({
     masterId: z.uuid(),
     masterSha256: sha,
-    regions: z.array(colorRegionSchema.extend({ weights })).min(1).max(5),
+    regions: z
+      .array(
+        colorRegionSchema.extend({
+          weights,
+          selection: regionSelectionInputSchema.optional(),
+        }),
+      )
+      .min(1)
+      .max(5),
   })
   .strict();
 export const paletteSchema = z
@@ -35,6 +47,7 @@ export const paletteSchema = z
       .array(
         colorRegionSchema.extend({
           mask: maskRef,
+          selection: regionSelectionRecordSchema.optional(),
           colors: z
             .array(
               z
@@ -57,6 +70,13 @@ export const colorRuleSchema = z
     strength: z.number().min(0).max(1),
     tolerance: z.number().min(1).max(50),
     correctLightness: z.boolean(),
+    transferGroups: z
+      .array(
+        z.object({ sourceColor: hexSchema, targetColor: hexSchema }).strict(),
+      )
+      .min(1)
+      .max(16)
+      .optional(),
   })
   .strict();
 export const colorDraftSchema = z
@@ -242,9 +262,13 @@ export function correctColors(
     data = new Uint8Array(source.data);
   for (const r of d.regions) {
     checkMask(source, r.weights);
-    const from = lab(r.sourceColor),
-      to = lab(r.targetColor),
-      cache = new Map<string, number[]>();
+    const groups = (
+        r.transferGroups ?? [
+          { sourceColor: r.sourceColor, targetColor: r.targetColor },
+        ]
+      ).map((g) => ({ from: lab(g.sourceColor), to: lab(g.targetColor) })),
+      cache = new Map<string, number[]>(),
+      noChange = groups.every((g) => g.from.every((v, i) => v === g.to[i]));
     for (let i = 0; i < owned.length; i++)
       if (r.weights[i]) {
         if (owned[i])
@@ -257,13 +281,14 @@ export function correctColors(
           d.protectedWeights[i] ||
           !source.data[k + 3] ||
           !r.strength ||
-          r.sourceColor === r.targetColor
+          noChange
         )
           continue;
         const hex = rgbHex(source.data.subarray(k, k + 3));
         let rgb = cache.get(hex);
         if (!rgb) {
           const c = lab(hex);
+          const { from, to } = closestGroup(c, groups);
           // Chroma grouping deliberately includes new darker shades, but retains their L* spacing.
           if (Math.hypot(c[1] - from[1], c[2] - from[2]) > r.tolerance)
             continue;
@@ -277,6 +302,7 @@ export function correctColors(
           if (r.weights[i] === 255 && cache.size < 65536) cache.set(hex, rgb);
         } else if (r.weights[i] !== 255) {
           const c = lab(hex),
+            { from, to } = closestGroup(c, groups),
             s = (r.strength * r.weights[i]) / 255;
           rgb = fromLab([
             c[0] + (r.correctLightness ? to[0] - from[0] : 0) * s,
@@ -288,4 +314,45 @@ export function correctColors(
       }
   }
   return { ...source, data };
+}
+
+function closestGroup(c: number[], groups: { from: number[]; to: number[] }[]) {
+  return groups.reduce((best, g) =>
+    Math.hypot(c[1] - g.from[1], c[2] - g.from[2]) <
+    Math.hypot(c[1] - best.from[1], c[2] - best.from[2])
+      ? g
+      : best,
+  );
+}
+/** Proposes chromatic group offsets using actual regional swatches. No per-pixel palette snapping.
+ * Near-identical chroma shares one anchor so additional darker shades retain their own L*. */
+export function paletteTransferGroups(
+  candidate: { hex: string; count: number }[],
+  master: { hex: string; count: number }[],
+) {
+  if (!candidate.length || !master.length)
+    throw new Error("Master- und Kandidatenregion zuerst zuweisen.");
+  const anchors: { sourceColor: string; targetColor: string }[] = [];
+  for (const c of candidate) {
+    const from = lab(c.hex);
+    if (
+      anchors.some((g) => {
+        const v = lab(g.sourceColor);
+        return Math.hypot(from[1] - v[1], from[2] - v[2]) < 3;
+      })
+    )
+      continue;
+    const distance = (hex: string) => {
+      const to = lab(hex);
+      return (
+        Math.hypot(from[1] - to[1], from[2] - to[2]) +
+        0.25 * Math.abs(from[0] - to[0])
+      );
+    };
+    const target = master.reduce((best, v) =>
+      distance(v.hex) < distance(best.hex) ? v : best,
+    );
+    anchors.push({ sourceColor: c.hex, targetColor: target.hex });
+  }
+  return anchors;
 }
