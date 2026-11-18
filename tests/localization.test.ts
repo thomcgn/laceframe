@@ -29,6 +29,10 @@ afterEach(async () => {
 });
 it("validates all installed language JSON, placeholders, referenced and obsolete keys", async () => {
   const references = new Set<string>();
+  const keyPattern = new RegExp(
+    '"((?:' + Object.keys(resources.en.translation).join("|") + ')\\.[\\w]+)"',
+    "g",
+  );
   for (const folder of [
     "src/main",
     "src/preload",
@@ -43,18 +47,13 @@ it("validates all installed language JSON, placeholders, referenced and obsolete
       )
         continue;
       const source = await fs.readFile(path.join(folder, file), "utf8");
-      for (const m of source.matchAll(
-        /"((?:common|characters|studio|expressions|styles|editing|errors)\.[\w]+)"/g,
-      ))
-        references.add(m[1]);
+      for (const m of source.matchAll(keyPattern)) references.add(m[1]);
     }
   }
   // The fixed presentation map itself is a consumer of catalogue keys.
   for (const m of (
     await fs.readFile("src/shared/locales/index.ts", "utf8")
-  ).matchAll(
-    /"((?:common|characters|studio|expressions|styles|editing|errors)\.[\w]+)"/g,
-  ))
+  ).matchAll(keyPattern))
     references.add(m[1]);
   const english = resources.en.translation;
   for (const [language, resource] of Object.entries(resources)) {

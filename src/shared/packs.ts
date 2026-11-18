@@ -1,3 +1,5 @@
+import { creatorProvenanceSchema } from "./style-semantics";
+import { parseBoundedJSON } from "./bounded-json";
 import { tr } from "./locales/index";
 import { z } from "zod";
 import { metricsSchema, ANALYSIS_VERSION } from "./style-analysis";
@@ -30,6 +32,7 @@ export const legacyStyleSchema = z
 export const styleContentSchema = z
   .object({
     name: short,
+    creator: creatorProvenanceSchema.optional(),
     category: z.enum(["portrait", "sprite", "scene"]),
     intent: text,
     positiveRules: z.array(text).max(100),
@@ -59,7 +62,21 @@ export const styleContentSchema = z
       )
       .max(100),
   })
-  .strict();
+  .strict()
+  .superRefine((style, ctx) => {
+    if (style.creator) {
+      const hashes = style.creator.references.map((r) => r.sha256);
+      if (
+        JSON.stringify(hashes) !== JSON.stringify(style.referenceHashes) ||
+        JSON.stringify(hashes) !==
+          JSON.stringify(style.findings.map((f) => f.sha256))
+      )
+        ctx.addIssue({
+          code: "custom",
+          message: "Creator references and measurements must match",
+        });
+    }
+  });
 export const packProvenanceSchema = z
   .object({ application: z.literal("laceframe"), note: z.string().max(2000) })
   .strict();
@@ -153,40 +170,8 @@ export type PackRow = {
   reason: string;
 };
 export type PackPreview = { pack: Pack; rows: PackRow[]; projectHash: string };
-const unsafePath =
-  /(?:file:|data:|https?:\/\/|(?:^|[\s"'])\/[^\s/]|[A-Za-z]:[\\/]|\\\\|(?:^|[\s"'])\.\.[\\/])/i;
-/** Bounds before JSON.parse/Zod, including ignored/unknown input. No executable or path fields. */
 export function parsePackJSON(json: string): Pack {
-  if (new TextEncoder().encode(json).length > MAX_PACK_BYTES)
-    throw new Error(tr("styles.mf1d98c6e8d"));
-  let depth = 0,
-    quoted = false,
-    escaped = false;
-  for (const c of json) {
-    if (quoted) {
-      if (escaped) escaped = false;
-      else if (c === "\\") escaped = true;
-      else if (c === '"') quoted = false;
-    } else if (c === '"') quoted = true;
-    else if (c === "[" || c === "{") {
-      if (++depth > 20) throw new Error(tr("styles.m10ccb921ec"));
-    } else if (c === "]" || c === "}") depth--;
-  }
-  const raw: unknown = JSON.parse(json);
-  let nodes = 0;
-  function visit(v: unknown) {
-    if (++nodes > 30000) throw new Error(tr("styles.m991879caa7"));
-    if (typeof v === "string" && (unsafePath.test(v) || v.includes("\0")))
-      throw new Error(tr("styles.m0359b7e148"));
-    if (v && typeof v === "object")
-      for (const [k, x] of Object.entries(v)) {
-        if (["__proto__", "prototype", "constructor"].includes(k))
-          throw new Error(tr("styles.m5a33b43a26"));
-        visit(x);
-      }
-  }
-  visit(raw);
-  return packSchema.parse(raw);
+  return packSchema.parse(parseBoundedJSON(json, MAX_PACK_BYTES));
 }
 export function serializePack(pack: Pack) {
   return JSON.stringify(parsePackJSON(JSON.stringify(pack)), null, 2) + "\n";

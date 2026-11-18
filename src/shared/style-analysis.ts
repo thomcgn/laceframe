@@ -9,8 +9,12 @@ export const referenceTypes = [
   "sprite",
   "environment",
   "ui",
+  "general",
 ] as const;
 export const referenceLabels = {
+  get general() {
+    return tr("styleCreator.roleGeneral");
+  },
   dialogue: tr("common.m0c2b1d58da"),
   get portrait() {
     return tr("styles.m1f24176600");
@@ -172,6 +176,7 @@ export const analysisEditsSchema = z
 export type AnalysisEdits = z.infer<typeof analysisEditsSchema>;
 export const analysisRecordSchema = z
   .object({
+    origin: z.literal("style-creator").optional(),
     id: z.uuid(),
     version: z.literal(ANALYSIS_VERSION),
     profileId: z.uuid(),

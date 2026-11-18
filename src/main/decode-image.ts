@@ -69,6 +69,11 @@ export async function decodeAssetPixels(bytes: Uint8Array) {
   if (!info.width || !info.height || info.width * info.height > 16_000_000)
     throw new Error(tr("errors.mf20fc17c90"));
   if (info.type === "png") return decodePixels(bytes);
+  if (info.type === "jpg") {
+    const image = nativeImage.createFromBuffer(Buffer.from(bytes));
+    if (image.isEmpty()) throw new Error(tr("styleCreator.invalidImage"));
+    return decodePixels(image.toPNG());
+  }
   if (info.type !== "webp") throw new Error(tr("errors.m7d50e46fe5"));
   const decoder = new BrowserWindow({
     show: false,

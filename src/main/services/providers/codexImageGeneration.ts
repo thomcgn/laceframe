@@ -266,7 +266,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         const bytes = await readLimited(file.path, limit);
         if (hashBytes(bytes) !== file.sha256)
           throw new Error(tr("errors.m9b8af4fa3d"));
-        if (creation && !isStyle) inspectIdentityImage(bytes);
+        if (isStyle || creation) inspectIdentityImage(bytes);
         else inspectImage(bytes);
         const target = path.join(
           cwd,

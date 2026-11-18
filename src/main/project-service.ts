@@ -1,3 +1,13 @@
+import { z } from "zod";
+import {
+  draftReferencesSchema,
+  styleDraftImportSchema,
+  parseSemanticJSON,
+  semanticRecordSchema,
+  type StyleDraftImage,
+  type StyleDraftReference,
+  type SemanticRecord,
+} from "../shared/style-semantics";
 import { tr } from "../shared/locales/index";
 import { hasOtherAssetReference } from "../shared/asset-retention";
 import {
@@ -231,6 +241,11 @@ export class ProjectService {
   private legacyBytes?: Buffer;
   private legacyBackupName = "laceframe.v1.backup.json";
   private staged?: { image: StagedIdentityImage; bytes: Buffer };
+  private styleDrafts = new Map<
+    string,
+    { image: StyleDraftImage; bytes: Buffer }
+  >();
+  private styleSemantics = new Map<string, SemanticRecord>();
   constructor(
     private readonly decode: (
       bytes: Uint8Array,
@@ -243,6 +258,8 @@ export class ProjectService {
     ) => Pixels | Promise<Pixels> = decodePixels,
   ) {}
   close() {
+    this.styleDrafts.clear();
+    this.styleSemantics.clear();
     this.project = undefined;
     this.directory = "";
     this.diskHash = "";
@@ -324,7 +341,9 @@ export class ProjectService {
       );
       if (hashBytes(contents) !== image.sha256)
         throw new Error(tr("errors.ma083c96fee"));
-      const identity = project.identityAssets.some((a) => a.id === image.id);
+      const identity =
+        project.identityAssets.some((a) => a.id === image.id) ||
+        project.styleAssets.some((a) => a.id === image.id);
       const info = identity
         ? inspectIdentityImage(contents)
         : inspectImage(contents);
@@ -554,6 +573,8 @@ export class ProjectService {
                     : source.portablePacksVersion !== 1
                       ? "laceframe.v2.pre-portable-packs.backup.json"
                       : "laceframe.v2.pre-color-consistency.backup.json";
+    this.styleDrafts.clear();
+    this.styleSemantics.clear();
     this.directory = root;
     this.project = project;
     this.diskHash = hashBytes(bytes);
@@ -948,7 +969,7 @@ export class ProjectService {
             profile.revision++;
             if (!target) p.artDirections.push(profile);
             this.archiveStyle(p, profile, false);
-            if (!p.defaultArtDirectionId) p.defaultArtDirectionId = profile.id;
+            if (!p.defaultArtDirectionId && !data.creator) p.defaultArtDirectionId = profile.id;
           } else {
             const f = pack.families.find((f) => f.id === row.key)!;
             const target =
@@ -1907,6 +1928,145 @@ export class ProjectService {
         await this.attachResult(p, attempt, cmd.token);
         break;
       }
+      case "createStylePreset": {
+        if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
+        if (p.artDirections.length >= 100 || p.styleAnalyses.length >= 100)
+          throw new Error(tr("styleCreator.libraryFull"));
+        const inputs = this.styleReferenceBytes(cmd.references);
+        const hashes = inputs.map((i) => i.sha256),
+          metadata = cmd.style.creator;
+        if (
+          !metadata ||
+          JSON.stringify(
+            metadata.references.map((r) => ({
+              sha256: r.sha256,
+              role: r.role,
+              sourceNote: r.sourceNote,
+            })),
+          ) !==
+            JSON.stringify(
+              inputs.map((i, index) => ({
+                sha256: i.sha256,
+                role: i.role ?? "general",
+                sourceNote: cmd.references[index].sourceNote,
+              })),
+            ) ||
+          JSON.stringify(cmd.style.referenceHashes) !== JSON.stringify(hashes)
+        )
+          throw new Error(tr("styleCreator.referenceMismatch"));
+        if (metadata.semantic) {
+          const granted =
+            cmd.semanticReceipt && this.styleSemantics.get(cmd.semanticReceipt);
+          if (
+            !granted ||
+            JSON.stringify(granted) !== JSON.stringify(metadata.semantic)
+          )
+            throw new Error(tr("styleCreator.semanticReceiptInvalid"));
+        } else if (cmd.semanticReceipt)
+          throw new Error(tr("styleCreator.semanticReceiptInvalid"));
+        const measured: AnalysisResult[] = [];
+        for (const input of inputs) {
+          const pixels = await this.pixels(input.bytes);
+          if (pixels.width !== input.width || pixels.height !== input.height)
+            throw new Error(tr("styleCreator.referenceMismatch"));
+          measured.push({
+            id: input.token,
+            type: input.role ?? "general",
+            sha256: input.sha256,
+            metrics: measureStyle(pixels),
+          });
+        }
+        if (!measured.some((r) => r.metrics.visible))
+          throw new Error(tr("styleCreator.noVisiblePixels"));
+        if (
+          cmd.style.findings.length !== measured.length ||
+          measured.some((r, i) => {
+            const finding = cmd.style.findings[i];
+            return (
+              finding.sha256 !== r.sha256 ||
+              JSON.stringify({ ...finding.metrics, warnings: [] }) !==
+                JSON.stringify({ ...r.metrics, warnings: [] })
+            );
+          })
+        )
+          throw new Error(tr("styleCreator.measurementMismatch"));
+        if (
+          p.artDirections.some(
+            (s) => s.name.toLowerCase() === cmd.style.name.toLowerCase(),
+          )
+        )
+          throw new Error(tr("styleCreator.duplicateName"));
+        const newHashes = new Set(
+          inputs
+            .filter((i) => !p.styleAssets.some((a) => a.sha256 === i.sha256))
+            .map((i) => i.sha256),
+        );
+        if (p.styleAssets.length + newHashes.size > 128)
+          throw new Error(tr("errors.mf03e734434"));
+        parsePackJSON(
+          JSON.stringify({
+            format: "laceframe.style",
+            schemaVersion: 1,
+            id: randomUUID(),
+            revision: 1,
+            provenance: {
+              application: "laceframe",
+              note: "Reviewed independent style",
+            },
+            style: cmd.style,
+          }),
+        );
+        const ids: string[] = [];
+        for (const input of inputs) {
+          const image = await this.storeStyleBytes(input.bytes, input.name, p);
+          if (!p.styleAssets.some((a) => a.id === image.id))
+            p.styleAssets.push(image);
+          ids.push(image.id);
+        }
+        const style = structuredClone(cmd.style);
+        style.creator!.createdAt = new Date().toISOString();
+        style.findings = measured.map((r) => ({
+          algorithm: ANALYSIS_VERSION,
+          sha256: r.sha256,
+          metrics: r.metrics,
+        }));
+        const profile = {
+          id: randomUUID(),
+          revision: 1,
+          name: style.name,
+          ...style.legacy,
+          portableStyle: style,
+          styleReferenceIds: ids,
+        };
+        p.artDirections.push(profile);
+        this.archiveStyle(p, profile, false);
+        const references = measured.map((r, i) => ({ ...r, id: ids[i] }));
+        const suggestions: ReturnType<typeof suggestRules> = [];
+        p.styleAnalyses.push({
+          origin: "style-creator",
+          id: randomUUID(),
+          version: ANALYSIS_VERSION,
+          profileId: profile.id,
+          profileRevision: 1,
+          createdAt: new Date().toISOString(),
+          parameters: {
+            ...parameters,
+            comparisonSteps: [...parameters.comparisonSteps],
+          },
+          references,
+          suggestions,
+          edits: {
+            rules: suggestions.map((s) => ({
+              key: s.key,
+              text: s.text,
+              enabled: false,
+            })),
+            ownRules: "",
+            palette: metadata.workingPalette,
+          },
+        });
+        break;
+      }
       case "adoptStyleAnalysis": {
         if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const profile = p.artDirections.find((a) => a.id === cmd.profileId);
@@ -1956,21 +2116,12 @@ export class ProjectService {
             (a) => a.sha256 === source.sha256 && a.format === source.format,
           );
           if (!asset) {
-            const staged = await this.stage(
+            asset = await this.storeStyleBytes(
               bytes,
               `${type}-${source.id.slice(0, 8)}.${source.format}`,
+              p,
             );
-            try {
-              asset = {
-                ...(await this.store("styles", staged.token)),
-                id: randomUUID(),
-                name: staged.name,
-                createdAt: new Date().toISOString(),
-              };
-              p.styleAssets.push(asset);
-            } finally {
-              this.discard(staged.token);
-            }
+            p.styleAssets.push(asset);
           }
           if (!ids.includes(asset.id)) ids.push(asset.id);
         }
@@ -2253,18 +2404,25 @@ export class ProjectService {
       const firstDiscard =
         candidates(p).some((a) => a.discardedAt) &&
         !candidates(before).some((a) => a.discardedAt);
-      if (firstRaster || firstDiscard) {
+      const firstCreator =
+        p.artDirectionRevisions.some((r) => r.portableStyle?.creator) &&
+        !before.artDirectionRevisions.some((r) => r.portableStyle?.creator);
+      if (firstRaster || firstDiscard || firstCreator) {
         this.legacyBytes = await readLimited(
           await safePath(this.directory, "laceframe.json"),
           MAX_MANIFEST_BYTES,
         );
-        this.legacyBackupName = firstDiscard
-          ? "laceframe.v2.pre-candidate-cleanup.backup.json"
-          : "laceframe.v2.pre-raster-review.backup.json";
+        this.legacyBackupName = firstCreator
+          ? "laceframe.v2.pre-style-creator.backup.json"
+          : firstDiscard
+            ? "laceframe.v2.pre-candidate-cleanup.backup.json"
+            : "laceframe.v2.pre-raster-review.backup.json";
       }
     }
     p.updatedAt = new Date().toISOString();
     await this.save(p);
+    if (cmd.type === "createStylePreset")
+      for (const ref of cmd.references) this.styleDrafts.delete(ref.token);
     if (removeFile) {
       const file = await safePath(this.directory, removeFile.file);
       if (
@@ -2750,6 +2908,153 @@ export class ProjectService {
           };
     return { edit, protectedWeights };
   }
+  async stageStyleImages(input: unknown): Promise<StyleDraftImage[]> {
+    const p = this.snapshot().project,
+      request = styleDraftImportSchema.parse(input);
+    if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
+    if (!request.files) throw new Error(tr("styleCreator.noReferences"));
+    if (request.replaceToken && !this.styleDrafts.has(request.replaceToken))
+      throw new Error(tr("styleCreator.draftExpired"));
+    if (
+      request.files.length +
+        this.styleDrafts.size -
+        (request.replaceToken ? 1 : 0) >
+      6
+    )
+      throw new Error(tr("styleCreator.tooMany"));
+    const hashes = new Set(
+      [...this.styleDrafts.values()]
+        .filter((i) => i.image.token !== request.replaceToken)
+        .map((i) => i.image.sha256),
+    );
+    const next: { image: StyleDraftImage; bytes: Buffer }[] = [],
+      errors: string[] = [];
+    for (const file of request.files) {
+      try {
+        const bytes = Buffer.from(file.bytes),
+          info = inspectIdentityImage(bytes),
+          hash = hashBytes(bytes);
+        if (
+          bytes.length > MAX_STYLE_BYTES ||
+          info.width * info.height > MAX_STYLE_PIXELS
+        )
+          throw new Error(tr("styleCreator.imageLimits"));
+        await this.decode(bytes, info.width, info.height, info.format);
+        if (hashes.has(hash))
+          throw new Error(tr("styleCreator.duplicateReference"));
+        hashes.add(hash);
+        next.push({
+          bytes,
+          image: {
+            ...info,
+            token: randomUUID(),
+            name: file.name,
+            sha256: hash,
+            preview: preview(bytes, info.format),
+            known: p.styleAssets.some((a) => a.sha256 === hash),
+          },
+        });
+      } catch (error) {
+        errors.push(
+          `${file.name}: ${error instanceof Error ? error.message : tr("styleCreator.invalidImage")}`,
+        );
+      }
+    }
+    if (errors.length) throw new Error(errors.join("\n"));
+    if (request.replaceToken) this.styleDrafts.delete(request.replaceToken);
+    for (const value of next) this.styleDrafts.set(value.image.token, value);
+    return next.map((i) => ({ ...i.image }));
+  }
+  discardStyleImage(token: string) {
+    this.styleDrafts.delete(z.uuid().parse(token));
+  }
+  styleReferenceBytes(input: unknown) {
+    this.snapshot();
+    return draftReferencesSchema.parse(input).map((ref) => {
+      const value = this.styleDrafts.get(ref.token);
+      if (!value || hashBytes(value.bytes) !== value.image.sha256)
+        throw new Error(tr("styleCreator.draftExpired"));
+      return {
+        ...value.image,
+        role: ref.role,
+        bytes: new Uint8Array(value.bytes),
+      };
+    });
+  }
+  async styleDraftSource(token: string) {
+    const image = this.styleReferenceBytes([{ token, sourceNote: "" }])[0];
+    if (image.width * image.height > MAX_ANALYSIS_PIXELS)
+      throw new Error(tr("styleCreator.analysisLimit"));
+    const pixels = await this.pixels(image.bytes);
+    if (pixels.width !== image.width || pixels.height !== image.height)
+      throw new Error(tr("styleCreator.referenceMismatch"));
+    return {
+      ...pixels,
+      data: new Uint8Array(pixels.data),
+      sha256: image.sha256,
+    };
+  }
+  rememberStyleSemantic(id: string, record: SemanticRecord, projectId: string) {
+    if (this.snapshot().project.id !== projectId)
+      throw new Error(tr("styleCreator.draftExpired"));
+    const parsed = semanticRecordSchema.parse(record);
+    const existing = this.styleSemantics.get(id);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(parsed))
+      throw new Error(tr("styleCreator.semanticReceiptInvalid"));
+    this.styleSemantics.set(z.uuid().parse(id), structuredClone(parsed));
+    if (this.styleSemantics.size > 16)
+      this.styleSemantics.delete(this.styleSemantics.keys().next().value!);
+  }
+  importStyleSemantic(json: string, references: StyleDraftReference[]) {
+    const hashes = this.styleReferenceBytes(references).map((i) => i.sha256);
+    const record: SemanticRecord = {
+      version: "lf-semantic-style-v1",
+      provider: "manual-import",
+      createdAt: new Date().toISOString(),
+      result: parseSemanticJSON(json, hashes),
+    };
+    const receipt = randomUUID();
+    this.rememberStyleSemantic(receipt, record, this.snapshot().project.id);
+    return { receipt, record };
+  }
+  private async storeStyleBytes(bytes: Uint8Array, name: string, p: Project) {
+    const info = inspectIdentityImage(bytes),
+      sha256 = hashBytes(bytes);
+    if (
+      bytes.length > MAX_STYLE_BYTES ||
+      info.width * info.height > MAX_STYLE_PIXELS
+    )
+      throw new Error(tr("styleCreator.imageLimits"));
+    await this.decode(bytes, info.width, info.height, info.format);
+    const existing = p.styleAssets.find((a) => a.sha256 === sha256);
+    if (existing) {
+      await this.verifiedBytes(existing.id);
+      return existing;
+    }
+    await fs.mkdir(await safePath(this.directory, "assets/styles"), {
+      recursive: true,
+    });
+    const relative = assetFile("styles", sha256, info.format),
+      file = await safePath(this.directory, relative);
+    try {
+      await fs.writeFile(file, bytes, { flag: "wx", mode: 0o444 });
+    } catch (error) {
+      if (
+        (error as NodeJS.ErrnoException).code !== "EEXIST" ||
+        !(await readLimited(file, MAX_STYLE_BYTES)).equals(Buffer.from(bytes))
+      )
+        throw new Error(tr("errors.m82282ed9a5"), { cause: error });
+    }
+    return {
+      ...info,
+      id: randomUUID(),
+      file: relative,
+      sha256,
+      name,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
   async analysisSource(id: string) {
     const source = this.qualitySourceOrStyle(id);
     if (source.width * source.height > MAX_ANALYSIS_PIXELS)
@@ -3225,7 +3530,9 @@ export class ProjectService {
     );
     if (hashBytes(bytes) !== image.sha256)
       throw new Error(tr("errors.ma64f97b724"));
-    const info = p.identityAssets.some((a) => a.id === id)
+    const info = [...p.identityAssets, ...p.styleAssets].some(
+      (a) => a.id === id,
+    )
       ? inspectIdentityImage(bytes)
       : inspectImage(bytes);
     if (

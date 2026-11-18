@@ -1,3 +1,4 @@
+import { stylePresetInputSchema } from "./style-creator";
 import { tr } from "./locales/index";
 import { hasOtherAssetReference } from "./asset-retention";
 import { pixelEditInputSchema, MAX_SNAP_PIXELS } from "./pixel-snap";
@@ -213,7 +214,12 @@ const projectObject = z
     styleAssets: z
       .array(
         z
-          .object({ ...imageFields, name: label, createdAt: z.iso.datetime() })
+          .object({
+            ...imageFields,
+            format: z.enum(["png", "webp", "jpg"]),
+            name: label,
+            createdAt: z.iso.datetime(),
+          })
           .strict()
           .refine(
             (a) => a.width * a.height <= MAX_STYLE_PIXELS,
@@ -365,10 +371,10 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
             ["snap", "spritefusion"].includes(q.pixelEdit.edit.kind) ||
           Boolean(
             q.mask ||
-              q.profile ||
-              q.relighting ||
-              q.colorCorrection ||
-              q.smartCutout,
+            q.profile ||
+            q.relighting ||
+            q.colorCorrection ||
+            q.smartCutout,
           ) ||
           (q.pixelEdit.edit.kind !== "spritefusion" &&
             (source?.width !== q.width || source?.height !== q.height)) ||
@@ -652,18 +658,33 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     );
     try {
       if (
+        analysis.origin !== "style-creator" &&
         JSON.stringify(suggestRules(analysis.references)) !==
-        JSON.stringify(analysis.suggestions)
+          JSON.stringify(analysis.suggestions)
       )
         fail("Invalid generated analysis rules");
       const fields = adoptedRules(analysis.suggestions, analysis.edits);
       if (
+        analysis.origin !== "style-creator" &&
         savedRevision &&
         Object.entries(fields).some(
           ([key, value]) => savedRevision[key as keyof typeof fields] !== value,
         )
       )
         fail("Analysis rules do not match saved style revision");
+      if (
+        analysis.origin === "style-creator" &&
+        (!savedRevision?.portableStyle?.creator ||
+          JSON.stringify(savedRevision.portableStyle.findings) !==
+            JSON.stringify(
+              analysis.references.map((r) => ({
+                algorithm: "rgba8-style-v1",
+                sha256: r.sha256,
+                metrics: r.metrics,
+              })),
+            ))
+      )
+        fail("Invalid creator analysis provenance");
       const expected = [...new Set(analysis.references.map((r) => r.sha256))];
       const actual = savedRevision?.styleReferenceIds?.map(
         (id) => p.styleAssets.find((a) => a.id === id)?.sha256,
@@ -1057,9 +1078,10 @@ export const assetFile = (
     | "relight-masks"
     | "color-masks",
   hash: string,
-  format: "png" | "webp",
+  format: "png" | "webp" | "jpg",
 ) => `assets/${kind}/${hash}.${format}`;
 export const commandSchema = z.discriminatedUnion("type", [
+  stylePresetInputSchema.extend({ type: z.literal("createStylePreset") }),
   z
     .object({
       type: z.literal("importPack"),
