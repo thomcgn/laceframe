@@ -8,10 +8,9 @@
   "private": true,
   "main": ".vite/build/main.cjs",
   "scripts": {
-    "check:fast": "node scripts/quality-runner.cjs fast",
-    "check:targeted": "node scripts/quality-runner.cjs targeted",
+    "check:dev": "node scripts/quality-runner.cjs dev",
+    "check:smoke": "node scripts/quality-runner.cjs smoke",
     "check:full": "node scripts/quality-runner.cjs full",
-    "classify:changes": "node scripts/quality-classifier.cjs --json",
     "start": "electron-forge start",
     "build": "electron-forge package",
     "make": "electron-forge make",

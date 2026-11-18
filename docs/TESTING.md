@@ -1,63 +1,54 @@
 # Teststrategie
 
-LF-00 gilt für alle Phasen. Tatsächliche Regeln: `scripts/quality-classifier.cjs`, `quality-plan.cjs`, `quality-runner.cjs`, `quality-build.cjs`, `quality-gate.cjs` und `.github/workflows/quality.yml`. Testergebnisse gehören in den zugehörigen PR, getrennt nach lokal/CI und echter Anwendung/Protokoll-Fixture. Historische Fehlerprotokolle bleiben in GitHub Actions und PRs.
+DEV-01 ersetzt die automatische LF-00-Risikoeskalation. Die unveröffentlichte Entwicklungsanwendung verwendet einen schnellen Standardcheck; Desktop-Regressionen bleiben bewusst auswählbar. Maßgeblich sind `scripts/quality-runner.cjs`, `quality-build.cjs` und `.github/workflows/quality.yml`. Ergebnisse und Messungen gehören in den PR, keine neuen Prüfberichte.
 
-## Profile
+## Entwicklung und PR
 
-| Befehl | Umfang |
+Während der Implementierung nur unmittelbar betroffene Tests, etwa `npx vitest run tests/color-consistency.test.ts`. Typecheck nach Bedarf, Lint gezielt (`npx eslint <dateien> --max-warnings 0`) oder vor größeren Meilensteinen. Keine volle Unit-Suite nach jeder Änderung, keine automatische Paketierung und kein eigenmächtiger FULL-Lauf.
+
+Vor dem PR einmal `npm run check:dev`. Nach PR-Erstellung den GitHub-Status prüfen; gleiche lokale Prüfungen ohne neue Änderung, Fehler oder konkrete Unsicherheit nicht wiederholen. Änderungen an IPC/Dateizugriff/Persistenz benötigen passende Sicherheits-/Migrations-/Kompatibilitätstests; Bildalgorithmen benötigen gezielte Pixel-/Alpha-/Schutzbereichstests. Diese Pflicht bleibt unabhängig vom schlanken PR-Workflow. Assertions nicht abschwächen und Fehler nicht ignorieren.
+
+| Befehl | Tatsächlicher Umfang |
 | --- | --- |
-| `npm run classify:changes` | Read-only Git-Diff mit Risiko, Gründen und Integrationsgruppen; zuerst aktuelle Remote-Refs holen. |
-| `npm run check:fast` | Typecheck, vollständiger Lint ohne Warnungen, alle Vitest-Tests mit zwei Workern, Git-/Index-Whitespacechecks. Kein Desktop und keine Paketierung. |
-| `npm run check:targeted` | Für MEDIUM die betroffenen Integrationen dedupliziert, bei Bedarf einmal paketieren. FAST vorher separat ausführen. HIGH eskaliert automatisch zu FULL. LOW hat keine erforderlichen Desktopchecks. |
-| `npm run check:full` | FAST einmal, Paketierung, vollständiges `npm run test:desktop` und `npm run test:desktop:native`, sequenziell. |
+| `npm run check:dev` | Typecheck, alle Vitest-Tests mit zwei Workern, Git-Diff-/Index-Whitespacecheck. Kein Lint, Build, Desktop oder Native. |
+| `npm run lint` | Eigenständiger vollständiger Lint ohne Warnungen. |
+| `npm run check:smoke -- <workflow>` | Genau ein ausdrücklich gewählter Desktop-Workflow; vorher gültiges Build wiederverwenden oder einmal paketieren. Keine automatische zusätzliche Suite. |
+| `npm run check:full` | Typecheck, vollständiger Lint, alle Units, Whitespacechecks, ein verifiziertes Build, alle bisherigen Desktop- und Native-Smokes sequenziell. Nur manuell oder ausdrücklich beauftragt. |
 
-Während Implementierung betroffene Unit-/Integrationstests, Typecheck und gezielten Lint verwenden. Vor PR FAST, Klassifizierung und risikogemäße Integrationen. Vor Merge vollständige vorgeschriebene Coverage/Quality Gate; keine unnötigen wiederholten lokalen Vollregressionen. GitHub Actions ist maßgeblich, wenn verfügbar; ohne geeignete CI alle erforderlichen Prüfungen lokal durchführen. Nach Fehlern Ursache beheben und notwendige Checks erneut ausführen, nicht unverändert wiederholen, bis zufällig grün entsteht. Tests/Erwartungswerte nicht abschwächen.
+Die bisherigen `classify:changes`, `check:fast` und `check:targeted` entfallen; alte README-/PR-Beispiele dazu sind durch diese Befehle ersetzt. Es gibt keine LOW/MEDIUM/HIGH-Klassifizierung, automatische Gruppenwahl oder Eskalation mehr. Unbekannte Smoke-Namen und fehlende Auswahl sind Fehler, kein FULL-Fallback. Lokal prüft der Diff-Check gegen HEAD und den Index; CI prüft zusätzlich alle committed PR-Änderungen gegen die tatsächliche Base-SHA (`QUALITY_DIFF_BASE`).
 
-## Risikozuordnung
+## Desktop gezielt auswählen
 
-Höchstes Risiko gewinnt. Klassifizierung verwendet tatsächliche Commit-/Dateiänderungen, nicht Labels/Titel/Branchnamen. Lokal: Merge-Base von `origin/main` und HEAD plus Index, unstaged und nicht ignorierte neue Dateien. PR: tatsächliche Base-/Head-SHAs. Manuell: immer HIGH/FULL. Rename wird als Löschen/Hinzufügen bewertet. Ungültige SHAs, Konflikte oder Git-Fehler brechen ab, kein FAST-Fallback.
-
-| Risiko | Änderungen | Erforderlich |
-| --- | --- | --- |
-| LOW | Markdown außerhalb kritischer Verzeichnisse, Dokumentationsbilder, Renderer-CSS/Icons, LICENSE | FAST; visuelle Kontrolle bei Darstellungsänderungen zusätzlich sinnvoll. |
-| MEDIUM | Bekannte Renderer-React-Komponenten, Navigation/Zustand | FAST plus ausgewählte Integrationen. |
-| HIGH | Main/Preload/Shared, Worker, bekannte Masken-/Alpha-/Lichtverarbeitung | FULL einschließlich Sicherheits-/Persistenzregression. |
-| HIGH | Tests, Skripte, CI, Abhängigkeiten/Locks/Buildkonfiguration oder unbekannte Pfade | FULL; Vertrauensgrenze der Prüfungen/Builds. |
-
-Kritische Verzeichnisse werden zuerst geprüft, auch bei `.md`. Allgemeine React-Komponenten wählen konservativ alle Gruppen. Sicherheitskritische Änderungen nicht unter Hinweis auf FAST von ihrer Regression ausnehmen. Keine Skip-/Level-/Gruppen-Overrides; `QUALITY_RISK_FLOOR` kann nur erhöhen.
-
-| Gruppe | Desktop-Skripte unter `scripts/` |
+| Workflow | Einzelnes Skript unter `scripts/` |
 | --- | --- |
 | `creator` | `creator-smoke.cjs` |
-| `expressions` | `color-consistency-smoke.cjs`, `desktop-smoke.cjs`, `expression-designer-smoke.cjs`, `native-smoke.cjs` |
-| `art-direction` | `style-analysis-smoke.cjs`, `native-smoke.cjs` |
-| `cutout` | `quality-smoke.cjs`, `smart-cutout-smoke.cjs`, `cutout-stability-smoke.cjs`, `native-smoke.cjs` |
-| `relighting` | `relighting-smoke.cjs`, `cutout-stability-smoke.cjs` |
-| `native` | `native-smoke.cjs`, `creator-smoke.cjs` |
-| `persistence` | Color, Desktop, Expression Designer, Quality, Relighting, Style Analysis, Smart Cutout, Cutout Stability und beide Native-Skripte |
+| `expressions` | `expression-designer-smoke.cjs` |
+| `color` | `color-consistency-smoke.cjs` |
+| `cutout` | `smart-cutout-smoke.cjs` |
+| `relighting` | `relighting-smoke.cjs` |
+| `desktop` | `desktop-smoke.cjs` (manueller Create-/Projektworkflow) |
+| `quality` | `quality-smoke.cjs` |
+| `cutout-stability` | `cutout-stability-smoke.cjs` |
+| `style` | `style-analysis-smoke.cjs` |
+| `packs` | `packs-smoke.cjs` |
+| `native` | `native-smoke.cjs` (deterministischer App-Server) |
 
-`packs-smoke.cjs` kommt bei Expressions/Art Direction/Persistence hinzu, solange vorhanden. Doppelte Skripte laufen nur einmal. CharacterCreator wählt Creator+Native, ExpressionDesigner Expressions, CreateView Expressions+Native, Stilkomponenten Art Direction, MasterApproval/MasterHistory/AssetLibrary Creator+Expressions; allgemeine Komponenten alle Gruppen. HIGH geht unabhängig davon über FULL. Maßgeblich bleiben Implementierung und Inventartests der Routing-Suite.
+Beispiel: `npm run check:smoke -- creator`. Weitere Workflows bei Bedarf einzeln aufrufen. Alle elf vorhandenen GUI-Skripte und alle fachlichen Unit-/Integrationstests bleiben erhalten; ausschließlich Tests der entfernten Routing-/Gate-Policy werden durch Tests der neuen Profile, CLI, CI-Verzweigung, Fehlerweitergabe und sicheren Build-Wiederverwendung ersetzt. `npm run test:desktop` und `npm run test:desktop:native` bleiben als vollständige Suites verfügbar. Dev-Smoke: separate Instanz mit `npm run start -- -- --remote-debugging-port=9232`, dann `npm run test:dev`.
 
-## Ausführung und Artefakte
+`npm ci` mit Lockfile; Desktop-Smokes benötigen Linux x64 mit grafischer Sitzung oder Xvfb und Electron-Systembibliotheken. Bestehende Skripte starten `out/Laceframe-linux-x64/laceframe`. `out/.quality-build.json` prüft Runtime-/Buildinputs, Paket-/Lockdaten einschließlich installiertem Lockfile, Plattform/Architektur/Node-Version und SHA-256 von Binary/app.asar. Docs, Tests, CI, Testskripte und `.vscode` sind keine Runtimeinputs. Forge-/Vite-Konfiguration, Quellcode und Abhängigkeiten bleiben enthalten. Fehlende, veränderte oder symlinkbasierte Artefakte werden nicht wiederverwendet; keine Wiederverwendung fremder PR-Builds. Änderungen an installierten Abhängigkeiten außerhalb des Lockfiles sind nicht unterstützt.
 
-`npm ci` mit Lockfile; Linux-Desktop oder Xvfb und benötigte Electron-Bibliotheken. Desktop-Skripte lesen das paketierte Linux-Binary unter `out/Laceframe-linux-x64/laceframe`; sie paketieren nicht pro Skript neu. Bestehende `npm run build`, `npm run test:desktop`, `npm run test:desktop:native` bleiben direkt verfügbar. Dev-Smoke: separate Instanz mit `npm run start -- -- --remote-debugging-port=9232`, dann `npm run test:dev`.
+`artifacts/quality/<profil>.json` enthält tatsächlich ausgeführte Befehle, monotone Dauer, Exitcodes, Status und gebaut/wiederverwendet/nicht erforderlich. Fehler stoppen die Ausführung; Abbruch wird weitergereicht. Nicht ausgeführte Desktoptests gelten nicht als bestanden. Befehle haben 20 Minuten Timeout. Speicherintensive Prüfungen sequenziell; kein automatischer mehrfacher Build.
 
-Speicherintensive Profile sequenziell. Lokale Wiederverwendung nur mit gültigem `out/.quality-build.json`: Hashes der tatsächlichen Runtime-/Buildinputs, Lock-/Paketdaten, Plattform/Architektur/Node-Version sowie Binary und app.asar müssen stimmen. Docs, Tests und `.vscode` sind keine Runtimeinputs. Veränderte, fehlende, unsichere oder veraltete Artefakte nicht als validiert ausgeben; CI übernimmt keine Buildoutputs aus anderen PRs. Dependencyänderungen außerhalb des Lockfiles sind nicht unterstützt.
+## GitHub Actions und Grenzen
 
-`artifacts/quality/` enthält tatsächlich ausgeführte Befehle, monotone Dauer, Exitcodes, effektives Profil und gebaut/wiederverwendet/nicht erforderlich. Fehler stoppen das Profil; Abbruch wird weitergereicht, kein Pass für unterbrochene Prüfungen. Ein LOW-Desktopcheck ist „nicht erforderlich“, nicht „bestanden“. Befehle haben 20 Minuten Timeout; CI-Checks 45 Minuten. Neue Benchmarks müssen Host/Inhalte und Messgrenzen nennen; Einzelprozess-RSS ist kein addierbarer Gesamt-RAM-Verbrauch.
+Ein **pull_request gegen main** startet genau einen Job mit dem stabilen Namen **`quality-gate`**: Node 24, `npm ci`, `check:dev`, Prüfung des abgeschlossenen Profilnachweises. Kein automatischer Lint, Electron-Download/Build/Start, Playwright-Browserdownload, Desktop-Setup, Xvfb oder Native-Smoke. Die npm-Dev-Abhängigkeiten bleiben installiert; nur die für Units unnötigen Browser-/Electron-Binärdownloads werden ausgelassen. Gepinnte Actions, read-only Contents, npm-Cache und Abbruch überholter Läufe bleiben bestehen. Ein fehlgeschlagener/abgebrochener Check erzeugt keinen erfolgreichen Job; kein `continue-on-error`. Profile/Diagnosen werden sieben Tage aufbewahrt.
 
-Die installierte Playwright-Electron-Instrumentierung fügt unter Linux standardmäßig `--no-sandbox` hinzu. Die App selbst deaktiviert ihre Sandbox nicht; Context Isolation, Node-Verbot, typisiertes Preload und IPC-Absenderprüfungen bleiben auch im Test Gegenstand der Assertions. Ein instrumentierter Desktop-Smoke ist deshalb kein alleiniger Nachweis des normalen OS-Sandbox-Starts. Den normalen Entwicklungsstart getrennt mit dem Dev-Smoke prüfen, wenn diese Grenze betroffen ist.
+**workflow_dispatch** führt ausdrücklich FULL im selben Job aus, einschließlich Desktop-Systemabhängigkeiten, Xvfb/Openbox/D-Bus und der bisherigen elf Smokes. Kein `push`-Trigger auf main: nach Merge läuft dieselbe Regression nicht erneut. Ohne Merge Queue wird der endgültige Merge-Commit nicht separat geprüft. PR-Checks prüfen den jeweiligen PR-Merge-Ref; spätere Baseänderungen können den finalen Merge verändern. Kein `merge_group` konfiguriert.
 
-Tests verwenden ausschließlich synthetische Bilder und temporäre Projekte. Native Smokes injizieren den ausdrücklich bezeichneten `tests/support/fake-codex.mjs` über ihren Test-PATH in die echte IPC-/Prozess-/Importstrecke. Das ist kein Produktionsfallback und beweist keine Modellqualität. Native Dialogantworten werden in GUI-Tests kontrolliert geliefert; Dateiverarbeitung/Validierung und Renderer laufen tatsächlich. OS-Strg-/Shift-Dialoggesten oder neue Live-Generierung werden dadurch nicht bewiesen. Keine privaten Portraits, Credentials, Live-ImageGen-Aufrufe oder bezahlten API-Anfragen.
+Repository-Audit 18.11.2026: `main` meldet `protected: false`. Der stabile Statuscheck ist vorhanden, wird aber ohne Branchschutz/Ruleset nicht automatisch erzwungen. Der Besitzer muss PR-Pflicht und `quality-gate` konfigurieren; Codex ändert Schutzregeln nicht eigenmächtig. Der schnelle Check ersetzt keine manuell gewählte vollständige GUI-Regression. Linux ist geprüft, Windows/macOS bleiben offen.
 
-Die Studio-Smokes navigieren über die tatsächlichen vier Schritte, statt versteckte Felder im DOM freizuschalten. Zusätzliche UX-06-Abdeckung prüft horizontale Navigation, Tastatur, erhaltene Anweisungen/Freigabenotizen/Bestätigungen, Projektwechsel-Warnung und unveränderte Projektbytes bei 960×720, 1280×800 und 1920×1080. Farbtests prüfen genau eine sichtbare Editorfläche, inerten App-Hintergrund, erhaltene Elternentwürfe und Kameraänderungen ohne Pixeländerung; Relighting prüft bestätigtes und abgebrochenes Verwerfen. Native-/Creator-Smokes behalten Prozess-, Referenz-, Masken-, Freigabe- und Neustartassertions.
+Die installierte Playwright-Electron-Instrumentierung ergänzt unter Linux `--no-sandbox`; Produkt-Sandbox, Context Isolation, Node-Verbot und IPC-Assertions bleiben erhalten. Bei Änderungen dieser Grenze zusätzlich normalen OS-Sandbox-Start über Dev-Smoke prüfen. Tests verwenden synthetische Bilder/temporäre Projekte. Native-Smokes injizieren das ausdrücklich bezeichnete `tests/support/fake-codex.mjs` über Test-PATH in die echte Prozess-/IPC-/Importstrecke; kein Produktionsfallback, kein Modellqualitätsnachweis. Keine privaten Portraits, Credentials, Live-ImageGen- oder bezahlten API-Aufrufe.
 
-## GitHub Actions und Merge-Grenze
+## Zeitmessung
 
-Quality läuft bei **pull_request gegen main** und **workflow_dispatch** (FULL). Kein `push`-Trigger auf main: ein geprüfter Merge startet nicht erneut dieselbe Regression. Ubuntu 24.04/Node 24, `npm ci`, gepinnte Actions, read-only Contents, npm-Cache und Abbruch überholter Läufe. Desktopabhängigkeiten/isoliertes Xvfb/Openbox/D-Bus nur bei Bedarf; der Runner setzt die User-Namespace-Voraussetzung für Sandbox-fähige Prozesse. Diagnosen/Profile werden sieben Tage als Artefakte gespeichert.
-
-CI lädt die Risikopolicy aus dem tatsächlichen Base-Commit. Fehlende historische Policy erzwingt FULL; ungültige Base ist ein Fehler. Aktueller Runner darf das Baseline-Risiko nicht senken. Immer laufendes **`quality-gate`** verlangt erfolgreiche Klassifizierung, erfolgreiche Checks und expliziten validierten Profilnachweis ausreichender Stärke. Fehlgeschlagen, abgebrochen, übersprungen, fehlend oder zu schwach bedeutet Gate-Fehler. Bösartige Workflowänderungen sind zusätzlich durch Review/Repositoryregeln zu verhindern.
-
-**Repository-Audit 18.11.2026:** `main` meldet `protected: false`. Das vorhandene Gate ist damit nicht automatisch ein erzwungener Merge-Schutz. Repositorybesitzer muss PR-Pflicht und erfolgreichen Statuscheck `quality-gate` in Branchschutz/Ruleset verlangen, gegebenenfalls aktuelle Base und Bypassschutz. Schutzregeln werden durch Codex nicht eigenmächtig verändert.
-
-Ohne Merge Queue wird der endgültige Merge-Commit nicht separat getestet. Der PR-Workflow prüft den damaligen PR-Merge-Ref; spätere Baseänderungen können den finalen Merge ändern. Aktuelle Branchanforderung reduziert die Lücke. `merge_group` ist nicht konfiguriert. Manuelle FULL-Regression bleibt möglich, ist aber keine automatische Post-Merge-Abdeckung. Linux ist die geprüfte Plattform; Windows/macOS-Eingabe, Paketierung/Signierung bleiben offen.
+Vorher/Nachher im PR mit Host/Node-Version, Commit, tatsächlichen Befehlen und Messgrenzen berichten: lokale Standardzeit aus den summierten monotonen Befehlszeiten; CI-Wandzeit vom Start bis Ende und Jobdauer separat; Anzahl Prüfkommandos, Paketierungen und Electron-Starts. Historischen letzten erfolgreichen CI-Lauf als Baseline nutzen, keine zusätzliche FULL-Regressionsmessung auslösen. Einzellauf, veränderte Infrastrukturtests und Cache-/Runnerunterschiede sind kein kontrollierter Performancebenchmark. Der schnelle PR-Workflow spart GUI-Coverage bewusst ein; keine beschleunigte identische Vollregression behaupten.
