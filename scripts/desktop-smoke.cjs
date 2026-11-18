@@ -25,6 +25,7 @@ const { createHash } = require("node:crypto");
       env,
     });
     const page = await app.firstWindow();
+    await page.getByRole("combobox", {name:/^(Language|Sprache)$/}).selectOption("de");
     page.on("pageerror", (error) => rendererErrors.push(error.message));
     await expect(
       page.getByRole("button", { name: "Neues Projekt", exact: true }),
@@ -90,7 +91,9 @@ const { createHash } = require("node:crypto");
       bridge: [
         "analysisSource",
         "cancelGeneration",
+        "cancelStyleAnalysis",
         "checkCodex",
+        "checkStyleAnalysis",
         "chooseImage",
         "choosePack",
         "closeProject",
@@ -102,10 +105,13 @@ const { createHash } = require("node:crypto");
         "cutoutMask",
         "cutoutSource",
         "discardImage",
+        "discardStyleImage",
         "exportAsset",
         "exportPack",
         "generationStatus",
         "importIdentityImages",
+        "importStyleImages",
+        "importStyleSemantic",
         "openChatGPT",
         "openProject",
         "pixelEditSource",
@@ -121,6 +127,9 @@ const { createHash } = require("node:crypto");
         "smartCutoutRecipe",
         "stageImage",
         "startGeneration",
+        "startStyleAnalysis",
+        "styleAnalysisStatus",
+        "styleDraftSource",
       ],
     });
     const bytes = await app.evaluate(({ nativeImage }) => [
@@ -683,6 +692,7 @@ const { createHash } = require("node:crypto");
   } catch (error) {
     if (app) {
       const page = await app.firstWindow();
+    await page.getByRole("combobox", {name:/^(Language|Sprache)$/}).selectOption("de");
       await fs.mkdir("artifacts", { recursive: true });
       await page.screenshot({
         path: "artifacts/desktop-failure.png",

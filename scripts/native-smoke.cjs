@@ -42,6 +42,7 @@ const path = require("node:path");
       env,
     });
     let page = await app.firstWindow();
+    await page.getByRole("combobox", {name:/^(Language|Sprache)$/}).selectOption("de");
     page.setDefaultTimeout(15000);
     page.on("pageerror", (error) => errors.push(error.message));
     await expect(
@@ -140,6 +141,7 @@ const path = require("node:path");
     ).toContainText("Codex bereit");
     // Exercise actual style/profile UI before the explicit fixture generation.
     await nav(page, "Art Direction");
+    await page.getByRole("button", {name:"Stildetails",exact:true}).click();
     await field(page, "Stilname", { exact: true }).fill("Shared Noir");
     await field(
       page,
@@ -564,6 +566,7 @@ const path = require("node:path");
     expect((await manifest()).attempts[3].execution.status).toBe("completed");
     // Editing style creates a new revision without rewriting saved attempts.
     await nav(page, "Art Direction");
+    await page.getByRole("button", {name:"Stildetails",exact:true}).click();
     const historical = (await manifest()).attempts;
     await field(
       page,
@@ -1165,6 +1168,7 @@ const path = require("node:path");
       env,
     });
     page = await app.firstWindow();
+    await page.getByRole("combobox", {name:/^(Language|Sprache)$/}).selectOption("de");
     page.setDefaultTimeout(15000);
     page.on("pageerror", (error) => errors.push(error.message));
     await app.evaluate(({ dialog }, directory) => {

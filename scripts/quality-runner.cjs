@@ -82,6 +82,7 @@ async function runProfile(profile, options = {}) {
     quality: "quality-smoke.cjs",
     "cutout-stability": "cutout-stability-smoke.cjs",
     style: "style-analysis-smoke.cjs",
+    "style-creator": "style-creator-smoke.cjs",
     packs: "packs-smoke.cjs",
     native: "native-smoke.cjs",
   };

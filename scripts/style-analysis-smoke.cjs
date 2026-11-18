@@ -5,7 +5,7 @@ const fs = require("node:fs/promises"),
   os = require("node:os");
 const { PNG } = require("pngjs");
 const { createHash } = require("node:crypto");
-const { nav } = require("./smoke-ui.cjs");
+const { nav, studioExpert } = require("./smoke-ui.cjs");
 (async () => {
   const root = await fs.mkdtemp(
       path.join(os.tmpdir(), "laceframe-analysis-ui-"),
@@ -52,6 +52,7 @@ const { nav } = require("./smoke-ui.cjs");
       env,
     });
     page = await app.firstWindow();
+    await page.getByRole("combobox", {name:/^(Language|Sprache)$/}).selectOption("de");
     page.setDefaultTimeout(20000);
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("worker", (w) => {
@@ -128,11 +129,12 @@ const { nav } = require("./smoke-ui.cjs");
       page.getByRole("heading", { name: "Synthetic Ada Test", exact: true }),
     ).toBeVisible();
     await nav(page, "Art Direction");
+    await page.getByRole("button", {name:"Stildetails",exact:true}).click();
     await page
       .getByLabel("Stilname", { exact: true })
       .fill("Measured Game Style");
     await page
-      .getByLabel("Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)", {
+      .getByLabel("Darstellung-Regeln (ohne Charakter- oder Outfitmerkmale)", {
         exact: true,
       })
       .fill("Original manual contours");
@@ -328,6 +330,7 @@ const { nav } = require("./smoke-ui.cjs");
       page.getByRole("heading", { name: "Synthetic Ada Test", exact: true }),
     ).toBeVisible();
     await nav(page, "Art Direction");
+    await page.getByRole("button", {name:"Stildetails",exact:true}).click();
     await a()
       .getByLabel("Historische Analyse", { exact: true })
       .selectOption(record.id);
@@ -345,6 +348,7 @@ const { nav } = require("./smoke-ui.cjs");
     const expression = page.locator(
       '.studio-editor[data-operation="expression"]:visible',
     );
+    await studioExpert(page);
     await expect(
       expression.getByLabel("Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/Manually reviewed graphic clusters/);
@@ -373,12 +377,14 @@ const { nav } = require("./smoke-ui.cjs");
       creator.getByAltText("Identität 1", { exact: true }),
     ).toBeVisible();
     await creator
-      .getByLabel("Creator Outfit", { exact: true })
+      .getByLabel("Figurenerstellung Outfit", { exact: true })
       .fill("Independent blue coat, no borrowed clothing.");
+    await studioExpert(page);
     await expect(
       creator.getByLabel("Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/Manually reviewed graphic clusters/);
     await nav(page, "Art Direction");
+    await page.getByRole("button", {name:"Stildetails",exact:true}).click();
     // Actual worker performance on maximum image, bounded transferred RGBA; no images saved.
     const performance = await page.evaluate(async (url) => {
       const worker = new window.Worker(url, { type: "module" });

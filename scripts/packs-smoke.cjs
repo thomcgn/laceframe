@@ -33,6 +33,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       env,
     });
     page = await app.firstWindow();
+    await page.getByRole("combobox", {name:/^(Language|Sprache)$/}).selectOption("de");
     page.on("pageerror", (e) => errors.push(e.message));
     await expect(
       page.getByRole("button", { name: "Neues Projekt", exact: true }),
@@ -61,6 +62,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     await launch();
     await create(first, "Pack source synthetic");
     await nav(page, "Art Direction");
+    await page.getByRole("button", {name:"Stildetails",exact:true}).click();
     await field(page, "Stilname", { exact: true }).fill(
       "Synthetic legacy game style",
     );
@@ -147,10 +149,10 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       /black leather jacket|selfie|Neutral expression/,
     );
     await page
-      .getByText("Strukturierte Rendering-Regeln bearbeiten", { exact: true })
+      .getByText("Strukturierte Darstellung-Regeln bearbeiten", { exact: true })
       .click();
     await page
-      .getByLabel("Material-Rendering", { exact: true })
+      .getByLabel("Material-Darstellung", { exact: true })
       .fill("Render leather as grouped highlights");
     await expect(
       page.getByRole("button", {
@@ -165,10 +167,10 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       })
       .click();
     await expect(
-      page.getByLabel("Material-Rendering", { exact: true }),
+      page.getByLabel("Material-Darstellung", { exact: true }),
     ).toHaveValue("");
     await page
-      .getByLabel("Material-Rendering", { exact: true })
+      .getByLabel("Material-Darstellung", { exact: true })
       .fill("Render leather as grouped highlights");
     await page
       .getByRole("button", {
@@ -267,6 +269,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       .poll(async () => (await manifest(second)).masters.length)
       .toBe(1);
     await nav(page, "Art Direction");
+    await page.getByRole("button", {name:"Stildetails",exact:true}).click();
     const before = await fs.readFile(path.join(second, "laceframe.json"));
     const bad = path.join(root, "invalid.json");
     await fs.writeFile(
