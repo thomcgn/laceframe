@@ -47,7 +47,12 @@ export function MaskEditor({
   initialWeights?: Uint8Array;
   initialName?: string;
   recipeId?: string;
-  contextLabel?: { title: string; description: string; saveLabel: string };
+  contextLabel?: {
+    title: string;
+    description: string;
+    saveLabel: string;
+    readOnlyName?: boolean;
+  };
   mask?: Mask;
   onSave: (
     weights: Uint8Array,
@@ -968,6 +973,7 @@ export function MaskEditor({
                 Name
                 <input
                   aria-label="Maskenname"
+                  readOnly={contextLabel?.readOnlyName}
                   value={name}
                   maxLength={120}
                   onChange={(e) => {

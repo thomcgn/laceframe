@@ -49,9 +49,16 @@ const { nav } = require("./smoke-ui.cjs");
       }
     return PNG.sync.write(p);
   };
-  async function paintMask(name) {
+  async function paintMask(name, rename) {
     const editor = page.getByRole("dialog", { name, exact: true });
     await expect(editor).toBeVisible();
+    if (rename) {
+      await editor.locator("summary").filter({ hasText: "Erweitert" }).click();
+      await editor.getByLabel("Maskenname", { exact: true }).fill(rename);
+    } else
+      await expect(
+        editor.getByLabel("Maskenname", { exact: true }),
+      ).toHaveAttribute("readonly", "");
     const canvas = editor.getByLabel("Maskenzeichenfläche", { exact: true });
     await expect(
       editor.getByRole("button", {
@@ -145,7 +152,7 @@ const { nav } = require("./smoke-ui.cjs");
     await dialog
       .getByRole("button", { name: "Haare / Bart zuweisen", exact: true })
       .click();
-    await paintMask("Farbregion");
+    await paintMask("Farbregion", "Manuell zugewiesene Haare");
     await dialog
       .getByRole("button", {
         name: "Masterpalette als neue Revision speichern",
@@ -186,7 +193,9 @@ const { nav } = require("./smoke-ui.cjs");
         .evaluate((c) => [
           ...c.getContext("2d").getImageData(0, 0, c.width, c.height).data,
         ]);
-    await expect.poll(preview).not.toEqual([...PNG.sync.read(Buffer.from(input)).data]);
+    await expect
+      .poll(preview)
+      .not.toEqual([...PNG.sync.read(Buffer.from(input)).data]);
     const corrected = await preview();
     await dialog
       .getByRole("button", { name: "Farbe rückgängig", exact: true })
@@ -226,6 +235,9 @@ const { nav } = require("./smoke-ui.cjs");
     await expect(dialog).not.toBeVisible();
     const after = await read(),
       q = after.qualityAssets.at(-1);
+    expect(after.masterPalettes[0].regions[0].name).toBe(
+      "Manuell zugewiesene Haare",
+    );
     expect(q.operation).toBe("color-correction");
     expect(q.status).toBe("candidate");
     expect([
@@ -338,7 +350,12 @@ const { nav } = require("./smoke-ui.cjs");
     await app?.close();
   }
 })().catch((e) => {
-  console.error(String(e.message).slice(0,1500));
-  console.error(e.stack?.split("\n").filter(l=>l.trim().startsWith("at ")).join("\n"));
+  console.error(String(e.message).slice(0, 1500));
+  console.error(
+    e.stack
+      ?.split("\n")
+      .filter((l) => l.trim().startsWith("at "))
+      .join("\n"),
+  );
   process.exitCode = 1;
 });

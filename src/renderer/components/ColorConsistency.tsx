@@ -383,7 +383,7 @@ function ColorEditor({
         tabIndex={-1}
         ref={modal}
         onKeyDown={(e) => {
-          if (e.target instanceof Element && e.target.closest(".mask-dialog"))
+          if (e.target instanceof Element && e.target.closest(".mask-editor"))
             return;
           if (e.key === "Escape" && !mask) {
             e.preventDefault();
@@ -864,6 +864,7 @@ function ColorEditor({
                   ? "Weiß oder Grau schützt den Originalpixel vollständig vor Farbkorrektur. Schwarz lässt Korrekturen zu."
                   : "Weiß wählt Pixel für die regionale Farbprüfung und Korrektur aus. Schwarz lässt sie unverändert. Keine automatische Haar-/Hauterkennung.",
               saveLabel: "In Farbentwurf übernehmen",
+              readOnlyName: mask.kind !== "master",
             }}
             master={
               mask.kind === "master"
@@ -873,7 +874,9 @@ function ColorEditor({
             initialName={
               mask.kind === "protected"
                 ? "Geschützte Pixel (weiß schützt)"
-                : "Farbregion (weiß wählt aus)"
+                : (masterRegions.find((r) => r.id === mask.id)?.name ??
+                  refRegion?.name ??
+                  "Farbregion")
             }
             initialWeights={
               mask.kind === "master"
@@ -884,12 +887,12 @@ function ColorEditor({
                       ?.weights
             }
             onClose={() => setMask(undefined)}
-            onSave={async (weights) => {
+            onSave={async (weights, name) => {
               if (mask.kind === "master") {
                 setMasterRegions((old) =>
                   old.map((r) =>
                     r.id === mask.id
-                      ? { ...r, weights: new Uint8Array(weights) }
+                      ? { ...r, name, weights: new Uint8Array(weights) }
                       : r,
                   ),
                 );
