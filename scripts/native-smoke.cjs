@@ -220,7 +220,7 @@ const path = require("node:path");
       image(page, "Stil 2 · style-b.webp", { exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("button", { name: "Stilreferenz 1 entfernen", exact: true })
+      .getByRole("button", { name: /^Stilreferenz\s*1 entfernen$/ })
       .click();
     await expect(
       image(page, "Stil 1 · style-b.webp", { exact: true }),
@@ -519,6 +519,7 @@ const path = require("node:path");
     await expect(
       page.getByRole("button", { name: "Generierung abbrechen", exact: true }),
     ).toBeVisible();
+    await expect(generate).toBeDisabled();
     await nav(page, "Library");
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const cancel = page.getByRole("button", {
@@ -527,7 +528,6 @@ const path = require("node:path");
     });
     await expect(cancel).toBeInViewport();
     await expect(cancel).toBeEnabled();
-    await expect(generate).toBeDisabled();
     const locked = await page.evaluate(() =>
       window.laceframe.command({
         type: "addCharacter",
@@ -624,7 +624,7 @@ const path = require("node:path");
     expect((await manifest()).attempts).toEqual(historical);
 
     // A second identity uses its own immutable master and personal direction.
-    await page.getByRole("button", { name: /Characters$/ }).click();
+    await nav(page, "Characters");
     await field(page, "Neue Figur", { exact: true }).fill("Synthetic Other");
     await page
       .getByRole("button", { name: "Figur erstellen", exact: true })

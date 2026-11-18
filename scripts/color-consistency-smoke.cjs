@@ -35,9 +35,7 @@ const { nav } = require("./smoke-ui.cjs");
     page = await app.firstWindow();
     page.setDefaultTimeout(15000);
     page.on("pageerror", (e) => errors.push(e.message));
-    await expect(
-      page.getByRole("button", { name: "Neues Projekt", exact: true }),
-    ).toBeVisible({ timeout: 25000 });
+    await require("./smoke-ui.cjs").projectSelection(page);
   }
   const make = (shade) => {
     const p = new PNG({ width: 32, height: 32 });
@@ -308,7 +306,7 @@ const { nav } = require("./smoke-ui.cjs");
     await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await nav(page, "Library");
     await page
-      .getByLabel("Library Assettyp", { exact: true })
+      .getByLabel("Bibliothek Assettyp", { exact: true })
       .selectOption("expression");
     let quality = page.locator('[data-testid="asset-quality"]:visible').first();
     await expect(
@@ -490,7 +488,7 @@ const { nav } = require("./smoke-ui.cjs");
     await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await nav(page, "Library");
     await page
-      .getByLabel("Library Assettyp", { exact: true })
+      .getByLabel("Bibliothek Assettyp", { exact: true })
       .selectOption("expression");
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     await expect(
@@ -509,8 +507,7 @@ const { nav } = require("./smoke-ui.cjs");
       .click();
     await dialog
       .getByRole("button", {
-        name: "Mastermaske Manuell zugewiesene Haare",
-        exact: true,
+        name: /^Mastermaske\s*Manuell zugewiesene Haare$/,
       })
       .click();
     const restoredRegion = page.getByRole("dialog", {
@@ -533,7 +530,7 @@ const { nav } = require("./smoke-ui.cjs");
       .getByRole("button", { name: "Schließen / verwerfen", exact: true })
       .click();
     await page
-      .getByLabel("Library Assettyp", { exact: true })
+      .getByLabel("Bibliothek Assettyp", { exact: true })
       .selectOption("quality");
     await page
       .getByLabel("Bibliothek Asset", { exact: true })

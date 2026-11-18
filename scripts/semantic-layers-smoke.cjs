@@ -1,4 +1,4 @@
-// Focused PX-01 visual/integrity acceptance. Synthetic images; no generation provider.
+// Focused Semantic Layers visual/integrity acceptance. Synthetic images; no generation provider.
 const { _electron: electron, expect } = require("@playwright/test");
 const { PNG } = require("pngjs");
 const fs = require("node:fs/promises"),
@@ -550,7 +550,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     ).toEqual({ node: "undefined", filesystem: false });
     expect(errors).toEqual([]);
     console.log(
-      "PASS Semantic Layers: real editor tools, conflicts, twenty-step undo/redo, focused zoom/pan, 960/1280/1920 layouts, immutable Master, exact revision masks, historical load and restart. No generation.",
+      "PASS Semantic Layers: real editor tools, conflicts, twenty-step undo/redo, focused zoom/pan, 960/1280/1920 layouts, immutable Master, exact revision masks, color-region provenance, independent Expression masks, historical load and restart. No generation.",
     );
   } catch (error) {
     if (app) {

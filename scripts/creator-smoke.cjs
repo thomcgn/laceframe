@@ -54,9 +54,7 @@ const { createHash } = require("node:crypto");
     page = await app.firstWindow();
     page.setDefaultTimeout(15000);
     page.on("pageerror", (e) => errors.push(e.message));
-    await expect(
-      page.getByRole("button", { name: "Neues Projekt", exact: true }),
-    ).toBeVisible({ timeout: 25000 });
+    await require("./smoke-ui.cjs").projectSelection(page);
   };
   const chooser = (file) =>
     app.evaluate(({ dialog }, file) => {
@@ -145,6 +143,7 @@ const { createHash } = require("node:crypto");
     await fs.writeFile(path.join(output, "result.png"), PNG.sync.write(hi));
     // Populate a real project style through the existing editor; no identity character yet.
     await nav(page, "Art Direction");
+    await page.getByRole("button", { name: "Stildetails", exact: true }).click();
     await field(page, "Stilname", { exact: true }).fill(
       "Ada Voss · Illustrated Noir",
     );
@@ -165,10 +164,7 @@ const { createHash } = require("node:crypto");
     await expect(
       image(page, "Stil 1 · synthetic-style.png", { exact: true }),
     ).toBeVisible();
-    await page
-      .getByRole("navigation", { name: "Hauptnavigation" })
-      .getByRole("button", { name: /Characters$/ })
-      .click();
+    await nav(page, "Characters");
     await page
       .getByRole("button", { name: "Neuen Charakter erstellen", exact: true })
       .click();
@@ -854,10 +850,7 @@ const { createHash } = require("node:crypto");
       field(page, "Studio Masterversion", { exact: true }),
     ).toHaveValue(master.id);
     // Returning to creator never replaces the locked master. Referenced photo removal retains history.
-    await page
-      .getByRole("navigation", { name: "Hauptnavigation" })
-      .getByRole("button", { name: /Characters$/ })
-      .click();
+    await nav(page, "Characters");
     await page
       .getByRole("button", { name: "Neuen Charakter erstellen", exact: true })
       .click();
