@@ -45,14 +45,15 @@ const path = require("node:path");
     page.setDefaultTimeout(15000);
     page.on("pageerror", (error) => errors.push(error.message));
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
     await app.evaluate(({ dialog }, directory) => {
       dialog.showOpenDialog = async () => ({
         canceled: false,
         filePaths: [directory],
       });
     }, project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await field(page, "Projektname", { exact: true }).fill("Native smoke");
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })
@@ -1168,7 +1169,7 @@ const path = require("node:path");
       });
     }, project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Synthetic Native", exact: true }),

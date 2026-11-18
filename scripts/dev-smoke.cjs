@@ -16,8 +16,18 @@ const { chromium, expect } = require("@playwright/test");
     page.on("pageerror", (error) => errors.push(error.message));
     // Verify first-load rendering before any reload: catches blocked Vite navigation.
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible({ timeout: 10000 });
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
+    await expect(page.locator(".sidebar")).toHaveCount(0);
+    expect(
+      await page
+        .locator(".splash-image")
+        .evaluate((image) => ({
+          loaded: image.complete,
+          width: image.naturalWidth,
+          height: image.naturalHeight,
+        })),
+    ).toEqual({ loaded: true, width: 1827, height: 861 });
     const result = await page.evaluate(() =>
       window.laceframe.preview("00000000-0000-4000-8000-000000000000"),
     );
@@ -34,8 +44,8 @@ const { chromium, expect } = require("@playwright/test");
       page.evaluate(() => window.location.assign(window.location.href)),
     ]);
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
     expect(page.url()).toBe(url);
     expect(errors).toEqual([]);
     console.log(

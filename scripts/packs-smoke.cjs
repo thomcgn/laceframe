@@ -35,18 +35,13 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     page = await app.firstWindow();
     page.on("pageerror", (e) => errors.push(e.message));
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
   };
   const manifest = async (dir) =>
     JSON.parse(await fs.readFile(path.join(dir, "laceframe.json"), "utf8"));
-  const management = async () => {
-    const d = page.locator(".project-management");
-    if ((await d.getAttribute("open")) === null)
-      await d.locator("summary").click();
-  };
   const create = async (dir, name) => {
-    await management();
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await field(page, "Projektname", { exact: true }).fill(name);
     await chooser(dir);
     await page
@@ -417,10 +412,9 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     );
     await app.close();
     await launch();
-    await management();
     await chooser(second);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Synthetic pack user", exact: true }),

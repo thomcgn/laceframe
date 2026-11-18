@@ -55,8 +55,8 @@ const { createHash } = require("node:crypto");
     page.setDefaultTimeout(15000);
     page.on("pageerror", (e) => errors.push(e.message));
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
   };
   const chooser = (file) =>
     app.evaluate(({ dialog }, file) => {
@@ -84,6 +84,7 @@ const { createHash } = require("node:crypto");
   try {
     await launch();
     await chooser(project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await field(page, "Projektname", { exact: true }).fill("Cameo synthetic");
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })
@@ -721,7 +722,7 @@ const { createHash } = require("node:crypto");
     ])
       await expect(field(page, label, { exact: true })).toBeChecked();
     await expect(
-      page.getByRole("button", { name: "Projekt öffnen …", exact: true }),
+      page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }),
     ).toBeVisible();
     const beforeReviewSwitch = await fs.readFile(
       path.join(project, "laceframe.json"),
@@ -732,7 +733,7 @@ const { createHash } = require("node:crypto");
       void d.dismiss();
     });
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     expect(reviewWarning).toContain("Ungespeicherte");
     await expect(field(page, "Master Prüfnotiz", { exact: true })).toHaveValue(
@@ -880,7 +881,7 @@ const { createHash } = require("node:crypto");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       image(page, "Freigegebener Master V1", { exact: true }),
@@ -1085,7 +1086,7 @@ const { createHash } = require("node:crypto");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       image(page, "Freigegebener Master V1", { exact: true }),

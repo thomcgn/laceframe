@@ -55,8 +55,8 @@ const fs = require("node:fs/promises"),
       if (w.url().includes("smart-cutout.worker")) workerUrl = w.url();
     });
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
   };
   const dialog = () =>
     page.getByRole("dialog", { name: "Freistellungsmaske", exact: true });
@@ -101,6 +101,7 @@ const fs = require("node:fs/promises"),
   try {
     await launch();
     await chooser(project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await page
       .getByLabel("Projektname", { exact: true })
       .fill("Smart synthetic");
@@ -142,7 +143,7 @@ const fs = require("node:fs/promises"),
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Protected portrait", exact: true }),
@@ -978,7 +979,7 @@ const fs = require("node:fs/promises"),
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Protected portrait", exact: true }),

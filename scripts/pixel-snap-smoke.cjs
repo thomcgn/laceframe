@@ -59,6 +59,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     const manifest = () =>
       fs.readFile(path.join(dir, "laceframe.json"), "utf8").then(JSON.parse);
     await choose(dir);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await field(page, "Projektname", { exact: true }).fill("Pixel pipeline");
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })
@@ -432,7 +433,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     page.setDefaultTimeout(15000);
     await choose(dir);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Synthetic Pixel", exact: true }),

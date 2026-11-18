@@ -36,8 +36,8 @@ const { nav } = require("./smoke-ui.cjs");
     page.setDefaultTimeout(15000);
     page.on("pageerror", (e) => errors.push(e.message));
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
   }
   const make = (shade) => {
     const p = new PNG({ width: 32, height: 32 });
@@ -251,6 +251,7 @@ const { nav } = require("./smoke-ui.cjs");
   try {
     await launch();
     await choose(project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await page
       .getByLabel("Projektname", { exact: true })
       .fill("Synthetic color consistency");
@@ -273,7 +274,7 @@ const { nav } = require("./smoke-ui.cjs");
     await launch();
     await choose(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByAltText("Freigegebener Master V1", { exact: true }),
@@ -307,7 +308,7 @@ const { nav } = require("./smoke-ui.cjs");
     await launch();
     await choose(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await nav(page, "Library");
     await page
@@ -487,7 +488,7 @@ const { nav } = require("./smoke-ui.cjs");
     await launch();
     await choose(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await nav(page, "Library");
     await page

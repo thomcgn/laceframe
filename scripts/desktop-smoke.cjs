@@ -27,11 +27,8 @@ const { createHash } = require("node:crypto");
     const page = await app.firstWindow();
     page.on("pageerror", (error) => rendererErrors.push(error.message));
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
-    await expect(
-      text(page, "Ein sicherer Ort für deine Charaktere."),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
     return page;
   };
   const setDialog = async (file) =>
@@ -96,6 +93,7 @@ const { createHash } = require("node:crypto");
         "checkCodex",
         "chooseImage",
         "choosePack",
+        "closeProject",
         "colorPalette",
         "colorRecipe",
         "command",
@@ -110,6 +108,7 @@ const { createHash } = require("node:crypto");
         "importIdentityImages",
         "openChatGPT",
         "openProject",
+        "pixelEditSource",
         "preview",
         "providers",
         "qualityReport",
@@ -146,6 +145,7 @@ const { createHash } = require("node:crypto");
       .update(Buffer.from(bytes))
       .digest("hex");
     await setDialog(project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await field(page, "Projektname", { exact: true }).fill("Desktop Smoke");
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })
@@ -242,9 +242,9 @@ const { createHash } = require("node:crypto");
       expect(result.ok).toBe(true);
     }
     await setDialog(project);
-    await expect(page.getByRole("button", {name: "Projekt öffnen …", exact:true})).toBeVisible();
+    await expect(page.getByRole("button", {name: /^Projekt öffnen(?: …)?$/})).toBeVisible();
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await nav(page, "Expressions");
     await text(page, "Eigene Familie hinzufügen", { exact: true }).click();
@@ -633,7 +633,7 @@ const { createHash } = require("node:crypto");
     page = await launch();
     await setDialog(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Ada Voss", exact: true }),

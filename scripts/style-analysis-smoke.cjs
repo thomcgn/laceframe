@@ -58,12 +58,13 @@ const { nav } = require("./smoke-ui.cjs");
       if (w.url().includes("style-analysis.worker")) workerUrl = w.url();
     });
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
   };
   try {
     await launch();
     await chooser(project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await page
       .getByLabel("Projektname", { exact: true })
       .fill("Synthetic style analysis");
@@ -121,7 +122,7 @@ const { nav } = require("./smoke-ui.cjs");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Synthetic Ada Test", exact: true }),
@@ -321,7 +322,7 @@ const { nav } = require("./smoke-ui.cjs");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Synthetic Ada Test", exact: true }),

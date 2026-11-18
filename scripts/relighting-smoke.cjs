@@ -29,8 +29,8 @@ const { createHash } = require("node:crypto");
     page.setDefaultTimeout(15000);
     page.on("pageerror", (e) => errors.push(e.message));
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
   };
   const chooser = (file) =>
     app.evaluate(({ dialog }, file) => {
@@ -74,6 +74,7 @@ const { createHash } = require("node:crypto");
   try {
     await launch();
     await chooser(project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await page
       .getByLabel("Projektname", { exact: true })
       .fill("Relight synthetic");
@@ -154,7 +155,7 @@ const { createHash } = require("node:crypto");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByRole("heading", { name: "Relight Character", exact: true }),
@@ -432,7 +433,7 @@ const { createHash } = require("node:crypto");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByAltText("Freigegebener Master V3", { exact: true }),
@@ -580,7 +581,7 @@ const { createHash } = require("node:crypto");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByAltText("Freigegebener Master V2", { exact: true }),

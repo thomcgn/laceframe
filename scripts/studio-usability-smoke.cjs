@@ -54,6 +54,7 @@ const { createHash } = require("node:crypto");
         });
       }, p);
     await dialog(project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await field(page, "Projektname", { exact: true }).fill("Studio usability");
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })

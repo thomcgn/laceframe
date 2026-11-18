@@ -2,7 +2,7 @@
 // Scope labels to the active workspace. Mode owners retain drafts; step controls render on demand.
 const scope = (page) =>
   page.locator(
-    ".expressions-workspace:visible, .studio-editor:visible, .studio-context:visible, .art-direction-workspace:visible, .library-workspace:visible, .characters-workspace:visible, .character-bar:visible, .project-management, .create-action-bar:visible, .modal-backdrop:visible",
+    ".expressions-workspace:visible, .studio-editor:visible, .studio-context:visible, .art-direction-workspace:visible, .library-workspace:visible, .characters-workspace:visible, .character-bar:visible, .project-management, .splash-screen, .create-action-bar:visible, .modal-backdrop:visible",
   );
 exports.field = (page, ...args) => scope(page).getByLabel(...args);
 exports.image = (page, ...args) => scope(page).getByAltText(...args);
@@ -52,4 +52,20 @@ exports.studioExpert = async (page) => {
     .locator(".studio-editor:visible")
     .getByRole("checkbox", { name: "Expertenansicht", exact: true })
     .check();
+};
+
+// New application entry: wait for the real ten-second boot; never bypass lifecycle.
+exports.projectSelection = async (page) => {
+  await page
+    .getByRole("button", { name: "Neues Projekt", exact: true })
+    .waitFor({ state: "visible", timeout: 25000 });
+};
+exports.prepareProjectCreation = async (page) => {
+  await page.locator(".splash-screen, .project-management").first().waitFor({ state: "visible", timeout: 25000 });
+  if (await page.locator(".splash-screen").count()) {
+    await exports.projectSelection(page);
+    await page
+      .getByRole("button", { name: "Neues Projekt", exact: true })
+      .click();
+  }
 };

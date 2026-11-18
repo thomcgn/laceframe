@@ -2,6 +2,14 @@
 
 **Vorhandene Oberfläche:** Characters / Art Direction / Expressions / Studio / Library / Motion. Die Bedienwege unten sind implementiert, sofern ausdrücklich nicht als geplant bezeichnet. Studio verwendet die Aufgaben **Auswählen → Erzeugen → Bearbeiten → Freigeben** für Master und Expressions. Die Schritte behalten ihre Eingaben innerhalb der Sitzung; keine Navigation startet eine Generierung.
 
+## Starten, öffnen und schließen
+
+Beim vollständigen Anwendungsstart erscheint ausschließlich das originale Splashbild. Die bewusst inszenierte Startanimation dauert mindestens zehn Sekunden; ihre humorvollen Meldungen sind keine technische Diagnose. Bei langsamer lokaler Initialisierung wartet sie bei 95 %, bei einem Fehler bietet sie **Erneut versuchen**. Dafür sind weder Internet noch Codex-Anmeldung nötig.
+
+Anschließend bleibt dasselbe Bild als Projektmanager sichtbar: **Projekt öffnen** wählt über den OS-Dialog ein vorhandenes Projekt; **Neues Projekt** erfragt Name und einen leeren lokalen Ordner. Erst nach vollständiger Prüfung erscheint die Workspace-Navigation. Abbruch und ungültige Projekte bleiben sicher auf der Auswahl. Das letzte Projekt wird nach Neustart nicht automatisch geöffnet.
+
+**Projekt schließen** in der Projektverwaltung warnt vor ungespeicherten Studio-/Expressions-/Stilentwürfen. Nach Bestätigung verschwindet der Workspace; die Auswahl ist sofort wieder verfügbar, ohne erneute zehn Sekunden. Gespeicherte Projekte und Bilder bleiben unverändert. Während einer Generierung beziehungsweise offenen Bildübernahme ist die Projektverwaltung gesperrt; zuerst Auftrag beenden/abbrechen beziehungsweise Import abschließen/verwerfen. Ein abgebrochener Wechsel aus einem gültigen Workspace erhält dessen ungespeicherte Entwürfe.
+
 ## 1. Projekt erstellen
 
 Über **Projekt erstellen …** einen leeren Ordner außerhalb des Repositorys wählen; alternativ ein vorhandenes Projekt mit `laceframe.json` öffnen. Das gesamte Verzeichnis einschließlich Assets sichern. Projektwechsel warnt vor erkannten ungespeicherten Entwürfen; während einer Generierung erst abbrechen oder Ergebnis abwarten.

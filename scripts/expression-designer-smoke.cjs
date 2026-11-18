@@ -30,6 +30,7 @@ const { field, nav } = require("./smoke-ui.cjs");
         filePaths: [dir],
       });
     }, project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await field(page, "Projektname", { exact: true }).fill("UX03 synthetic");
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })
@@ -236,7 +237,7 @@ const { field, nav } = require("./smoke-ui.cjs");
     ).toHaveValue("Unsaved personal draft");
     page.once("dialog", (dialog) => dialog.dismiss());
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       field(page, "Persönlicher Ausdruck", { exact: true }),

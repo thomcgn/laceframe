@@ -20,6 +20,7 @@ Implementierung, fachlicher Abschluss und Integration nach main sind unterschied
 
 | Status | Funktion | Nachweis im Repository / gemergte PRs |
 | --- | --- | --- |
+| IMPLEMENTIERT auf develop | Splash-/Projektmanager: mindestens zehn Sekunden Offline-Boot, Öffnen/Erstellen, sicherer Close und direkte Rückkehr zur Auswahl | `app-lifecycle.ts`, `SplashScreen`, gezielte Lifecycle-/Projektservice-Tests und `splash-smoke.cjs`; keine Main-Integration/Alpha-Freigabe |
 | FACHLICH FERTIG | Lokale Projekte, sichere Electron-/Preload-Grenzen, unveränderliche Bilder und manuelle Expressionsfreigabe | `project-service.ts`, `domain.ts`, Desktop-Smoke; #2 |
 | FACHLICH FERTIG | Native Codex-Generierung mit Masterreferenz, Status, monotonem Timer, Abbruch; manueller Fallback | Provider/Controller, Native-Smoke; #4–5 |
 | FACHLICH FERTIG | Art Direction mit Referenzen/Revisionen, getrennte Identität und persönliche Ausdrucksregeln | StyleLibrary, Generation-/Style-Tests; #8–9 |

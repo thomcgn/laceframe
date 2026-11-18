@@ -33,8 +33,8 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
     page.setDefaultTimeout(20000);
     page.on("pageerror", (e) => errors.push(e.message));
     await expect(
-      page.getByRole("heading", { name: "Characters", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Neues Projekt", exact: true }),
+    ).toBeVisible({ timeout: 25000 });
     // Delay only transport to the REAL worker; inspect original canvas before selection can complete.
     await page.evaluate(() => {
       window.Worker = new Proxy(window.Worker, {
@@ -114,6 +114,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
   try {
     await launch();
     await chooser(project);
+    await require("./smoke-ui.cjs").prepareProjectCreation(page);
     await page
       .getByRole("button", { name: "Projekt erstellen …", exact: true })
       .click();
@@ -135,7 +136,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByAltText("Freigegebener Master V1", { exact: true }),
@@ -513,7 +514,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByAltText("Freigegebener Master V2", { exact: true }),
@@ -589,7 +590,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
     await launch();
     await chooser(project);
     await page
-      .getByRole("button", { name: "Projekt öffnen …", exact: true })
+      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
       .click();
     await expect(
       page.getByAltText("Freigegebener Master V1", { exact: true }),
