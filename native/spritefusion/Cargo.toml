@@ -7,7 +7,10 @@ license = "MIT"
 [lib]
 crate-type = ["cdylib"]
 [dependencies]
-spritefusion-pixel-snapper = { path = "vendor" }
+rand = { version = "=0.8.5", features = ["small_rng"] }
+rand_chacha = "=0.3.1"
+rand_distr = "=0.4.3"
+getrandom = { version = "=0.2.16", features = ["js"] }
 image = { version = "=0.24.9", default-features = false, features = ["png"] }
 wasm-bindgen = "=0.2.105"
 [profile.release]

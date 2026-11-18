@@ -106,6 +106,29 @@ function getArrayU8FromWasm0(ptr, len) {
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
 }
 /**
+ * WASM entry point
+ * `palette_hex` is a comma-separated list of hex colors: `"0d2b45,ffecd6"`.
+ * @param {Uint8Array} input_bytes
+ * @param {number | null} [k_colors]
+ * @param {number | null} [pixel_size_override]
+ * @param {string | null} [palette_hex]
+ * @returns {Uint8Array}
+ */
+export function process_image(input_bytes, k_colors, pixel_size_override, palette_hex) {
+    const ptr0 = passArray8ToWasm0(input_bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    var ptr1 = isLikeNone(palette_hex) ? 0 : passStringToWasm0(palette_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.process_image(ptr0, len0, isLikeNone(k_colors) ? 0x100000001 : (k_colors) >>> 0, !isLikeNone(pixel_size_override), isLikeNone(pixel_size_override) ? 0 : pixel_size_override, ptr1, len1);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
+}
+
+/**
  * @param {Uint8Array} data
  * @param {number} width
  * @param {number} height
@@ -145,20 +168,20 @@ export function decode_png(bytes) {
 }
 
 /**
- * WASM entry point
- * `palette_hex` is a comma-separated list of hex colors: `"0d2b45,ffecd6"`.
- * @param {Uint8Array} input_bytes
- * @param {number | null} [k_colors]
- * @param {number | null} [pixel_size_override]
- * @param {string | null} [palette_hex]
+ * Independent original quantizer: no grid detection or geometry change.
+ * @param {Uint8Array} data
+ * @param {number} width
+ * @param {number} height
+ * @param {number} colors
+ * @param {string | null} [palette]
  * @returns {Uint8Array}
  */
-export function process_image(input_bytes, k_colors, pixel_size_override, palette_hex) {
-    const ptr0 = passArray8ToWasm0(input_bytes, wasm.__wbindgen_malloc);
+export function quantize_rgba(data, width, height, colors, palette) {
+    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    var ptr1 = isLikeNone(palette_hex) ? 0 : passStringToWasm0(palette_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var ptr1 = isLikeNone(palette) ? 0 : passStringToWasm0(palette, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len1 = WASM_VECTOR_LEN;
-    const ret = wasm.process_image(ptr0, len0, isLikeNone(k_colors) ? 0x100000001 : (k_colors) >>> 0, !isLikeNone(pixel_size_override), isLikeNone(pixel_size_override) ? 0 : pixel_size_override, ptr1, len1);
+    const ret = wasm.quantize_rgba(ptr0, len0, width, height, colors, ptr1, len1);
     if (ret[3]) {
         throw takeFromExternrefTable0(ret[2]);
     }

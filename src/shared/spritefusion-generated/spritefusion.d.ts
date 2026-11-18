@@ -1,12 +1,16 @@
 /* tslint:disable */
 /* eslint-disable */
-export function process_rgba(data: Uint8Array, width: number, height: number, colors: number, pixel_size?: number | null, palette?: string | null): Uint8Array;
-export function decode_png(bytes: Uint8Array): Uint8Array;
 /**
  * WASM entry point
  * `palette_hex` is a comma-separated list of hex colors: `"0d2b45,ffecd6"`.
  */
 export function process_image(input_bytes: Uint8Array, k_colors?: number | null, pixel_size_override?: number | null, palette_hex?: string | null): Uint8Array;
+export function process_rgba(data: Uint8Array, width: number, height: number, colors: number, pixel_size?: number | null, palette?: string | null): Uint8Array;
+export function decode_png(bytes: Uint8Array): Uint8Array;
+/**
+ * Independent original quantizer: no grid detection or geometry change.
+ */
+export function quantize_rgba(data: Uint8Array, width: number, height: number, colors: number, palette?: string | null): Uint8Array;
 export class Config {
   private constructor();
   free(): void;
@@ -20,14 +24,15 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly process_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number, number];
-  readonly decode_png: (a: number, b: number) => [number, number, number, number];
+  readonly process_image: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
   readonly __wbg_config_free: (a: number, b: number) => void;
   readonly __wbg_get_config_k_colors: (a: number) => number;
   readonly __wbg_set_config_k_colors: (a: number, b: number) => void;
   readonly __wbg_get_config_pixel_size_override: (a: number) => [number, number];
   readonly __wbg_set_config_pixel_size_override: (a: number, b: number, c: number) => void;
-  readonly process_image: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
+  readonly process_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number, number];
+  readonly decode_png: (a: number, b: number) => [number, number, number, number];
+  readonly quantize_rgba: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
   readonly __wbindgen_externrefs: WebAssembly.Table;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

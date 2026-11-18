@@ -3,6 +3,7 @@ import {
   initSync,
   process_rgba,
   decode_png,
+  quantize_rgba,
 } from "./spritefusion-generated/spritefusion.js";
 import { SPRITEFUSION_WASM_BASE64 } from "./spritefusion-generated/wasm";
 import type { ColorPixels } from "./color-consistency";
@@ -29,14 +30,7 @@ export function spriteFusionPixels(
     s.pixelSize > Math.min(p.width, p.height) / 2
   )
     throw new Error(tr("common.m635d965b99"));
-  if (!ready) {
-    initSync({
-      module: Uint8Array.from(atob(SPRITEFUSION_WASM_BASE64), (c) =>
-        c.charCodeAt(0),
-      ),
-    });
-    ready = true;
-  }
+  ensureSpriteFusion();
   try {
     const png = process_rgba(
       p.data,
@@ -70,5 +64,38 @@ export function spriteFusionPixels(
     throw new Error(tr("common.m441e33731b", { v0: String(error) }), {
       cause: error,
     });
+  }
+}
+
+function ensureSpriteFusion() {
+  if (!ready) {
+    initSync({
+      module: Uint8Array.from(atob(SPRITEFUSION_WASM_BASE64), (c) =>
+        c.charCodeAt(0),
+      ),
+    });
+    ready = true;
+  }
+}
+export function spriteFusionQuantize(
+  p: ColorPixels,
+  colors: number,
+  palette?: string[],
+): ColorPixels {
+  if (poisoned || p.width * p.height * colors > 67_108_864)
+    throw new Error(tr("common.m5f80be6cad"));
+  ensureSpriteFusion();
+  try {
+    const data = quantize_rgba(
+      p.data,
+      p.width,
+      p.height,
+      colors,
+      palette?.map((c) => c.slice(1)).join(","),
+    );
+    return { width: p.width, height: p.height, data };
+  } catch (error) {
+    if (error instanceof WebAssembly.RuntimeError) poisoned = true;
+    throw error;
   }
 }
