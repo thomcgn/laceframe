@@ -1,3 +1,4 @@
+const { studioStep, studioExpert } = require("./smoke-ui.cjs");
 const checkIdentityComparison = require("./identity-comparison-checks.cjs");
 const { PNG } = require("pngjs");
 const { field, image, nav } = require("./smoke-ui.cjs");
@@ -61,7 +62,10 @@ const { createHash } = require("node:crypto");
     app.evaluate(({ dialog }, file) => {
       dialog.showOpenDialog = async (...args) => {
         dialog.showOpenDialog.lastOptions = args[1];
-        return { canceled: file === null, filePaths: file === null ? [] : Array.isArray(file) ? file : [file] };
+        return {
+          canceled: file === null,
+          filePaths: file === null ? [] : Array.isArray(file) ? file : [file],
+        };
       };
     }, file);
   const drop = async (selector, bytes, name, type) =>
@@ -87,7 +91,8 @@ const { createHash } = require("node:crypto");
     const makeImage = async (shade, jpg = false) =>
       app.evaluate(
         ({ nativeImage }, { shade, jpg }) => {
-          const width = jpg ? 4032 : 72, height = jpg ? 3024 : 96;
+          const width = jpg ? 4032 : 72,
+            height = jpg ? 3024 : 96;
           const b = Buffer.alloc(width * height * 4, shade);
           for (let i = 3; i < b.length; i += 4) b[i] = 255;
           const image = nativeImage.createFromBitmap(b, {
@@ -131,10 +136,12 @@ const { createHash } = require("node:crypto");
     const thread = "00000000-0000-4000-8000-000000000123",
       output = path.join(root, "generated_images", thread);
     await fs.mkdir(output, { recursive: true });
-    const hi = new PNG({width:1254,height:1254});
-    for(let y=150;y<1150;y++)for(let x=400;x<850;x++)hi.data.set([170,120,90,255],(y*1254+x)*4);
-    hi.data.set([170,120,90,255],0);
-    await fs.writeFile(path.join(output,"result.png"),PNG.sync.write(hi));
+    const hi = new PNG({ width: 1254, height: 1254 });
+    for (let y = 150; y < 1150; y++)
+      for (let x = 400; x < 850; x++)
+        hi.data.set([170, 120, 90, 255], (y * 1254 + x) * 4);
+    hi.data.set([170, 120, 90, 255], 0);
+    await fs.writeFile(path.join(output, "result.png"), PNG.sync.write(hi));
     // Populate a real project style through the existing editor; no identity character yet.
     await nav(page, "Art Direction");
     await field(page, "Stilname", { exact: true }).fill(
@@ -206,43 +213,93 @@ const { createHash } = require("node:crypto");
         ),
       ];
     });
-    const pngPath = path.join(root, "identity.png"), webpPath = path.join(root, "identity.webp"), brokenPath = path.join(root, "broken.png");
+    const pngPath = path.join(root, "identity.png"),
+      webpPath = path.join(root, "identity.webp"),
+      brokenPath = path.join(root, "broken.png");
     await fs.writeFile(pngPath, Buffer.from(other));
     await fs.writeFile(webpPath, Buffer.from(webp));
     await fs.writeFile(brokenPath, "broken");
-    const addIdentities = () => page.getByRole("button", { name: "Identitätsbilder hinzufügen …", exact: true });
+    const addIdentities = () =>
+      page.getByRole("button", {
+        name: "Identitätsbilder hinzufügen …",
+        exact: true,
+      });
     const pristine = await fs.readFile(path.join(project, "laceframe.json"));
-    for (const selection of [null, [selfiePath, pngPath, webpPath, selfiePath], [selfiePath, selfiePath], [selfiePath, brokenPath]]) {
+    for (const selection of [
+      null,
+      [selfiePath, pngPath, webpPath, selfiePath],
+      [selfiePath, selfiePath],
+      [selfiePath, brokenPath],
+    ]) {
       await chooser(selection);
       await addIdentities().click();
-      if (selection) await expect(page.getByRole("alert").first()).toContainText(selection.length === 4 ? "3 von 3" : selection[1] === brokenPath ? "broken.png" : "doppelt");
+      if (selection)
+        await expect(page.getByRole("alert").first()).toContainText(
+          selection.length === 4
+            ? "3 von 3"
+            : selection[1] === brokenPath
+              ? "broken.png"
+              : "doppelt",
+        );
       await expect(addIdentities()).toBeEnabled();
-      expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(pristine);
+      expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(
+        pristine,
+      );
     }
     await chooser([selfiePath, pngPath, webpPath]);
     await addIdentities().click();
     await expect(image(page, "Identität 3", { exact: true })).toBeVisible();
-    await expect(page.locator(".creator-identity")).toContainText("3 von 3 Bildern");
-    expect((await manifest()).identityAssets.map(a => a.format)).toEqual(["jpg", "png", "webp"]);
-    const options = await app.evaluate(({ dialog }) => dialog.showOpenDialog.lastOptions);
+    await expect(page.locator(".creator-identity")).toContainText(
+      "3 von 3 Bildern",
+    );
+    expect((await manifest()).identityAssets.map((a) => a.format)).toEqual([
+      "jpg",
+      "png",
+      "webp",
+    ]);
+    const options = await app.evaluate(
+      ({ dialog }) => dialog.showOpenDialog.lastOptions,
+    );
     expect(options.properties).toContain("multiSelections");
     expect(options.defaultPath).toBe(root);
     await expect(addIdentities()).toBeDisabled();
     const clearIdentities = async () => {
-      for (let remaining=2; remaining>=0; remaining--) {
-        page.once("dialog", d => d.accept());
-        await page.locator(".creator-identity").getByRole("button", {name:"Referenz entfernen", exact:true}).first().click();
-        await expect.poll(async()=> (await manifest()).identityAssets.length).toBe(remaining);
-        await expect(page.locator(".creator-identity")).toContainText(`${remaining} von 3 Bildern`);
+      for (let remaining = 2; remaining >= 0; remaining--) {
+        page.once("dialog", (d) => d.accept());
+        await page
+          .locator(".creator-identity")
+          .getByRole("button", { name: "Referenz entfernen", exact: true })
+          .first()
+          .click();
+        await expect
+          .poll(async () => (await manifest()).identityAssets.length)
+          .toBe(remaining);
+        await expect(page.locator(".creator-identity")).toContainText(
+          `${remaining} von 3 Bildern`,
+        );
       }
     };
     await clearIdentities();
     // Multi-file drop follows the identical atomic import path, without staging tokens.
-    await page.evaluate(files => {
-      const dataTransfer = new DataTransfer();
-      for (const f of files) dataTransfer.items.add(new File([new Uint8Array(f.bytes)], f.name, {type:f.type}));
-      document.querySelector(".creator-identity").dispatchEvent(new DragEvent("drop", {bubbles:true,dataTransfer}));
-    }, [{bytes:photo,name:"one.jpg",type:"image/jpeg"}, {bytes:other,name:"two.png",type:"image/png"}, {bytes:webp,name:"three.webp",type:"image/webp"}]);
+    await page.evaluate(
+      (files) => {
+        const dataTransfer = new DataTransfer();
+        for (const f of files)
+          dataTransfer.items.add(
+            new File([new Uint8Array(f.bytes)], f.name, { type: f.type }),
+          );
+        document
+          .querySelector(".creator-identity")
+          .dispatchEvent(
+            new DragEvent("drop", { bubbles: true, dataTransfer }),
+          );
+      },
+      [
+        { bytes: photo, name: "one.jpg", type: "image/jpeg" },
+        { bytes: other, name: "two.png", type: "image/png" },
+        { bytes: webp, name: "three.webp", type: "image/webp" },
+      ],
+    );
     await expect(image(page, "Identität 3", { exact: true })).toBeVisible();
     await clearIdentities();
     await chooser(selfiePath);
@@ -267,11 +324,17 @@ const { createHash } = require("node:crypto");
     expect((await manifest()).identityAssets[0].sha256).toBe(sourceHash);
     await chooser([pngPath, webpPath]);
     await addIdentities().click();
-    await expect(image(page, "Identität 3", {exact:true})).toBeVisible();
-    for (let i=0;i<2;i++) {
-      page.once("dialog", d=>d.accept());
-      await page.locator(".creator-identity").getByRole("button",{name:"Referenz entfernen",exact:true}).last().click();
-      await expect.poll(async()=> (await manifest()).identityAssets.length).toBe(2-i);
+    await expect(image(page, "Identität 3", { exact: true })).toBeVisible();
+    for (let i = 0; i < 2; i++) {
+      page.once("dialog", (d) => d.accept());
+      await page
+        .locator(".creator-identity")
+        .getByRole("button", { name: "Referenz entfernen", exact: true })
+        .last()
+        .click();
+      await expect
+        .poll(async () => (await manifest()).identityAssets.length)
+        .toBe(2 - i);
     }
     // The manifest write can finish before React clears the removal's busy state.
     // A synthetic drop dispatched while disabled is intentionally ignored by production.
@@ -294,9 +357,11 @@ const { createHash } = require("node:crypto");
         .getByRole("button", { name: "Vergleichen", exact: true })
         .first(),
     ).toBeDisabled();
+    await studioStep(page, "Auswählen");
     await field(page, "Creator Outfit", { exact: true }).fill(
       "Blue jacket and plain white shirt, no pendant or plaid.",
     );
+    await studioStep(page, "Auswählen");
     await field(page, "Creator Identitätsmerkmale", { exact: true }).fill(
       "Use only the individual in the identity photos.",
     );
@@ -316,6 +381,7 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toBeHidden();
+    await studioStep(page, "Auswählen");
     await page
       .getByRole("button", { name: "Art Direction bearbeiten", exact: true })
       .click();
@@ -358,21 +424,25 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/retained draft R3/);
+    await studioExpert(page);
     await expect(
       page.getByRole("button", {
         name: "Neue Vorlage übernehmen",
         exact: true,
       }),
     ).toHaveCount(0);
+    await studioExpert(page);
     await field(page, "Creator Promptmodus", { exact: true }).selectOption(
       "supplement",
     );
+    await studioExpert(page);
     await field(page, "Creator Ergänzende Anweisung", { exact: true }).fill(
       "A calm confident presence.",
     );
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/calm confident presence/);
+    await studioExpert(page);
     await field(page, "Creator Promptmodus", { exact: true }).selectOption(
       "expert",
     );
@@ -380,6 +450,7 @@ const { createHash } = require("node:crypto");
       (await field(page, "Creator Arbeits-Prompt", {
         exact: true,
       }).inputValue()) + "\nReviewed expert instruction.";
+    await studioExpert(page);
     await field(page, "Creator Arbeits-Prompt", { exact: true }).fill(
       expertText,
     );
@@ -389,6 +460,7 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(expertText);
+    await studioStep(page, "Auswählen");
     await page
       .getByRole("button", { name: "Art Direction bearbeiten", exact: true })
       .click();
@@ -417,6 +489,7 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/expert conflict R4/);
+    await studioExpert(page);
     await field(page, "Creator Promptmodus", { exact: true }).selectOption(
       "automatic",
     );
@@ -515,6 +588,7 @@ const { createHash } = require("node:crypto");
         exact: true,
       }),
     ).toContainText("Mastergenerierung abgeschlossen");
+    await studioStep(page, "Erzeugen");
     await expect(
       image(page, "Character Creator · Ergebnisvorschau", {
         exact: true,
@@ -523,8 +597,11 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Mastergenerierungszeit", { exact: true }),
     ).toContainText("Generiert in");
-    await checkIdentityComparison({page,app,project});
-    await fs.writeFile(path.join(output,"result.png"),Buffer.from(approvedResult));
+    await checkIdentityComparison({ page, app, project });
+    await fs.writeFile(
+      path.join(output, "result.png"),
+      Buffer.from(approvedResult),
+    );
     const rpc = (await turns()).at(-1);
     expect(
       rpc.params.input
@@ -538,6 +615,7 @@ const { createHash } = require("node:crypto");
     ]);
     expect((await manifest()).masters).toEqual([]);
     expect((await manifest()).assets).toEqual([]);
+    await studioStep(page, "Freigeben");
     await page
       .getByRole("button", { name: "Masterkandidat ablehnen", exact: true })
       .click();
@@ -606,6 +684,7 @@ const { createHash } = require("node:crypto");
     await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
       originalOutfit,
     );
+    await studioStep(page, "Freigeben");
     await field(page, "Master Identität bestätigt", { exact: true }).check();
     await field(page, "Master Silhouette geprüft", { exact: true }).check();
     await field(page, "Master Aktivierung bestätigen", { exact: true }).check();
@@ -658,6 +737,7 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Create Masterversion", { exact: true }),
     ).toHaveValue(master.id);
+    await studioStep(page, "Auswählen");
     await field(page, "Create Anbieter", { exact: true }).selectOption(
       "codex-native",
     );
@@ -674,6 +754,7 @@ const { createHash } = require("node:crypto");
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Generierung abgeschlossen");
     expect((await manifest()).assets[0].masterId).toBe(master.id);
+    await studioStep(page, "Freigeben");
     await page
       .getByRole("button", { name: "Als Expression freigeben", exact: true })
       .click();
@@ -732,6 +813,7 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Neuen Charakter erstellen", exact: true })
       .click();
     page.once("dialog", (d) => d.accept());
+    await studioStep(page, "Auswählen");
     await page
       .getByRole("button", { name: "Referenz entfernen", exact: true })
       .first()
@@ -752,6 +834,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Neuen Charakter erstellen", exact: true })
       .click();
+    await studioStep(page, "Erzeugen");
     await expect(
       image(page, "Character Creator · Ergebnisvorschau", {
         exact: true,
@@ -781,6 +864,11 @@ const { createHash } = require("node:crypto");
     await expect(
       page.getByRole("heading", { name: "Master neu aufbauen", exact: true }),
     ).toBeVisible();
+    await expect(
+      page
+        .locator(".studio-editor:visible")
+        .getByRole("button", { name: "1. Auswählen", exact: true }),
+    ).toHaveAttribute("aria-current", "step");
     await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
       originalOutfit,
     );
@@ -808,9 +896,11 @@ const { createHash } = require("node:crypto");
       expect(p.masks).toEqual(oldMasks);
       expect(p.identityAssets).toEqual(identityBefore);
     };
+    await studioExpert(page);
     await field(page, "Creator Promptmodus", { exact: true }).selectOption(
       "supplement",
     );
+    await studioExpert(page);
     await field(page, "Creator Ergänzende Anweisung", { exact: true }).fill(
       "Use a solid black background",
     );
@@ -818,9 +908,11 @@ const { createHash } = require("node:crypto");
     await expect(page.locator(".create-action-bar")).toContainText(
       "widerspricht",
     );
+    await studioExpert(page);
     await field(page, "Creator Ergänzende Anweisung", { exact: true }).fill(
       "Restrained illustrated contours",
     );
+    await studioExpert(page);
     await field(page, "Creator Promptmodus", { exact: true }).selectOption(
       "automatic",
     );
@@ -842,6 +934,7 @@ const { createHash } = require("node:crypto");
     expect(parallel.ok).toBe(false);
     await expect(job()).toContainText("abgeschlossen");
     await assertOld();
+    await studioStep(page, "Freigeben");
     const opaque = (await manifest()).masterCandidates.at(-1);
     await expect(
       page.getByRole("status", {
@@ -892,6 +985,7 @@ const { createHash } = require("node:crypto");
     await editor
       .getByRole("button", { name: "Editor schließen", exact: true })
       .click();
+    await studioStep(page, "Freigeben");
     await page
       .getByRole("button", { name: "Masterkandidat ablehnen", exact: true })
       .click();
@@ -955,6 +1049,7 @@ const { createHash } = require("node:crypto");
       })
       .click();
     await expect(approveButton()).toBeDisabled();
+    await studioStep(page, "Freigeben");
     await field(page, "Master Identität bestätigt", { exact: true }).check();
     await field(page, "Master Silhouette geprüft", { exact: true }).check();
     await field(page, "Master Aktivierung bestätigen", { exact: true }).check();
@@ -975,6 +1070,7 @@ const { createHash } = require("node:crypto");
             .setContentSize(width, height),
         { width, height },
       );
+      await studioStep(page, "Freigeben");
       await page.locator(".master-approval:visible").scrollIntoViewIfNeeded();
       const rejectBounds = await page
         .getByRole("button", { name: "Masterkandidat ablehnen", exact: true })
@@ -1049,12 +1145,23 @@ const { createHash } = require("node:crypto");
     );
     await chooser(null);
     const selectedCharacter = (await manifest()).selectedCharacterId;
-    const cancelled = await page.evaluate(characterId=>window.laceframe.importIdentityImages({characterId}), selectedCharacter);
-    expect(cancelled).toEqual({ok:true,value:null});
-    const remembered = await app.evaluate(({ dialog })=>dialog.showOpenDialog.lastOptions.defaultPath);
+    const cancelled = await page.evaluate(
+      (characterId) => window.laceframe.importIdentityImages({ characterId }),
+      selectedCharacter,
+    );
+    expect(cancelled).toEqual({ ok: true, value: null });
+    const remembered = await app.evaluate(
+      ({ dialog }) => dialog.showOpenDialog.lastOptions.defaultPath,
+    );
     expect(remembered).toBe(root);
-    expect((await fs.readFile(path.join(project,"laceframe.json"),"utf8")).includes(root)).toBe(false);
-    console.log("PASS identity import: native three-file selection, one plus two, multi-drop, capacity/cancel/duplicate/corrupt atomic rejection, previews/counts, remembered defaultPath after real app restart. No live generation.");
+    expect(
+      (
+        await fs.readFile(path.join(project, "laceframe.json"), "utf8")
+      ).includes(root),
+    ).toBe(false);
+    console.log(
+      "PASS identity import: native three-file selection, one plus two, multi-drop, capacity/cancel/duplicate/corrupt atomic rejection, previews/counts, remembered defaultPath after real app restart. No live generation.",
+    );
     expect(errors).toEqual([]);
     console.log(
       "PASS Character Creator: JPEG chooser + PNG/WebP drops, three identity/one style input order, no-master generation, neutral/outfit prompt, single-job lock, timer/failure/cancel/retry, rejected/approved candidates, immutable Master V1, native Expression handoff, archived private sources, close/relaunch/reopen, 960px layout and secure typed IPC. UX-01: missing prerequisites/focus, retained master draft across mode/workspace/style revisions, automatic/supplement/expert conflict, sticky cancel across Characters/Art Direction/Library, exact candidate handoff, Library raw PNG+JSON export and same-master return, 960x720/1440x900 layout. Explicit protocol fixture only; no live AI calls.",

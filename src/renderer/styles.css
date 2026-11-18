@@ -1307,3 +1307,98 @@ button.text-link { border:0; background:transparent; padding:2px 0; color:var(--
 }
 .color-region-controls input[type="checkbox"] { width: auto; }
 .color-region-controls input[type="range"] { margin: 0; }
+
+/* UX-06: task navigation keeps the retained editor drafts mounted. */
+[hidden] { display: none !important; }
+.studio-flow { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; border-bottom:1px solid #43505f; padding:8px 0; }
+.studio-flow nav { display:flex; flex:1; gap:6px; }
+.studio-flow nav button { flex:1; white-space:nowrap; padding:10px 12px; }
+.studio-flow [aria-current=step] { background:var(--sage); color:var(--ink); border-color:var(--sage); }
+.studio-flow > label { display:flex; flex-direction:row; align-items:center; gap:6px; margin:0; font-size:12px; }
+.studio-flow input { width:auto; }
+.studio-flow p { flex-basis:100%; margin:0; color:var(--sage); font-size:12px; }
+.studio-context-summary { margin:8px 0; font-size:13px; }
+.create-view { display:flex; flex-direction:column; gap:10px; }
+.create-view > .studio-settings { padding:0; }
+.create-main .create-result { padding:10px; }
+.create-main .create-result .compare-viewport { min-height:260px; }
+.create-view .studio-expression-summary { margin:8px 0; }
+.create-view .reference-roles { margin:8px 0; }
+.create-view .create-drawers { display:block; }
+.create-view .create-drawers > details { margin-bottom:8px; }
+
+/* One visible workspace; subtools replace it while parent state remains mounted. */
+.editor-workspace-screen { position:fixed; inset:0; z-index:100; display:flex; flex-direction:column; background:var(--ink); padding:8px; gap:6px; overflow:hidden; }
+.editor-workspace-path { color:var(--sage); font-size:12px; flex-shrink:0; }
+.editor-workspace-screen > section { flex:1; min-height:0; width:100%; max-width:none; max-height:none; height:auto; margin:0; border-radius:6px; display:flex; flex-direction:column; overflow:hidden; padding:10px; gap:6px; }
+.editor-workspace-screen > section > p { margin:0; font-size:12px; flex-shrink:0; }
+.editor-workspace-screen .section-head { margin:0; flex-shrink:0; }
+.editor-workspace-screen h2 { font-size:18px; margin:0; }
+.editor-workspace-screen .color-layout,
+.editor-workspace-screen .color-region-layout,
+.editor-workspace-screen .relight-layout { flex:1; min-height:0; grid-template-columns:minmax(210px,280px) minmax(0,1fr); gap:12px; }
+.editor-workspace-screen .color-controls,
+.editor-workspace-screen .color-region-controls,
+.editor-workspace-screen .relight-controls { max-height:none; height:100%; min-height:0; overflow:auto; margin:0; padding:8px; }
+.editor-workspace-screen .color-review,
+.editor-workspace-screen .relight-preview { min-height:0; max-height:none; overflow:auto; }
+.editor-workspace-screen .color-region-layout figure { display:flex; flex-direction:column; min-height:0; }
+.editor-workspace-screen .color-images { min-height:260px; }
+.editor-workspace-screen .color-actions,
+.editor-workspace-screen .relight-actions { flex-shrink:0; position:static; margin:0; padding:6px 0 0; }
+.editor-workspace-screen .precision-editor { padding:8px; }
+.editor-workspace-screen .precision-editor > .editor-workspace { grid-template-columns:220px minmax(0,1fr); }
+/* Camera changes CSS only. All canvases retain their original pixel buffers. */
+.pixel-camera { min-width:0; display:flex; flex-direction:column; flex:1; min-height:230px; height:100%; }
+.pixel-camera-tools { display:flex; flex-wrap:wrap; align-items:center; gap:4px; padding:4px 0; }
+.pixel-camera-tools button { padding:5px 7px; font-size:11px; }
+.pixel-camera-viewport { position:relative; flex:1; min-height:180px; overflow:hidden; touch-action:none; }
+.pixel-camera-stage { position:absolute; }
+.pixel-camera-stage canvas,
+.color-region-layout .pixel-camera-stage canvas { width:100%!important; height:100%!important; max-width:none!important; max-height:none!important; object-fit:fill; }
+.pixel-camera-stage > .relight-canvas { width:100%; height:100%; max-height:none; overflow:visible; padding:0; }
+.color-images .pixel-camera { height:45vh; }
+.color-region-layout .pixel-camera { height:100%; min-height:0; }
+.relight-preview .pixel-camera { height:50vh; }
+@media(max-width:1000px) {
+  .studio-flow nav button { font-size:12px; padding:8px; }
+  .editor-workspace-screen .color-layout,.editor-workspace-screen .color-region-layout,.editor-workspace-screen .relight-layout { grid-template-columns:210px minmax(0,1fr); gap:8px; }
+  .editor-workspace-screen .color-images { grid-template-columns:1fr; }
+  .color-images .pixel-camera { height:260px; }
+}
+.studio-editor[data-operation="expression"] .create-view { display:flex; }
+.editor-workspace-screen .precision-editor { position:relative; padding-left:62px; }
+.editor-workspace-screen .precision-editor > .editor-tools { position:absolute; top:80px; bottom:80px; left:8px; width:42px; flex-direction:column; flex-wrap:nowrap; overflow:auto; }
+.editor-workspace-screen .precision-editor > .editor-workspace { grid-template-columns:minmax(0,1fr) 220px; }
+.editor-workspace-screen .precision-editor .editor-sidebar { order:2; }
+.editor-workspace-screen .precision-editor .editor-image-area { order:1; }
+.editor-workspace-screen .color-controls,.editor-workspace-screen .color-region-controls,.editor-workspace-screen .relight-controls { grid-column:2; grid-row:1; }
+.editor-workspace-screen .color-review,.editor-workspace-screen .color-region-layout > figure,.editor-workspace-screen .relight-preview { grid-column:1; grid-row:1; }
+.editor-workspace-screen .color-layout,.editor-workspace-screen .color-region-layout,.editor-workspace-screen .relight-layout { grid-template-columns:minmax(0,1fr) 280px; }
+@media(max-width:1000px) {
+  .editor-workspace-screen .color-layout,.editor-workspace-screen .color-region-layout,.editor-workspace-screen .relight-layout { grid-template-columns:minmax(0,1fr) 240px; }
+  .editor-workspace-screen .precision-editor > .editor-workspace { grid-template-columns:minmax(0,1fr) 210px; }
+}
+.editor-workspace-screen .pixel-camera { display:grid; grid-template-columns:68px minmax(0,1fr); gap:6px; }
+.editor-workspace-screen .pixel-camera-tools { flex-direction:column; flex-wrap:nowrap; align-items:stretch; overflow:auto; justify-content:flex-start; }
+.editor-workspace-screen .pixel-camera-tools button { white-space:normal; min-height:28px; }
+.editor-workspace-screen .pixel-camera-tools output { text-align:center; font-size:11px; }
+.editor-workspace-screen .pixel-camera-viewport { min-width:0; }
+.studio-editor .studio-settings { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px 16px; }
+.studio-editor .studio-settings .create-header,
+.studio-editor .studio-settings .create-header.has-style { grid-column:1/-1; grid-template-columns:repeat(4,minmax(0,1fr)); }
+.studio-editor .studio-settings .studio-expression-summary { grid-column:1; grid-row:2 / span 6; padding:8px; background:var(--slate); border-radius:6px; margin:0; }
+.studio-editor .studio-settings > .studio-lock-summary,
+.studio-editor .studio-settings > h3,
+.studio-editor .studio-settings > button,
+.studio-editor .studio-settings > .reference-roles,
+.studio-editor .studio-settings > p { grid-column:2; margin:0; }
+.studio-editor .studio-settings .reference-roles { font-size:12px; }
+@media(max-width:800px) {
+  .studio-editor .studio-settings { grid-template-columns:minmax(0,1fr); }
+  .studio-editor .studio-settings .studio-expression-summary { grid-row:auto; }
+  .studio-editor .studio-settings > .studio-lock-summary,.studio-editor .studio-settings > h3,.studio-editor .studio-settings > button,.studio-editor .studio-settings > .reference-roles,.studio-editor .studio-settings > p { grid-column:1; }
+}
+.studio-flow nav { flex-direction:row; min-width:0; }
+.studio-flow nav button { text-align:center; }
+.create-main .project-management { border:1px solid #3e4b5b; border-radius:6px; padding:4px 8px; background:#1b222c; }

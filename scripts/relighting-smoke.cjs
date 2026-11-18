@@ -174,6 +174,27 @@ const { createHash } = require("node:crypto");
       .readdir(path.join(project, "assets", "quality"))
       .catch(() => []);
     const originalFrame = await getFramebuffer();
+    // A camera-only zoom retains the actual GPU/CPU canvas and its canonical pixels.
+    const lightCanvas = await dialog
+      .locator(".relight-canvas canvas")
+      .elementHandle();
+    await dialog
+      .getByRole("button", { name: "Bild vergrößern", exact: true })
+      .click();
+    await expect(dialog.getByLabel("Lichtzoom", { exact: true })).toHaveValue(
+      "1.25",
+    );
+    expect(
+      await lightCanvas.evaluate(
+        (c) => c === document.querySelector(".relight-canvas canvas"),
+      ),
+    ).toBe(true);
+    expect((await getFramebuffer()).bytes).toEqual(originalFrame.bytes);
+    await dialog.getByRole("button", { name: "1:1", exact: true }).click();
+    await expect(dialog.getByLabel("Lichtzoom", { exact: true })).toHaveValue(
+      "1",
+    );
+
     await dialog.getByLabel("Intensität", { exact: true }).fill("0.8");
     await dialog.getByLabel("Farbtemperatur", { exact: true }).fill("0.5");
     await dialog.getByLabel("Schattenstärke", { exact: true }).fill("0.3");
@@ -613,9 +634,22 @@ const { createHash } = require("node:crypto");
     expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(
       largeBefore,
     );
+    // UX-06: cancelling discard retains the live draft and project bytes.
+    page.once("dialog", (d) => d.dismiss());
     await dialog
       .getByRole("button", { name: "Verwerfen & schließen", exact: true })
       .click();
+    await expect(dialog).toBeVisible();
+    expect(await fs.readFile(path.join(project, "laceframe.json"))).toEqual(
+      largeBefore,
+    );
+    page.once("dialog", (d) => d.accept());
+    await dialog
+      .getByRole("button", { name: "Verwerfen & schließen", exact: true })
+      .click();
+    await expect(dialog).toBeHidden();
+    expect(await page.locator("#root").evaluate((el) => el.inert)).toBe(false);
+
     expect(errors).toEqual([]);
     console.log(
       "PASS relighting: worker live updates without disk writes, real GPU/CPU premultiplied agreement (GPU=" +

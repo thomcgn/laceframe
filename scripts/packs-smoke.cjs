@@ -1,3 +1,4 @@
+const { studioExpert } = require("./smoke-ui.cjs");
 // Real packaged Electron + typed IPC + JSON bytes; synthetic projects only, no ImageGen.
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises"),
@@ -398,8 +399,12 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     await expect(field(page, "Create Variante", { exact: true })).toHaveValue(
       variant.id,
     );
+    await studioExpert(page);
     await page
-      .getByRole("button", { name: "Prompt-Revision speichern", exact: true })
+      .getByRole("button", {
+        name: "Generierungsanweisung speichern",
+        exact: true,
+      })
       .click();
     await expect
       .poll(async () => (await manifest(second)).attempts.length)

@@ -1,3 +1,5 @@
+import { PixelViewport } from "./PixelViewport";
+import { EditorWorkspace } from "./EditorWorkspace";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   commitRegion,
@@ -191,7 +193,7 @@ export function ColorRegionEditor({
       onClose();
   };
   return (
-    <div className="modal-backdrop">
+    <EditorWorkspace title="Auswahl nach Farbe" className="">
       <section
         ref={modal}
         className="color-region-dialog"
@@ -366,33 +368,35 @@ export function ColorRegionEditor({
               {name} · {pixels.width}×{pixels.height} · Pipette /
               Auswahlvorschau
             </figcaption>
-            <canvas
-              ref={canvas}
-              width={pixels.width}
-              height={pixels.height}
-              aria-label="Farbauswahlfläche"
-              onClick={(e) => {
-                const r = e.currentTarget.getBoundingClientRect(),
-                  scale = Math.min(
-                    r.width / pixels.width,
-                    r.height / pixels.height,
+            <PixelViewport width={pixels.width} height={pixels.height}>
+              <canvas
+                ref={canvas}
+                width={pixels.width}
+                height={pixels.height}
+                aria-label="Farbauswahlfläche"
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect(),
+                    scale = Math.min(
+                      r.width / pixels.width,
+                      r.height / pixels.height,
+                    );
+                  pick(
+                    Math.floor(
+                      (e.clientX -
+                        r.left -
+                        (r.width - pixels.width * scale) / 2) /
+                        scale,
+                    ),
+                    Math.floor(
+                      (e.clientY -
+                        r.top -
+                        (r.height - pixels.height * scale) / 2) /
+                        scale,
+                    ),
                   );
-                pick(
-                  Math.floor(
-                    (e.clientX -
-                      r.left -
-                      (r.width - pixels.width * scale) / 2) /
-                      scale,
-                  ),
-                  Math.floor(
-                    (e.clientY -
-                      r.top -
-                      (r.height - pixels.height * scale) / 2) /
-                      scale,
-                  ),
-                );
-              }}
-            />
+                }}
+              />
+            </PixelViewport>
           </figure>
         </div>
         <div className="button-row color-actions">
@@ -438,6 +442,6 @@ export function ColorRegionEditor({
           />
         )}
       </section>
-    </div>
+    </EditorWorkspace>
   );
 }

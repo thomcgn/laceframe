@@ -1,3 +1,4 @@
+import { StudioSteps, useStudioSteps } from "../components/StudioSteps";
 import { MasterApproval } from "../components/MasterApproval";
 import { GenerationRequirements } from "../components/GenerationRequirements";
 import {
@@ -33,7 +34,7 @@ import {
 import type { Result } from "../../shared/bridge";
 import { ImagePreview } from "../components/ImagePreview";
 import { MasterCandidateCompare } from "../components/MasterCandidateCompare";
-import { PromptComposer } from "../components/PromptComposer";
+import { PromptComposer, PromptConflict } from "../components/PromptComposer";
 type Perform = <T>(
   work: () => Promise<Result<T>>,
   success: (v: T) => void,
@@ -68,6 +69,8 @@ export function CharacterCreator({
   onClose: () => void;
   onExpressions: () => void;
 }) {
+  const flow = useStudioSteps();
+  const { step, expert } = flow;
   const p = snapshot.project,
     character = p.characters.find((c) => c.id === p.selectedCharacterId);
   const attempts = p.masterAttempts.filter(
@@ -190,6 +193,7 @@ export function CharacterCreator({
       intent.rebuild &&
       currentMaster
     ) {
+      flow.setStep("Auswählen");
       setTarget({
         mode: "rebuild",
         baseMasterId: currentMaster.id,
@@ -219,6 +223,7 @@ export function CharacterCreator({
       );
       if (candidate) {
         setActiveId(candidate.attemptId);
+        flow.setStep("Freigeben");
         const a = attempts.find((a) => a.id === candidate.attemptId)!;
         setTarget({
           mode: a.mode ?? "create",
@@ -260,15 +265,15 @@ export function CharacterCreator({
   const running = codex.state === "running";
   const valid = Boolean(
     targetValid &&
-    draft &&
-    !transparencyConflicts(
-      draft.prompt.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, ""),
-    ) &&
-    characterCreationDraftSchema.safeParse(draft).success &&
-    composer.pendingBase === undefined &&
-    (promptMode === "expert" || composer.base === base) &&
-    codex.available &&
-    (identities.length + styleRefs.length <= 1 || codex.multipleReferences),
+      draft &&
+      !transparencyConflicts(
+        draft.prompt.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, ""),
+      ) &&
+      characterCreationDraftSchema.safeParse(draft).success &&
+      composer.pendingBase === undefined &&
+      (promptMode === "expert" || composer.base === base) &&
+      codex.available &&
+      (identities.length + styleRefs.length <= 1 || codex.multipleReferences),
   );
   const wasRunning = useRef(false);
   useEffect(() => {
@@ -352,10 +357,13 @@ export function CharacterCreator({
         );
         return { ok: true as const, value };
       },
-      (value) => { if (value) onSnapshot(value); },
+      (value) => {
+        if (value) onSnapshot(value);
+      },
     );
   }
   function generate() {
+    flow.setStep("Erzeugen");
     if (!valid || !draft) return;
     void perform(
       () => window.laceframe.startGeneration(draft as CharacterCreationDraft),
@@ -473,7 +481,17 @@ export function CharacterCreator({
                   {executionLabel(timing, running)}
                 </output>
               )}
-              {!running && <GenerationRequirements items={requirements} />}
+              {!running && (
+                <GenerationRequirements
+                  items={requirements}
+                  onFix={(target) => {
+                    if (target.includes("prompt")) {
+                      flow.setExpert(true);
+                      flow.setStep("Erzeugen");
+                    } else flow.setStep("Auswählen");
+                  }}
+                />
+              )}
               <small>
                 Nur dieser Klick übermittelt die unten aufgeführten Identitäts-
                 und Stilbilder an Codex und nutzt dein Codex-Kontingent.
@@ -511,6 +529,10 @@ export function CharacterCreator({
           </div>,
           slot,
         )}
+      <StudioSteps {...flow} />
+      {(!expert || step !== "Erzeugen") && (
+        <PromptConflict state={composer} onChange={setComposer} />
+      )}
       <div className="section-head">
         <div>
           <p className="eyebrow">CREATE CHARACTER</p>
@@ -546,7 +568,11 @@ export function CharacterCreator({
           </label>
         </>
       )}
-      <details className="creator-new-character" open={!character}>
+      <details
+        className="creator-new-character"
+        hidden={step !== "Auswählen"}
+        open={!character}
+      >
         <summary>Neue Figur anlegen</summary>
         <form
           className="inline-form"
@@ -584,7 +610,7 @@ export function CharacterCreator({
                 : "Für einen neuen Master derselben Figur in Characters Master neu aufbauen wählen."}
             </p>
           )}
-          <div className="creator-grid">
+          <div className="creator-grid" hidden={step !== "Auswählen"}>
             <section
               className="panel creator-identity"
               onDragOver={(e) => e.preventDefault()}
@@ -601,7 +627,7 @@ export function CharacterCreator({
               }}
             >
               <h3 data-focus-target="creator-identity">
-                Identity Lock · Identitätsquellen
+                Identität schützen · Identitätsquellen
               </h3>
               <p>
                 Bis zu drei Fotos derselben Person oder Illustrationen.
@@ -846,6 +872,7 @@ export function CharacterCreator({
           </div>
           <div
             className="reference-roles"
+            hidden={step !== "Erzeugen"}
             aria-label="Creator Referenzreihenfolge"
           >
             <strong>An Codex bei Generierung:</strong>
@@ -861,8 +888,8 @@ export function CharacterCreator({
                 </p>
               )}
           </div>
-          <section className="panel">
-            <h3>Masterkandidaten prüfen</h3>
+          <section className="panel" hidden={step === "Auswählen"}>
+            <h3>Masterentwürfe prüfen</h3>
             <label>
               Masterversuch
               <select
@@ -892,6 +919,23 @@ export function CharacterCreator({
                       ? "abgelehnt"
                       : "ungeprüft"}
                 </p>
+                {step === "Freigeben" && (
+                  <p aria-label="Gespeicherte Masterherkunft">
+                    Entwurf vom{" "}
+                    {new Date(candidate.createdAt).toLocaleString("de-DE")} ·{" "}
+                    {candidate.width} × {candidate.height} · Codex.
+                    {active && (
+                      <>
+                        {" "}
+                        Generierungsanweisung vom{" "}
+                        {new Date(
+                          active.promptRevision.createdAt,
+                        ).toLocaleString("de-DE")}
+                        .
+                      </>
+                    )}
+                  </p>
+                )}
                 <MasterCandidateCompare
                   master={activeReference}
                   candidate={candidate}
@@ -907,16 +951,19 @@ export function CharacterCreator({
                   }
                   previewPrefix="Character Creator"
                 />
-                <AssetQuality
-                  key={candidate.id}
-                  source={candidate}
-                  cutoutRequested={cutoutRequested}
-                  onCutoutOpened={() => setCutoutRequested(0)}
-                  project={p}
-                  onSnapshot={onSnapshot}
-                  disabled={busy || running}
-                />
-                {candidate.status === "candidate" && (
+                <div hidden={step === "Erzeugen"}>
+                  <AssetQuality
+                    key={candidate.id}
+                    source={candidate}
+                    workspaceStep={step}
+                    cutoutRequested={cutoutRequested}
+                    onCutoutOpened={() => setCutoutRequested(0)}
+                    project={p}
+                    onSnapshot={onSnapshot}
+                    disabled={busy || running}
+                  />
+                </div>
+                {candidate.status === "candidate" && step === "Freigeben" && (
                   <div className="button-row">
                     <button
                       className="danger"
@@ -973,7 +1020,7 @@ export function CharacterCreator({
                 kein erfundenes Bild.
               </p>
             )}
-            {active && (
+            {active && expert && (
               <details>
                 <summary>Gespeicherte Herkunft dieses Versuchs</summary>
                 <p className="mono">
@@ -991,6 +1038,7 @@ export function CharacterCreator({
           </section>
           <details
             className="panel"
+            hidden={!expert || step !== "Erzeugen"}
             open={promptOpen}
             onToggle={(e) => setPromptOpen(e.currentTarget.open)}
           >

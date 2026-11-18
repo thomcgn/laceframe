@@ -38,3 +38,18 @@ exports.zoomMask = async (editor, factor) => {
   const value = await slider.inputValue();
   await slider.fill(String(Number(value) + Math.log2(factor)));
 };
+
+// Navigate the actual task tabs; never reveal hidden fields by modifying the DOM.
+exports.studioStep = async (page, name) => {
+  const tabs = page
+    .locator(".studio-editor:visible")
+    .getByRole("navigation", { name: "Studio Schritte" });
+  await tabs.getByRole("button", { name: new RegExp(name + "$") }).click();
+};
+exports.studioExpert = async (page) => {
+  await exports.studioStep(page, "Erzeugen");
+  await page
+    .locator(".studio-editor:visible")
+    .getByRole("checkbox", { name: "Expertenansicht", exact: true })
+    .check();
+};

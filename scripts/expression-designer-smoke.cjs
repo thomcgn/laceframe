@@ -1,3 +1,4 @@
+const { studioStep, studioExpert } = require("./smoke-ui.cjs");
 const { reviewImport } = require("./historical-master-fixture.cjs");
 const { _electron: electron, expect } = require("@playwright/test");
 const fs = require("node:fs/promises");
@@ -180,12 +181,15 @@ const { field, nav } = require("./smoke-ui.cjs");
     await expect(
       page.getByRole("button", { name: "Ergebnis importieren …", exact: true }),
     ).toBeEnabled();
+    await studioExpert(page);
     await field(page, "Promptmodus", { exact: true }).selectOption(
       "supplement",
     );
+    await studioExpert(page);
     await field(page, "Ergänzende Anweisung", { exact: true }).fill(
       "Creative draft retained.",
     );
+    await studioStep(page, "Auswählen");
     await page
       .getByRole("button", { name: "Expression bearbeiten", exact: true })
       .click();
@@ -211,11 +215,13 @@ const { field, nav } = require("./smoke-ui.cjs");
     await expect(
       field(page, "Ergänzende Anweisung", { exact: true }),
     ).toHaveValue("Creative draft retained.");
+    await studioExpert(page);
     await field(page, "Promptmodus", { exact: true }).selectOption("expert");
     const prompt = field(page, "Arbeits-Prompt", { exact: true });
     await expect(prompt).toHaveValue(/One: deliberate gaze/);
     await expect(prompt).not.toHaveValue(/Calm global expression/);
     await prompt.fill((await prompt.inputValue()) + "\nEXPERT DRAFT");
+    await studioStep(page, "Auswählen");
     await page
       .getByRole("button", { name: "Expression bearbeiten", exact: true })
       .click();
@@ -254,6 +260,7 @@ const { field, nav } = require("./smoke-ui.cjs");
     );
     await nav(page, "Studio");
     page.once("dialog", (dialog) => dialog.accept());
+    await studioExpert(page);
     await field(page, "Promptmodus", { exact: true }).selectOption("automatic");
     await expect(field(page, "Promptmodus", { exact: true })).toHaveValue(
       "automatic",

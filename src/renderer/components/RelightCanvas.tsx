@@ -1,14 +1,17 @@
+import { PixelViewport } from "./PixelViewport";
 import { useEffect, useRef, useState } from "react";
 import type { RelightPixels } from "../../shared/relighting";
 /** GPU presents canonical CPU pixels. Straight texture -> explicit premultiplication, no color transform or smoothing. */
 export function RelightCanvas({
   pixels,
   zoom,
+  onZoom,
   pixelArt,
   forceCPU = false,
 }: {
   pixels: RelightPixels;
   zoom: number;
+  onZoom: (value: number) => void;
   pixelArt: boolean;
   forceCPU?: boolean;
 }) {
@@ -18,8 +21,8 @@ export function RelightCanvas({
     const canvas = document.createElement("canvas");
     canvas.width = pixels.width;
     canvas.height = pixels.height;
-    canvas.style.width = `${pixels.width * zoom}px`;
-    canvas.style.height = `${pixels.height * zoom}px`;
+    canvas.style.width = `${pixels.width}px`;
+    canvas.style.height = `${pixels.height}px`;
     canvas.style.imageRendering = pixelArt ? "pixelated" : "auto";
     canvas.setAttribute("aria-label", "Live Lichtvorschau");
     let gl: WebGLRenderingContext | null = null;
@@ -140,13 +143,20 @@ export function RelightCanvas({
       dispose();
       target.current?.replaceChildren();
     };
-  }, [pixels, zoom, pixelArt, forceCPU]);
+  }, [pixels, pixelArt, forceCPU]);
   return (
     <>
       <small role="status" aria-label="Lichtdarstellung">
         {backend}
       </small>
-      <div className="relight-canvas checker" ref={target} />
+      <PixelViewport
+        width={pixels.width}
+        height={pixels.height}
+        zoom={zoom}
+        onZoom={onZoom}
+      >
+        <div className="relight-canvas checker" ref={target} />
+      </PixelViewport>
     </>
   );
 }

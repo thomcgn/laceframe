@@ -96,24 +96,7 @@ export function PromptComposer({
               : "Automatische Vorlage"}
         </span>
       </div>
-      {state.pendingBase !== undefined && (
-        <div className="prompt-conflict" role="alert">
-          <strong>Auswahl oder Vorlage geändert.</strong>
-          <p>
-            Dein Expert Override bleibt erhalten. Übernimm die neue Vorlage oder
-            bestätige den eigenen Text für die neue Auswahl. Master,
-            Stilrevision, Emotion und Stimmaktion prüfen.
-          </p>
-          <div className="button-row">
-            <button onClick={() => onChange(resetComposer(state))}>
-              Neue Vorlage übernehmen
-            </button>
-            <button onClick={() => onChange(keepComposer(state))}>
-              Eigenen Prompt behalten
-            </button>
-          </div>
-        </div>
-      )}
+      <PromptConflict state={state} onChange={onChange} />
       <details className="full-prompt" open={mode === "expert"}>
         <summary>
           Vollständigen Prompt ansehen
@@ -143,5 +126,36 @@ export function PromptComposer({
         <pre className="prompt-base">{state.pendingBase ?? state.base}</pre>
       </details>
     </div>
+  );
+}
+
+export function PromptConflict({
+  state,
+  onChange,
+}: {
+  state: ComposerState;
+  onChange: (state: ComposerState) => void;
+}) {
+  return (
+    <>
+      {state.pendingBase !== undefined && (
+        <div className="prompt-conflict" role="alert">
+          <strong>Auswahl oder Vorlage geändert.</strong>
+          <p>
+            Dein Expert Override bleibt erhalten. Übernimm die neue Vorlage oder
+            bestätige den eigenen Text für die neue Auswahl. Master,
+            Stilrevision, Emotion und Stimmaktion prüfen.
+          </p>
+          <div className="button-row">
+            <button onClick={() => onChange(resetComposer(state))}>
+              Neue Vorlage übernehmen
+            </button>
+            <button onClick={() => onChange(keepComposer(state))}>
+              Eigenen Prompt behalten
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

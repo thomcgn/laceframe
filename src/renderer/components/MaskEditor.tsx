@@ -1,3 +1,4 @@
+import { EditorWorkspace } from "./EditorWorkspace";
 import { cutoutFrame } from "./cutout-preview";
 import { EditorTools, editorTools } from "./EditorTools";
 import {
@@ -529,7 +530,7 @@ export function MaskEditor({
   }
   finishRef.current = finish;
   return (
-    <div className="modal-backdrop precision-backdrop">
+    <EditorWorkspace title="Pixel bearbeiten" className="precision-backdrop">
       <section
         ref={dialog}
         className={`modal mask-editor precision-editor ${automatic ? "smart-mask-editor" : ""}`}
@@ -1592,6 +1593,6 @@ export function MaskEditor({
           </button>
         </div>
       </section>
-    </div>
+    </EditorWorkspace>
   );
 }

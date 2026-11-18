@@ -1,6 +1,6 @@
 # Workflows
 
-**Vorhandene Oberfläche:** Characters / Art Direction / Expressions / Studio / Library / Motion. Die Bedienwege unten sind implementiert, sofern ausdrücklich nicht als geplant bezeichnet. Begriffe können im aktuellen UI noch technisch/englisch sein; UX-06 vereinheitlicht die Darstellung erst im zweiten PR.
+**Vorhandene Oberfläche:** Characters / Art Direction / Expressions / Studio / Library / Motion. Die Bedienwege unten sind implementiert, sofern ausdrücklich nicht als geplant bezeichnet. Studio verwendet die Aufgaben **Auswählen → Erzeugen → Bearbeiten → Freigeben** für Master und Expressions. Die Schritte behalten ihre Eingaben innerhalb der Sitzung; keine Navigation startet eine Generierung.
 
 ## 1. Projekt erstellen
 
@@ -47,12 +47,12 @@ Neue Masteraktivierung benötigt echte transparente, nichtleere Bilddaten sowie 
 
 ## 7. Manuell bearbeiten
 
-Werkzeuge sind derzeit über Studio/Library und **Assetqualität** erreichbar, teilweise in eigenen Dialogen. Nicht jedes Werkzeug gilt für jede Quelle.
+**Studio → Bearbeiten** bietet Vergleich und Qualitätswerkzeuge; in der Library bleiben sie über **Assetqualität** erreichbar. Farbkorrektur, Farbauswahl, Masken/Freistellung und Relighting verwenden die gemeinsame fensterfüllende Editorfläche. Unterwerkzeuge ersetzen die sichtbare Fläche; der übergeordnete Entwurf bleibt erhalten und wird danach wieder bedienbar. Eigenschaften stehen seitlich, Übernehmen/Verwerfen bleiben erreichbar. Nicht jedes Werkzeug gilt für jede Quelle.
 
 | Aufgabe | Aktueller Weg / Bedeutung |
 | --- | --- |
 | Vorher/Nachher | Master-/Kandidatenvergleich, Slider per Maus/Touch/Pfeiltasten/Shift/Home/End, gemeinsamer Zoom/Pan, Overlay-Deckkraft; unterschiedliche Maße bleiben sichtbar. |
-| Originalpixel erhalten | **Hard Pixel Lock**: erlaubte Expressionsmaske bearbeiten/speichern, tatsächliches Rohresultat importieren, gleiche Maße und Registrierung manuell bestätigen, separates Composite erstellen und prüfen. Weiß erlaubt Änderung, Schwarz erhält den Master. Soft Lock ist nicht verfügbar. |
+| Originalpixel erhalten | **Originalpixel erhalten**: erlaubte Expressionsmaske bearbeiten/speichern, tatsächliches Rohresultat importieren, gleiche Maße und Registrierung manuell bestätigen, separates geschütztes Ergebnis erstellen und prüfen. Weiß erlaubt Änderung, Schwarz erhält den Master. Soft Lock ist nicht verfügbar. |
 | Hintergrund entfernen | **Hintergrund freistellen**: Original/Ergebnis/Alpha prüfen; Pipette/Toleranz, Schutz-/Entfernen-Pinsel, Polygon und Feinkorrektur nutzen. Weiß erhält Vordergrund, Schwarz entfernt Alpha. Speichern erstellt eine separate Ableitung, noch keine Freigabe. |
 | Farbdrift prüfen | **Farbkonsistenz prüfen**: Masterregionen über sichtbare Palette, Farbklick/Toleranz und mehrere Seeds aufbauen, Pinsel korrigiert. **Region speichern**, dann Masterpalette als neue Revision speichern. Kandidatenregion separat zuordnen und Pose prüfen. |
 | Masterfarben annähern | Regionale Master-/Kandidatenpalette vergleichen, **Masterpalette gezielt übertragen** oder eigene Farbgruppe wählen, Stärke/Radius und Schutzpixel prüfen. Keine Vollquantisierung; dunkle Zusatzschatten behalten standardmäßig ihre Helligkeit. L*-Versatz nur ausdrücklich wählen. Separaten Farbkandidaten speichern. |
@@ -67,8 +67,15 @@ Entwurf groß vergleichen, Warnungen, Identität, Silhouette, Alpha, Farbe und M
 
 **Library** zeigt Master, Masterentwürfe, Expressions und Qualitätsvarianten einschließlich historischer Versionen. **Transparentes PNG exportieren** schreibt nur ein intaktes freigegebenes transparentes Asset; optional Herkunfts-JSON mit exportieren. **Ausdrücklich Rohbild exportieren** ist der gesonderte `_RAW`-Weg. Ausgabeordner außerhalb des Projekts wählen; existierende Dateien werden nicht überschrieben. Das gesamte Projekt für spätere Bearbeitung zusätzlich sichern.
 
-## Geplant: Studio in vier Schritten
+## Studio bedienen
 
-UX-06 B ersetzt die lange Scrollfläche durch **Auswählen → Erzeugen → Bearbeiten → Freigeben**. Große gemeinsame Editorfläche: Werkzeuge links, Bild zentral, Eigenschaften seitlich, feste Übernehmen-/Verwerfen-Aktionen, einheitlicher Zoom/Pan; keine verschachtelten Bildmodals. Standardansicht erklärt die nächste Aufgabe; Expertenansicht behält vollständigen Prompt, Referenzen, Providerdaten, Maskenrevisionen, Metriken, SHA und Diagnosen. Eine Anwendung und ein Projektzustand, keine parallele Datenkopie. Unfertige Arbeit darf beim Schritt-/Projektwechsel nicht still verschwinden. Das ist das Ziel des zweiten PRs, noch kein vorhandener UI-Ablauf.
+1. **Auswählen:** Figur, Masterversion, Expression/Intensität/Aktion beziehungsweise Identitätsquellen, Outfit und Stil festlegen. Die Hauptbereiche bleiben unverändert.
+2. **Erzeugen:** Eingaben und Ergebnisvorschau prüfen. Die feste Aktionsleiste zeigt Voraussetzungen, echte Phase, Zeit und Abbruch. Sie bleibt auch beim Schrittwechsel erreichbar. Nur ein ausdrücklicher Generieren-/Importklick startet Arbeit.
+3. **Bearbeiten:** Vergleich, Originalpixelschutz, Farbe, Freistellung, Qualität und vorhandenes Relighting verwenden. Abgeleitete Bilder sind eigene Entwürfe. Zoom ändert keine Pixel: Einpassen/1:1, Mausrad, Hand/Alt-Ziehen; in den Farb-/Lichtansichten auch +/- und Pfeiltasten auf der Bildfläche. Die präzise Maske behält ihre bestehenden Werkzeugkürzel und Zoom-/Pan-Steuerung.
+4. **Freigeben:** Große Vorschau, Transparenzbefund, Herkunft und gegebenenfalls separate Qualitätsversion prüfen. Masteraktivierung und Qualitätsableitungen benötigen weiterhin Bestätigungen/Notizen. Rohentwurf und abgeleitete Version sind unterschiedliche Freigaben. Danach zur Library wechseln und exportieren.
+
+**Expertenansicht** blendet vollständige Generierungsanweisung im Schritt Erzeugen sowie technische Herkunft, Maskenrevisionen, SHA-256 und historischen Verlauf ein. Die Farb-/Qualitätswerkzeuge behalten ihre Messwerte und Diagnosen. Ein Kontextkonflikt des eigenen Prompts bleibt auch in Standard sichtbar und muss explizit gelöst werden. Das Umschalten erzeugt keine zweite Projektkopie und verwirft keine Eingaben.
+
+Projektwechsel und Verwerfen geänderter Bildentwürfe verlangen Bestätigung. Kein automatisches Speichern unfertiger Editorentwürfe über einen Neustart; gespeicherte Assets/Rezepte bleiben wiederherstellbar. Ein unabhängiger Pixel-Finishing-Workspace und verbesserte Auswahl sind UX-07, nicht Teil dieses Ablaufs.
 
 Motion/Animation, Spritesheets, Game-Engine-Export und optionale lokale Mimik-/Modellanalyse bleiben getrennte spätere Phasen; siehe [ROADMAP](ROADMAP.md).

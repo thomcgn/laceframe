@@ -1,4 +1,4 @@
-import { ColorConsistency } from "../components/ColorConsistency";
+import { StudioSteps, useStudioSteps } from "../components/StudioSteps";
 import { ImagePreview } from "../components/ImagePreview";
 import { GenerationRequirements } from "../components/GenerationRequirements";
 import {
@@ -8,6 +8,7 @@ import {
   type StudioIntent,
   type Requirement,
 } from "../../shared/studio";
+import { Evidence } from "../components/AssetQuality";
 import { AssetQuality } from "../components/AssetQuality";
 import { MaskEditor } from "../components/MaskEditor";
 import { MAX_MASK_PIXELS } from "../../shared/masking";
@@ -37,7 +38,7 @@ import {
   type CodexStatus,
 } from "../../shared/generation";
 import { MasterCandidateCompare } from "../components/MasterCandidateCompare";
-import { PromptComposer } from "../components/PromptComposer";
+import { PromptComposer, PromptConflict } from "../components/PromptComposer";
 
 type Perform = <T>(
   work: () => Promise<Result<T>>,
@@ -73,6 +74,8 @@ export function CreateView({
   onRunningChange: (running: boolean) => void;
   visible: boolean;
 }) {
+  const flow = useStudioSteps();
+  const { step, expert } = flow;
   const p = snapshot.project;
   const character = p.characters.find((c) => c.id === p.selectedCharacterId);
   const attempts = p.attempts.filter((a) => a.characterId === character?.id);
@@ -174,6 +177,7 @@ export function CreateView({
       intent.characterId !== character?.id
     )
       return;
+    flow.setStep(intent.candidateId ? "Freigeben" : "Auswählen");
     if (intent.masterId) setMasterId(intent.masterId);
     if (intent.familyId) setFamilyId(intent.familyId);
     if (intent.variantId) {
@@ -300,6 +304,7 @@ export function CreateView({
     };
   }, [codex.state, onSnapshot]);
   function generate() {
+    flow.setStep("Erzeugen");
     if (!draft || !valid) return;
     void perform(
       () =>
@@ -400,7 +405,7 @@ export function CreateView({
   const [dragging, setDragging] = useState(false);
   const status = asset
     ? {
-        candidate: "Kandidat · ungeprüft",
+        candidate: "Entwurf · ungeprüft",
         approved: "Freigegeben",
         rejected: "Abgelehnt",
       }[asset.status]
@@ -493,6 +498,7 @@ export function CreateView({
     );
   }
   function requestImport(file?: File) {
+    flow.setStep("Erzeugen");
     if (providerId !== "manual-import") {
       void perform(
         async () => ({
@@ -651,7 +657,17 @@ export function CreateView({
                   {executionLabel(timing, running)}
                 </output>
               )}
-              {!running && <GenerationRequirements items={requirements} />}
+              {!running && (
+                <GenerationRequirements
+                  items={requirements}
+                  onFix={(target) => {
+                    if (target.includes("prompt")) {
+                      flow.setExpert(true);
+                      flow.setStep("Erzeugen");
+                    } else flow.setStep("Auswählen");
+                  }}
+                />
+              )}
               {providerId === "codex-native" && (
                 <small>
                   Master + Prompt an Codex · nutzt dein Codex-Kontingent.
@@ -702,6 +718,16 @@ export function CreateView({
           </div>,
           slot,
         )}
+      <StudioSteps {...flow} />
+      {(!expert || step !== "Erzeugen") && (
+        <PromptConflict state={composer} onChange={setComposer} />
+      )}
+      <p className="studio-context-summary">
+        Arbeitsauswahl:{" "}
+        {character?.name ?? "Keine Figur"} · Master V{master?.version ?? "—"} ·{" "}
+        {family?.label} / {variant?.label} ·{" "}
+        {artDirection?.name ?? "Eigener Masterstil"}
+      </p>
       {providerError && (
         <p role="alert" className="error">
           {providerError}
@@ -713,7 +739,7 @@ export function CreateView({
           <button onClick={onCharacters}>Zu Characters</button>
         </div>
       )}
-      <div className="studio-settings">
+      <div className="studio-settings" hidden={step !== "Auswählen"}>
         <div
           className={`create-header${p.artDirections.length ? " has-style" : ""}`}
         >
@@ -927,8 +953,8 @@ export function CreateView({
           </button>
         </section>
         <details className="studio-lock-summary">
-          <summary>Identity Lock · Outfit & Composition</summary>
-          <h3>Identity Lock</h3>
+          <summary>Identität schützen · Outfit & Bildaufbau</summary>
+          <h3>Identität schützen</h3>
           <p>
             {character?.name ?? "Figur wählen"} · Master V
             {master?.version ?? "—"} · {master?.width ?? "—"}×
@@ -1019,6 +1045,16 @@ export function CreateView({
             </small>
           )}
         </div>
+        <p>
+          Outfit: aus Master V{master?.version ?? "—"};{" "}
+          {p.outfits
+            .filter((o) => o.characterId === character?.id)
+            .map((o) => `${o.name}: ${o.notes}`)
+            .join(" · ") || "keine zusätzlichen Outfitnotizen"}
+          .
+        </p>
+      </div>
+      <div hidden={step !== "Erzeugen" || !expert}>
         <details className="reference-inputs">
           <summary>
             Tatsächlich verwendete Bildreferenzen ·{" "}
@@ -1040,6 +1076,8 @@ export function CreateView({
             />
           ))}
         </details>
+      </div>
+      <div hidden={step !== "Bearbeiten"}>
         {master && (
           <div className="mask-controls">
             <label>
@@ -1055,7 +1093,7 @@ export function CreateView({
               >
                 <option value="none">Ohne Maske</option>
                 <option value="soft">Soft Lock · nicht verfügbar</option>
-                <option value="hard">Hard Pixel Lock · lokal</option>
+                <option value="hard">Originalpixel erhalten · lokal</option>
               </select>
             </label>
             {editMode === "soft" && (
@@ -1142,6 +1180,7 @@ export function CreateView({
       </div>
       <section
         className={`create-result ${dragging ? "drag-active" : ""}`}
+        hidden={step === "Auswählen"}
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1167,7 +1206,7 @@ export function CreateView({
         }}
       >
         <div className="comparison-heading">
-          <h2>Master / Kandidat</h2>
+          <h2>Master / Entwurf</h2>
           <span className={`badge ${asset?.status ?? ""}`}>{status}</span>
         </div>
         {active?.mask && (
@@ -1181,7 +1220,8 @@ export function CreateView({
               >
                 <option value="raw">Rohkandidat</option>
                 <option value="composite">
-                  Composite{!composite ? " · noch nicht erstellt" : ""}
+                  Geschütztes Ergebnis
+                  {!composite ? " · noch nicht erstellt" : ""}
                 </option>
               </select>
             </label>
@@ -1197,7 +1237,7 @@ export function CreateView({
               Maskensnapshot: {activeMask?.name} · R{active.mask.revision} ·{" "}
               {active.mask.sha256.slice(0, 12)} ·{" "}
               {composite && asset?.composite
-                ? `Composite · ${asset.status === "approved" ? "freigegeben" : asset.status === "rejected" ? "abgelehnt" : "ungeprüft"}`
+                ? `Geschütztes Ergebnis · ${asset.status === "approved" ? "freigegeben" : asset.status === "rejected" ? "abgelehnt" : "ungeprüft"}`
                 : "KI-Rohbild · kein Pixel Lock"}
             </small>
             {raw && !composite && (
@@ -1213,7 +1253,7 @@ export function CreateView({
                     onClick={() => {
                       if (
                         window.confirm(
-                          "Identische Maße beweisen keine Ausrichtung. Stimmen Ursprung (0,0), Ausschnitt und Gesichtslage überein? Nur bei bestätigter Registrierung das Composite erstellen.",
+                          "Identische Maße beweisen keine Ausrichtung. Stimmen Ursprung (0,0), Ausschnitt und Gesichtslage überein? Nur bei bestätigter Registrierung das geschützte Ergebnis erstellen.",
                         )
                       ) {
                         void perform(
@@ -1227,12 +1267,12 @@ export function CreateView({
                             onSnapshot(value);
                             setCandidateKind("composite");
                           },
-                          "Composite erstellt. Manuelle Prüfung erforderlich.",
+                          "Geschütztes Ergebnis erstellt. Manuelle Prüfung erforderlich.",
                         );
                       }
                     }}
                   >
-                    Registrierung bestätigen & Composite erstellen
+                    Registrierung bestätigen & geschütztes Ergebnis erstellen
                   </button>
                 )}
               </>
@@ -1244,23 +1284,18 @@ export function CreateView({
           candidate={asset}
           mask={maskOverlay ? activeMask : undefined}
         />
-        {asset && (
-          <ColorConsistency
-            sourceId={asset.id}
-            project={p}
-            onSnapshot={onSnapshot}
-            disabled={busy || running}
-          />
-        )}
-        {asset && (
-          <AssetQuality
-            key={asset.id}
-            source={asset}
-            project={p}
-            onSnapshot={onSnapshot}
-            disabled={busy || running}
-          />
-        )}
+        <div hidden={step !== "Bearbeiten" && step !== "Freigeben"}>
+          {asset && (
+            <AssetQuality
+              key={asset.id}
+              source={asset}
+              workspaceStep={step}
+              project={p}
+              onSnapshot={onSnapshot}
+              disabled={busy || running}
+            />
+          )}
+        </div>
         {!master && (
           <button onClick={onCharacters}>
             Freigegebenen Master importieren
@@ -1297,8 +1332,45 @@ export function CreateView({
             </div>
           </div>
         )}
+        {asset && step === "Freigeben" && (
+          <p aria-label="Gespeicherte Bildherkunft">
+            Entwurf vom {new Date(asset.createdAt).toLocaleString("de-DE")} ·
+            Referenz: Master V{reviewMaster?.version ?? "—"} · {asset.width} ×{" "}
+            {asset.height} ·{" "}
+            {active?.providerId === "codex-native"
+              ? "Codex"
+              : "Manueller Import"}
+            .
+            {active && (
+              <>
+                {" "}
+                Gespeicherter Versuch {attempts.indexOf(active) + 1};
+                Generierungsanweisung vom{" "}
+                {new Date(active.promptRevision.createdAt).toLocaleString(
+                  "de-DE",
+                )}
+                .
+                {active.artDirectionRevision && (
+                  <> Stilrevision R{active.artDirectionRevision}.</>
+                )}
+              </>
+            )}
+            {expert && (
+              <>
+                {" "}
+                Bild-ID {asset.id} · SHA-256 {asset.sha256}
+              </>
+            )}
+          </p>
+        )}
+        {asset && step === "Freigeben" && (
+          <Evidence id={asset.id} label="Expressionentwurf vor Freigabe" />
+        )}
         {asset && (
-          <div className="comparison-review button-row">
+          <div
+            className="comparison-review button-row"
+            hidden={step !== "Freigeben"}
+          >
             <button onClick={() => onInspect(asset.id)}>
               In Library prüfen
             </button>
@@ -1309,11 +1381,11 @@ export function CreateView({
                   onClick={() =>
                     command(
                       { type: "review", id: asset.id, status: "rejected" },
-                      "Kandidat verworfen. Verlauf und Original bleiben erhalten.",
+                      "Entwurf verworfen. Verlauf und Original bleiben erhalten.",
                     )
                   }
                 >
-                  Kandidat verwerfen
+                  Entwurf verwerfen
                 </button>
                 <button
                   className="primary"
@@ -1332,9 +1404,10 @@ export function CreateView({
           </div>
         )}
       </section>
-      <div className="create-drawers">
+      <div className="create-drawers" hidden={!expert || step === "Auswählen"}>
         <details
           className="panel prompt-drawer"
+          hidden={step !== "Erzeugen"}
           open={promptOpen}
           onToggle={(e) => setPromptOpen(e.currentTarget.open)}
         >
@@ -1399,7 +1472,7 @@ export function CreateView({
               disabled={!valid || Boolean(matches)}
               onClick={() => savePrompt()}
             >
-              Prompt-Revision speichern
+              Generierungsanweisung speichern
             </button>
             <button disabled={!valid} onClick={() => savePrompt(false)}>
               Prompt kopieren
@@ -1415,7 +1488,7 @@ export function CreateView({
           </p>
         </details>
         <details className="panel create-inspector">
-          <summary>Inspector · technische Herkunft</summary>
+          <summary>Technische Details · Herkunft</summary>
           {active?.mask && (
             <p className="mono">
               Maske {active.mask.id} · Revision {active.mask.revision} · SHA-256{" "}
