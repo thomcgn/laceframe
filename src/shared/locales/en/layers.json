@@ -51,5 +51,10 @@
   "redo": "Redo",
   "stats": "Assigned: {{classified}} · Unclassified: {{unclassified}} · Conflicts: {{conflicts}}",
   "cancel": "Cancel selection",
-  "save": "Save layer revision"
+  "save": "Save layer revision",
+  "importTransparent": "The color region contains transparent pixels. Explicitly confirm the visible subset.",
+  "clipImport": "The color region includes transparent pixels. Exclude these only for the new layer? The original mask stays unchanged.",
+  "importRegion": "Existing master region",
+  "importButton": "Explicitly import region",
+  "importHint": "New layer mask with provenance. Review overlaps afterwards."
 }

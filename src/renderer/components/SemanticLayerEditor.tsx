@@ -6,6 +6,7 @@ import {
   type SemanticLayerRole,
   validateLayerMasks,
   MAX_LAYERS,
+  layerFromColorRegion,
 } from "../../shared/semantic-layers";
 import {
   layerHistory,
@@ -68,6 +69,10 @@ export function SemanticLayerEditor({
       (s) => s.sourceId === sourceId,
     ),
     latest = revisions.at(-1);
+  const [importRegion, setImportRegion] = useState("");
+  const paletteRegions = project.masterPalettes
+    .filter((p) => p.masterId === sourceId)
+    .flatMap((p) => p.regions.map((r) => ({ palette: p, region: r })));
   const [source, setSource] = useState<ColorPixels & { sha256: string }>(),
     [history, setHistory] = useState<LayerHistory>(),
     [active, setActive] = useState(""),
@@ -308,6 +313,39 @@ export function SemanticLayerEditor({
       setError("");
     } catch (e) {
       setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function importPaletteRegion() {
+    const entry = paletteRegions.find(
+      (e) => `${e.palette.id}:${e.region.id}` === importRegion,
+    );
+    if (!entry || !source) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await window.laceframe.colorPalette(entry.palette.id);
+      if (!result.ok) throw new Error(result.error);
+      const region = result.value.regions.find(
+        (r) => r.id === entry.region.id,
+      )!;
+      const outside = region.weights.some(
+        (v, i) => v && !source.data[i * 4 + 3],
+      );
+      if (outside && !window.confirm(tr("layers.clipImport"))) return;
+      const imported = layerFromColorRegion(
+        source,
+        region,
+        entry.palette.id,
+        crypto.randomUUID(),
+        rows.length,
+        outside,
+      );
+      change([...rows, imported]);
+      setActive(imported.id);
+    } catch (error) {
+      setError(String(error));
     } finally {
       setBusy(false);
     }
@@ -619,6 +657,43 @@ export function SemanticLayerEditor({
                       ))}
                     </select>
                   </label>
+                )}
+                {paletteRegions.length > 0 && (
+                  <section className="semantic-import">
+                    <label>
+                      {tr("layers.importRegion")}
+                      <select
+                        aria-label={tr("layers.importRegion")}
+                        value={importRegion}
+                        disabled={busy || saving}
+                        onChange={(e) => setImportRegion(e.target.value)}
+                      >
+                        <option value="">—</option>
+                        {paletteRegions.map(({ palette, region }) => (
+                          <option
+                            key={`${palette.id}:${region.id}`}
+                            value={`${palette.id}:${region.id}`}
+                          >
+                            {palette.revision} · {region.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      disabled={
+                        !importRegion ||
+                        busy ||
+                        saving ||
+                        rows.length >= MAX_LAYERS ||
+                        source.width * source.height * (rows.length + 1) >
+                          64 * 1024 * 1024
+                      }
+                      onClick={() => void importPaletteRegion()}
+                    >
+                      {tr("layers.importButton")}
+                    </button>
+                    <small>{tr("layers.importHint")}</small>
+                  </section>
                 )}
                 <fieldset disabled={busy || saving}>
                   {rows.map((layer, index) => (

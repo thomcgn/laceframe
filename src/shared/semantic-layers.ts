@@ -113,3 +113,44 @@ export function semanticRegion(layers: LayerDraft[], role: SemanticLayerRole) {
       });
   return out;
 }
+/** Explicit seed import only. Palette bytes/revisions are never modified. */
+export function layerFromColorRegion(
+  source: ColorPixels,
+  region: {
+    id: string;
+    name: string;
+    role: string;
+    weights: Uint8Array;
+    mask: { sha256: string };
+  },
+  paletteId: string,
+  id: string,
+  order: number,
+  clipTransparent = false,
+): LayerDraft {
+  if (region.weights.length !== source.width * source.height)
+    throw new Error(tr("layers.invalidMask"));
+  const weights = new Uint8Array(region.weights);
+  for (let i = 0; i < weights.length; i++)
+    if (weights[i] && !source.data[i * 4 + 3]) {
+      if (!clipTransparent) throw new Error(tr("layers.importTransparent"));
+      weights[i] = 0;
+    }
+  return {
+    id,
+    name: region.name,
+    role:
+      region.role === "clothes"
+        ? "clothing"
+        : layerRoleSchema.parse(region.role),
+    visible: true,
+    locked: false,
+    order,
+    weights,
+    importedFrom: {
+      paletteId,
+      regionId: region.id,
+      maskSha256: region.mask.sha256,
+    },
+  };
+}

@@ -2975,19 +2975,29 @@ export class ProjectService {
       createdAt: new Date().toISOString(),
       layers: input.layers.map(({ weights, ...layer }) => {
         void weights;
-        return ({
-        ...layer,
-        mask: {
-          file: assetFile("color-masks", "0".repeat(64), "png"),
-          sha256: "0".repeat(64),
-        },
-      });
+        return {
+          ...layer,
+          mask: {
+            file: assetFile("color-masks", "0".repeat(64), "png"),
+            sha256: "0".repeat(64),
+          },
+        };
       }),
     };
     projectSchema.parse({
       ...p,
       semanticLayerSets: [...p.semanticLayerSets, set],
     });
+    for (const layer of input.layers)
+      if (layer.importedFrom) {
+        const palette = p.masterPalettes.find(
+          (p) => p.id === layer.importedFrom!.paletteId,
+        )!;
+        const region = palette.regions.find(
+          (r) => r.id === layer.importedFrom!.regionId,
+        )!;
+        await this.colorMask(region.mask, master.width, master.height);
+      }
     await this.prepareFeatureBackup(
       "laceframe.v2.pre-semantic-layers.backup.json",
       (before) => !before.semanticLayerSets.length,

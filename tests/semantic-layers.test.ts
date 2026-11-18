@@ -253,3 +253,101 @@ it("validates path and source relationships in the shared project schema", async
   p.semanticLayerSets[0].characterId = randomUUID();
   expect(projectSchema.safeParse(p).success).toBe(false);
 });
+it("imports existing color masks byte-exactly with immutable origin and reusable role data", async () => {
+  const src = await s.analysisSource(masterId),
+    weights = layer().weights,
+    regionId = randomUUID();
+  await s.command({
+    type: "saveMasterPalette",
+    masterId,
+    masterSha256: src.sha256,
+    regions: [{ id: regionId, name: "Hair source", role: "hair", weights }],
+  });
+  const palette = s.snapshot().project.masterPalettes[0],
+    original = await fs.readFile(path.join(dir, palette.regions[0].mask.file));
+  const { layerFromColorRegion } = await import(
+      "../src/shared/semantic-layers"
+    ),
+    decoded = await s.colorPalette(palette.id);
+  const imported = layerFromColorRegion(
+    src,
+    decoded.regions[0],
+    palette.id,
+    randomUUID(),
+    0,
+  );
+  await save([imported]);
+  const record = s.snapshot().project.semanticLayerSets[0];
+  expect(record.layers[0].importedFrom).toEqual({
+    paletteId: palette.id,
+    regionId,
+    maskSha256: palette.regions[0].mask.sha256,
+  });
+  expect((await s.semanticLayers(record.id)).layers[0].weights).toEqual(
+    weights,
+  );
+  expect(
+    semanticRegion((await s.semanticLayers(record.id)).layers, "hair"),
+  ).toEqual(weights);
+  expect(
+    await fs.readFile(path.join(dir, palette.regions[0].mask.file)),
+  ).toEqual(original);
+  await s.open(dir);
+  expect(s.snapshot().project.masterPalettes[0]).toEqual(palette);
+});
+it("requires explicit visible-only import and keeps source weights unchanged", async () => {
+  const { layerFromColorRegion } = await import(
+      "../src/shared/semantic-layers"
+    ),
+    src = await s.analysisSource(masterId),
+    weights = layer().weights;
+  weights[0] = 255;
+  const region = {
+    id: randomUUID(),
+    name: "Partial source",
+    role: "clothes",
+    weights,
+    mask: { sha256: "0".repeat(64) },
+  };
+  expect(() =>
+    layerFromColorRegion(src, region, randomUUID(), randomUUID(), 0),
+  ).toThrow("transparente");
+  const imported = layerFromColorRegion(
+    src,
+    region,
+    randomUUID(),
+    randomUUID(),
+    0,
+    true,
+  );
+  expect(imported.role).toBe("clothing");
+  expect(imported.weights[0]).toBe(0);
+  expect(weights[0]).toBe(255);
+  expect(imported.weights[20]).toBe(255);
+});
+it("rechecks imported region hashes before saving instead of trusting renderer provenance", async () => {
+  const src = await s.analysisSource(masterId),
+    weights = layer().weights;
+  await s.command({
+    type: "saveMasterPalette",
+    masterId,
+    masterSha256: src.sha256,
+    regions: [{ id: randomUUID(), name: "Source", role: "hair", weights }],
+  });
+  const palette = s.snapshot().project.masterPalettes[0],
+    region = (await s.colorPalette(palette.id)).regions[0],
+    { layerFromColorRegion } = await import("../src/shared/semantic-layers");
+  const imported = layerFromColorRegion(
+      src,
+      region,
+      palette.id,
+      randomUUID(),
+      0,
+    ),
+    before = await fs.readFile(path.join(dir, "laceframe.json"));
+  const mask = path.join(dir, region.mask.file);
+  await fs.chmod(mask, 0o600);
+  await fs.writeFile(mask, encodePixels(image()));
+  await expect(save([imported])).rejects.toThrow();
+  expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
+});

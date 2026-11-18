@@ -51,5 +51,10 @@
   "redo": "Wiederholen",
   "stats": "Zugeordnet: {{classified}} · Offen: {{unclassified}} · Konflikte: {{conflicts}}",
   "cancel": "Auswahl abbrechen",
-  "save": "Layerrevision speichern"
+  "save": "Layerrevision speichern",
+  "importTransparent": "Die Farbregion enthält transparente Pixel. Sichtbare Teilmenge ausdrücklich bestätigen.",
+  "clipImport": "Die Farbregion enthält transparente Pixel. Diese nur für den neuen Layer ausschließen? Die Originalmaske bleibt unverändert.",
+  "importRegion": "Vorhandene Masterregion",
+  "importButton": "Region ausdrücklich übernehmen",
+  "importHint": "Neue Layer-Maske mit Herkunft. Überlappungen anschließend prüfen."
 }
