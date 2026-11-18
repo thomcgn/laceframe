@@ -184,13 +184,11 @@ const { createHash } = require("node:crypto");
         .getByText("Synthetic Cameo", { exact: true }),
     ).toBeVisible();
     await studioStep(page, "Erzeugen");
-    // UX-01: missing prerequisites explain the disabled action and focus the fix.
-    await expect(
-      page.getByRole("button", {
-        name: "Neutralen Masterkandidaten generieren",
+    // Header click explains missing prerequisites, focuses the fix and creates no attempt.
+    await require("./smoke-ui.cjs").blockedGeneration(page, page.getByRole("button", {
+        name: "Master generieren",
         exact: true,
-      }),
-    ).toBeDisabled();
+      }));
     await expect(page.locator(".generation-requirements")).toContainText(
       "Identitätsbild fehlt",
     );
@@ -483,12 +481,10 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).toHaveValue(expertText);
-    await expect(
-      page.getByRole("button", {
-        name: "Neutralen Masterkandidaten generieren",
+    await require("./smoke-ui.cjs").blockedGeneration(page, page.getByRole("button", {
+        name: "Master generieren",
         exact: true,
-      }),
-    ).toBeDisabled();
+      }));
     await page
       .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
       .click();
@@ -502,16 +498,12 @@ const { createHash } = require("node:crypto");
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
     ).not.toHaveValue(/calm confident presence/);
-    await page
-      .getByRole("button", { name: "Expression erstellen", exact: true })
-      .click();
+    await require("./smoke-ui.cjs").studioMode(page, "expression");
     await studioStep(page, "Erzeugen");
     await expect(page.locator(".generation-requirements")).toContainText(
       "Kein freigegebener Master",
     );
-    await page
-      .getByRole("button", { name: "Master erstellen", exact: true })
-      .click();
+    await require("./smoke-ui.cjs").studioMode(page, "master");
     await studioStep(page, "Auswählen");
     await expect(
       field(page, "Figurenerstellung Outfit", { exact: true }),
@@ -547,7 +539,7 @@ const { createHash } = require("node:crypto");
       fullPage: true,
     });
     const generate = page.getByRole("button", {
-      name: "Neutralen Masterkandidaten generieren",
+      name: "Master generieren",
       exact: true,
     });
     await studioStep(page, "Erzeugen");
@@ -754,7 +746,7 @@ const { createHash } = require("node:crypto");
       "Master V1 freigegeben und gesperrt",
     );
     await studioStep(page, "Erzeugen");
-    await expect(generate).toBeDisabled();
+    await require("./smoke-ui.cjs").blockedGeneration(page, generate);
     const approved = await manifest();
     expect(approved.masterCandidates.map((c) => c.status)).toEqual([
       "rejected",
@@ -796,7 +788,7 @@ const { createHash } = require("node:crypto");
       "codex-native",
     );
     const expression = page.getByRole("button", {
-      name: "Mit Masterreferenz generieren",
+      name: "Expression generieren",
       exact: true,
     });
     await studioStep(page, "Erzeugen");
@@ -895,12 +887,10 @@ const { createHash } = require("node:crypto");
         exact: true,
       }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("button", {
-        name: "Neutralen Masterkandidaten generieren",
+    await require("./smoke-ui.cjs").blockedGeneration(page, page.getByRole("button", {
+        name: "Master generieren",
         exact: true,
-      }),
-    ).toBeDisabled();
+      }));
     // Master Rebuild: only deterministic local protocol jobs, never a real Codex image request.
     await nav(page, "Characters");
     const rebuildBefore = await manifest(),
@@ -931,7 +921,7 @@ const { createHash } = require("node:crypto");
     expect((await manifest()).characters[0].masterId).toBe(v1.id);
     const gen = () =>
       page.getByRole("button", {
-        name: "Neutralen Masterkandidaten generieren",
+        name: "Master generieren",
         exact: true,
       });
     const job = () =>
@@ -959,7 +949,7 @@ const { createHash } = require("node:crypto");
     await field(page, "Creator Ergänzende Anweisung", { exact: true }).fill(
       "Use a solid black background",
     );
-    await expect(gen()).toBeDisabled();
+    await require("./smoke-ui.cjs").blockedGeneration(page, gen());
     await expect(page.locator(".create-action-bar")).toContainText(
       "widerspricht",
     );

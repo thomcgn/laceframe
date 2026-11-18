@@ -32,7 +32,7 @@ Style-/Expression-Packs über native JSON-Dialoge austauschen. Importvorschau pr
 
 **Characters** zeigt den freigegebenen Master automatisch eingepasst; Zoomregler, 1:1/200/400, Mausrad am Mauszeiger und Alt-/Leertaste-Ziehen verändern nur die Ansicht. Identitätsquellen, Figurenaktionen und Masterversionsauswahl stehen daneben beziehungsweise darunter.
 
-**Characters → Neuen Charakter erstellen** oder **Studio → Master erstellen**: Figur benennen, ein bis drei Identitätsbilder (PNG/JPEG/WebP) per Mehrfachauswahl oder Drop importieren, Stil, Outfitbeschreibung und Komposition festlegen. Anzahl, Referenzrollen und Zielmaße prüfen. Zu große Gruppen, Duplikate und defekte Dateien werden vollständig abgelehnt. Einzelne Quellen lassen sich entfernen/ersetzen; historische Abhängigkeiten bleiben archiviert.
+**Figuren → Neue Figur** beziehungsweise das bestehende Formular bei noch leerem Studio: Figur benennen. Für eine ausgewählte Figur **Studio → Zum Master wechseln** verwenden; die Hauptaktion heißt **Master generieren**. Danach ein bis drei Identitätsbilder (PNG/JPEG/WebP) per Mehrfachauswahl oder Drop importieren, Stil, Outfitbeschreibung und Komposition festlegen. Anzahl, Referenzrollen und Zielmaße prüfen. Zu große Gruppen, Duplikate und defekte Dateien werden vollständig abgelehnt. Einzelne Quellen lassen sich entfernen/ersetzen; historische Abhängigkeiten bleiben archiviert.
 
 Der native Bilddialog merkt sich den letzten gewählten Ordner über Neustarts; Abbruch behält ihn, ein fehlender Ordner verwendet den OS-Standard. Drop verändert diese native Ordnerwahl nicht. Import/Änderung von Einstellungen erzeugt kein Bild.
 
@@ -50,7 +50,7 @@ Neue Masteraktivierung benötigt echte transparente, nichtleere Bilddaten sowie 
 
 **Expressions** verwaltet globale Familien/Varianten, Intensität, Anweisungen und vorgeschlagene Sprechaktion. Eigene Varianten sind möglich. Persönliche Performance gilt nur für die gewählte Figur/Variante; ohne Override greift die globale Vorlage. **Expression bearbeiten** übergibt den aktuellen Kontext an Studio.
 
-**Studio → Expression erstellen** zeigt den Master bereits in Auswählen und Erzeugen mit Figurenname/Version. Figur, freigegebenen Master, Familie/Variante und unabhängige Aktion wählen. Wut kann still oder schreiend sein; „Anbrüllen“ ersetzt nicht die gesamte Emotionsfamilie. Aktiven Stil und wirksame Regeln prüfen.
+**Studio → Zu Expressions wechseln** zeigt den Master bereits in Auswählen und Erzeugen mit Figurenname/Version. Figur, freigegebenen Master, Familie/Variante und unabhängige Aktion wählen. Wut kann still oder schreiend sein; „Anbrüllen“ ersetzt nicht die gesamte Emotionsfamilie. Aktiven Stil und wirksame Regeln prüfen.
 
 ## 6. Erzeugen oder importieren
 
@@ -112,3 +112,11 @@ Unter **Stilgestaltung → Stil erstellen** zuerst bis zu sechs Referenzbilder h
 Optional **Codex-Bildanalyse prüfen**, danach bewusst **Mit Codex analysieren**: Erst der zweite Klick überträgt Referenzbilder über den installierten offiziellen Codex-App-Server und verbraucht Codex-Kontingent. Es wird kein Bild generiert. Account und Vision-/Schemafähigkeit werden bei jedem Auftrag erneut geprüft. Ergebnisvorschläge erst durch eine lokale Analyse beziehungsweise **Vorschläge neu aufbauen** ausdrücklich in den überprüfbaren Entwurf übernehmen. Abbruch verwirft verspätete Ergebnisse. Alternativ lässt sich ein passendes semantisches JSON anhand des angezeigten Vertrags und der exakten Hashreihenfolge einfügen; seine Herkunft bleibt manuell.
 
 Nach der Inhaltsprüfung **Als neuen Stil speichern**. Dies setzt keinen neuen Projektstandard. Bibliothekskarten zeigen Name, Beschreibung, Referenzvorschau und Revision. **Im Character Creator verwenden** wählt den Stil ausdrücklich für einen neuen Masterentwurf; ein vorhandener Master wird dadurch nicht verändert. Unter Stildetails bleiben Zuordnungen, JSON-Pack-Import/-Export, historische Revisionen und die bisherige erweiterte Bearbeitung verfügbar. Im Character Creator erscheinen Beschreibung und Stilreferenzen zur gewählten aktuellen Revision. Gespeicherte Versuche behalten ihre ursprüngliche Revision.
+
+## Studio-Aktionen und Master-Rebuild
+
+Die primäre Headeraktion **Master generieren** beziehungsweise **Expression generieren** übergibt den Auftrag an den aktuellen Creator. Sie wechselt keinen Modus. Die separate sekundäre Aktion wechselt ausschließlich zwischen Master und Expressions und erhält die charakterbezogenen Entwürfe, einschließlich ergänzter und bearbeiteter Expertenanweisungen. Vorbereitete Eingaben werden bereits aus **Auswählen** verwendet; ein vorheriger Besuch von **Erzeugen** ist nicht erforderlich.
+
+Fehlende Voraussetzungen werden beim Klick angezeigt, ohne einen Auftrag zu senden; verlinkte Hinweise öffnen den passenden Schritt und fokussieren die Eingabe. Während eines Auftrags bleiben Status, tatsächliche Phase, Laufzeit und Abbruch außerhalb der gesperrten Arbeitsfläche sichtbar. Der Kandidat erscheint nach erfolgreicher Aufnahme in Erzeugen; **Bearbeiten** öffnet Vergleich und bestehende Werkzeuge, **Freigeben** behält die manuelle Masterprüfung. Keine automatische Freigabe.
+
+Bei bereits freigegebenem Master bleibt die direkte neue Erstellung gesperrt. **Neue Masterversion vorbereiten …** verlangt eine ausdrückliche Bestätigung und bindet den Rebuild an ID/Hash des aktuellen Masters. Es startet dadurch noch keine Generierung. Bei bearbeitetem Expertenprompt muss der neue Rebuild-Kontext gegebenenfalls zusätzlich über die bestehende Vorlagenkonflikt-Prüfung übernommen werden. Historische Master bleiben unverändert.

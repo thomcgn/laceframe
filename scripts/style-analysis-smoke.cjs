@@ -342,9 +342,7 @@ const { nav, studioExpert } = require("./smoke-ui.cjs");
     expect((await manifest()).styleAnalyses).toEqual(saved.styleAnalyses);
     // Both current Studio prompt composers consume the actual adopted revision without a generation.
     await nav(page, "Studio");
-    await page
-      .getByRole("button", { name: "Expression erstellen", exact: true })
-      .click();
+    await require("./smoke-ui.cjs").studioMode(page, "expression");
     const expression = page.locator(
       '.studio-editor[data-operation="expression"]:visible',
     );
@@ -352,9 +350,7 @@ const { nav, studioExpert } = require("./smoke-ui.cjs");
     await expect(
       expression.getByLabel("Arbeits-Prompt", { exact: true }),
     ).toHaveValue(/Manually reviewed graphic clusters/);
-    await page
-      .getByRole("button", { name: "Master erstellen", exact: true })
-      .click();
+    await require("./smoke-ui.cjs").studioMode(page, "master");
     const creator = page.locator(
       '.studio-editor[data-operation="master"]:visible',
     );

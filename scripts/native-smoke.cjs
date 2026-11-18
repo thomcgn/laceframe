@@ -128,9 +128,7 @@ const path = require("node:path");
       Buffer.from(resultBytes),
     );
     await nav(page, "Studio");
-    await page
-      .getByRole("button", { name: "Expression erstellen", exact: true })
-      .click();
+    await require("./smoke-ui.cjs").studioMode(page, "expression");
     await studioStep(page, "Auswählen");
     await field(page, "Studio Anbieter", { exact: true }).selectOption(
       "codex-native",
@@ -298,7 +296,7 @@ const path = require("node:path");
         "\nReviewed expert override.",
     );
     const generate = page.getByRole("button", {
-      name: "Mit Masterreferenz generieren",
+      name: "Expression generieren",
       exact: true,
     });
     await studioStep(page, "Erzeugen");
@@ -589,7 +587,7 @@ const path = require("node:path");
         exact: true,
       }),
     ).toBeVisible();
-    await expect(generate).toBeDisabled();
+    await require("./smoke-ui.cjs").blockedGeneration(page, generate);
     await page
       .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
       .click();
@@ -765,7 +763,7 @@ const path = require("node:path");
         "hard",
       );
       await studioStep(page, "Erzeugen");
-      await expect(generate).toBeDisabled();
+      await require("./smoke-ui.cjs").blockedGeneration(page, generate);
       await studioStep(page, "Bearbeiten");
       await page
         .getByRole("button", { name: "Maske erstellen", exact: true })
@@ -1092,7 +1090,7 @@ const path = require("node:path");
       );
       await expect(text(page, /Soft Lock nicht verfügbar/)).toBeVisible();
       await studioStep(page, "Erzeugen");
-      await expect(generate).toBeDisabled();
+      await require("./smoke-ui.cjs").blockedGeneration(page, generate);
       await studioStep(page, "Bearbeiten");
       await field(page, "Bearbeitungsmodus", { exact: true }).selectOption(
         "none",
@@ -1136,7 +1134,7 @@ const path = require("node:path");
         .locator(".generation-requirements")
         .getByText(/Mehrfachreferenzen nicht bestätigt/),
     ).toBeVisible();
-    await expect(generate).toBeDisabled();
+    await require("./smoke-ui.cjs").blockedGeneration(page, generate);
     await studioStep(page, "Auswählen");
     await field(page, "Charakter Stilzuordnung", { exact: true }).selectOption(
       "master",
@@ -1158,7 +1156,7 @@ const path = require("node:path");
     await expect(
       page.getByRole("status", { name: "Codex Status" }),
     ).toContainText("Nicht mit ChatGPT angemeldet");
-    await expect(generate).toBeDisabled();
+    await require("./smoke-ui.cjs").blockedGeneration(page, generate);
     // Close/relaunch/reopen the actual project: masks, composites, reviews and prompts persist exactly.
     const beforeMaskRestart = await manifest();
     await app.close();

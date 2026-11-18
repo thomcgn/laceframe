@@ -108,9 +108,9 @@ describe("explicit development and smoke profiles", () => {
     ]);
     expect(builds).toEqual([repo]);
   });
-  it("SMOKE reuses a verified build, without skipping its selected workflow", async () => {
-    const { calls, builds, report } = await spyRun("smoke", "creator", true);
-    expect(calls).toEqual([["node", "scripts/creator-smoke.cjs"]]);
+  it.each([["creator","creator-smoke.cjs"],["master","master-generation-smoke.cjs"]])("SMOKE %s reuses a verified build, without skipping its selected workflow", async (workflow,script) => {
+    const { calls, builds, report } = await spyRun("smoke", workflow, true);
+    expect(calls).toEqual([["node", `scripts/${script}`]]);
     expect(builds).toEqual([]);
     expect(report.packaging).toBe("reused-verified");
   });

@@ -409,9 +409,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     );
     // Existing manual Expression pipeline uses the same editor, keeps its Master binding.
     await nav(page, "Studio");
-    await page
-      .getByRole("button", { name: "Expression erstellen", exact: true })
-      .click();
+    await require("./smoke-ui.cjs").studioMode(page, "expression");
     await studioStep(page, "Erzeugen");
     await choose(file);
     await page

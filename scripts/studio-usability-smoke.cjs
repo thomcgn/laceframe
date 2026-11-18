@@ -185,9 +185,7 @@ const { createHash } = require("node:crypto");
         path: path.join(screenshots, `characters-${width}.png`),
       });
       await nav(page, "Studio");
-      await page
-        .getByRole("button", { name: "Expression erstellen", exact: true })
-        .click();
+      await require("./smoke-ui.cjs").studioMode(page, "expression");
       for (const step of ["Auswählen", "Erzeugen", "Bearbeiten", "Freigeben"]) {
         await studioStep(page, step);
         if (

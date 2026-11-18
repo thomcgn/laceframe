@@ -332,9 +332,7 @@ const { createHash } = require("node:crypto");
       page.getByRole("heading", { name: "Ada Voss", exact: true }),
     ).toBeVisible();
     await nav(page, "Studio");
-    await page
-      .getByRole("button", { name: "Expression erstellen", exact: true })
-      .click();
+    await require("./smoke-ui.cjs").studioMode(page, "expression");
     await studioStep(page, "Erzeugen");
     await expect(image(page, "Create · Masterreferenz")).toBeVisible();
     await studioStep(page, "Auswählen");

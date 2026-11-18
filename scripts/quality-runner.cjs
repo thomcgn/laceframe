@@ -73,6 +73,7 @@ async function runProfile(profile, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const scripts = {
     creator: "creator-smoke.cjs",
+    master: "master-generation-smoke.cjs",
     languages: "localization-smoke.cjs",
     expressions: "expression-designer-smoke.cjs",
     color: "color-consistency-smoke.cjs",

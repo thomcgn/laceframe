@@ -86,3 +86,37 @@ exports.prepareProjectCreation = async (page) => {
       .click();
   }
 };
+
+// Mode selection never invokes the primary generation action, including an already active mode.
+exports.studioMode = async (page, mode) => {
+  const context = page.locator(".studio-context");
+  const primary =
+    mode === "master" ? "Master generieren" : "Expression generieren";
+  if (await context.getByRole("button", { name: primary, exact: true }).count())
+    return;
+  await context
+    .getByRole("button", {
+      name:
+        mode === "master" ? "Zum Master wechseln" : "Zu Expressions wechseln",
+      exact: true,
+    })
+    .click();
+};
+exports.blockedGeneration = async (page, button) => {
+  const count = () =>
+    page.evaluate(async () => {
+      const r = await window.laceframe.generationStatus();
+      if (!r.ok) throw new Error(r.error);
+      return (
+        r.value.snapshot.project.attempts.length +
+        r.value.snapshot.project.masterAttempts.length
+      );
+    });
+  const before = await count();
+  await button.click();
+  const { expect } = require("@playwright/test");
+  await expect(
+    page.locator(".generation-requirements:visible"),
+  ).not.toBeEmpty();
+  expect(await count()).toBe(before);
+};
