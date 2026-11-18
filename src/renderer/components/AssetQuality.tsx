@@ -1,3 +1,4 @@
+import { PixelEditEditor } from "./PixelEditEditor";
 import type { StudioStep } from "./StudioSteps";
 import { ColorConsistency } from "./ColorConsistency";
 import type { RelightEligibility } from "../../shared/relighting";
@@ -115,6 +116,10 @@ export function AssetQuality({
   cutoutRequested?: number;
   onCutoutOpened?: () => void;
 }) {
+  const [pixelEditor, setPixelEditor] = useState<{
+    id: string;
+    mode: "snap" | "color";
+  }>();
   const [relighting, setRelighting] = useState<{
     source: Asset;
     recipeId?: string;
@@ -349,6 +354,18 @@ export function AssetQuality({
             Lichtrevision bearbeiten
           </button>
         )}
+        <button
+          disabled={busy}
+          onClick={() => setPixelEditor({ id: active.id, mode: "snap" })}
+        >
+          Pixel Snap öffnen
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => setPixelEditor({ id: active.id, mode: "color" })}
+        >
+          Color Correction öffnen
+        </button>
         <button disabled={busy} onClick={() => void beginCutout()}>
           Hintergrund freistellen
         </button>
@@ -416,9 +433,13 @@ export function AssetQuality({
                       ? "Freigestellter Kandidat"
                       : derivative.operation === "relighting"
                         ? `2D-Lichtkandidat · R${derivative.relighting?.revision}`
-                        : derivative.operation === "color-correction"
-                          ? `Farbkandidat · R${derivative.colorCorrection?.revision}`
-                          : "Separate Auflösungsvariante"
+                        : derivative.operation === "pixel-snap"
+                          ? `Pixel-Snap-Kandidat · R${derivative.pixelEdit?.revision}`
+                          : derivative.operation === "color-adjustment"
+                            ? `Manueller Farbkandidat · R${derivative.pixelEdit?.revision}`
+                            : derivative.operation === "color-correction"
+                              ? `Farbkandidat · R${derivative.colorCorrection?.revision}`
+                              : "Separate Auflösungsvariante"
                     : sourceQuality
                       ? "Freigegebene abgeleitete Version"
                       : "Unverändertes Rohbild"}
@@ -721,6 +742,18 @@ export function AssetQuality({
                   </div>
                 ))}
               </section>
+            )}
+            {pixelEditor && (
+              <PixelEditEditor
+                project={project}
+                sourceId={pixelEditor.id}
+                mode={pixelEditor.mode}
+                onClose={() => setPixelEditor(undefined)}
+                onSaved={(s) => {
+                  onSnapshot(s);
+                  setSelected(s.project.qualityAssets.at(-1)!.id);
+                }}
+              />
             )}
             {relighting && (
               <RelightingEditor

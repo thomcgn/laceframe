@@ -23,6 +23,11 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  pixelEditSource(
+    id: string,
+  ): Promise<
+    Result<RelightPixels & { sha256: string; protectedWeights: Uint8Array }>
+  >;
   colorPalette(id: string): Promise<
     Result<{
       palette: MasterPalette;

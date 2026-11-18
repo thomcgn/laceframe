@@ -1,3 +1,4 @@
+import { pixelEditRecordSchema } from "./pixel-snap";
 import { correctionRecordSchema } from "./color-consistency";
 import { smartCutoutRecordSchema } from "./smart-cutout";
 import { relightRecordSchema } from "./relighting";
@@ -66,6 +67,8 @@ export const qualityDerivativeSchema = z
       "resolution",
       "relighting",
       "color-correction",
+      "pixel-snap",
+      "color-adjustment",
     ]),
     version: z.literal(1),
     createdAt: z.iso.datetime(),
@@ -81,6 +84,7 @@ export const qualityDerivativeSchema = z
     profile: resolutionProfileSchema.optional(),
     relighting: relightRecordSchema.optional(),
     colorCorrection: correctionRecordSchema.optional(),
+    pixelEdit: pixelEditRecordSchema.optional(),
     smartCutout: smartCutoutRecordSchema.optional(),
     status: z.enum(["candidate", "approved", "rejected"]),
     reviewedAt: z.iso.datetime().optional(),

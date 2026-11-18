@@ -7,17 +7,29 @@ export function PixelViewport({
   children,
   zoom,
   onZoom,
+  pan: sharedPan,
+  onPan,
+  onFit,
 }: {
   width: number;
   height: number;
   children: ReactNode;
   zoom?: number;
   onZoom?: (value: number) => void;
+  onFit?: () => void;
+  pan?: { x: number; y: number };
+  onPan?: (value: { x: number; y: number }) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [localZoom, setLocalZoom] = useState<number | undefined>();
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [localPan, setLocalPan] = useState({ x: 0, y: 0 });
+  const pan = sharedPan ?? localPan;
+  const setPan = (value: typeof pan | ((p: typeof pan) => typeof pan)) => {
+    const next = typeof value === "function" ? value(pan) : value;
+    if (onPan) onPan(next);
+    else setLocalPan(next);
+  };
   const [hand, setHand] = useState(false);
   const drag = useRef<{
     id: number;
@@ -71,7 +83,8 @@ export function PixelViewport({
       >
         <button
           onClick={() => {
-            if (onZoom) onZoom(fit);
+            if (onFit) onFit();
+            else if (onZoom) onZoom(fit);
             else setLocalZoom(undefined);
             setPan({ x: 0, y: 0 });
           }}
@@ -81,6 +94,7 @@ export function PixelViewport({
         <button onClick={() => setZoom(1)}>1:1</button>
         <button onClick={() => setZoom(2)}>200%</button>
         <button onClick={() => setZoom(4)}>400%</button>
+        <button onClick={() => setZoom(8)}>800%</button>
         <input
           aria-label="Zoomregler"
           type="range"
@@ -149,7 +163,8 @@ export function PixelViewport({
           if (e.key === "+" || e.key === "=") setZoom(scale * 1.25);
           if (e.key === "-") setZoom(scale / 1.25);
           if (e.key === "0") {
-            setZoom(fit);
+            if (onFit) onFit();
+            else setZoom(fit);
             setPan({ x: 0, y: 0 });
           }
           const delta = {

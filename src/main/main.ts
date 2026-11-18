@@ -187,6 +187,9 @@ function registerIPC() {
   handle("image:color-recipe", (input) =>
     service.colorRecipe(idSchema.parse(input)),
   );
+  handle("image:pixel-edit-source", (input) =>
+    service.pixelEditSource(idSchema.parse(input)),
+  );
   handle("image:analysis-source", (input) =>
     service.analysisSource(idSchema.parse(input)),
   );
@@ -386,7 +389,7 @@ else {
       const headers = new Headers(response.headers);
       headers.set(
         "Content-Security-Policy",
-        "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
+        "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'",
       );
       return new Response(response.body, { status: response.status, headers });
     });

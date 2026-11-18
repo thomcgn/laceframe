@@ -255,8 +255,34 @@ export function correctColors(
   source: ColorPixels,
   input: ColorDraft,
 ): ColorPixels {
-  validateColorPixels(source);
   const d = colorDraftSchema.parse(input);
+  return correctColorRegions(source, {
+    protectedWeights: d.protectedWeights,
+    regions: d.regions.map((r) => {
+      const { paletteRegionId, ...rest } = r;
+      void paletteRegionId;
+      return rest;
+    }),
+  });
+}
+export const colorTransformSchema = z
+  .object({
+    protectedWeights: weights,
+    regions: z
+      .array(
+        colorRuleSchema.omit({ paletteRegionId: true }).extend({ weights }),
+      )
+      .min(1)
+      .max(5),
+  })
+  .strict();
+/** Shared manual/reference color transform; palette provenance is validated by its caller. */
+export function correctColorRegions(
+  source: ColorPixels,
+  input: z.infer<typeof colorTransformSchema>,
+): ColorPixels {
+  validateColorPixels(source);
+  const d = colorTransformSchema.parse(input);
   checkMask(source, d.protectedWeights);
   const owned = new Uint8Array(source.width * source.height),
     data = new Uint8Array(source.data);

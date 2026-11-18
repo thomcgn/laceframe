@@ -1,4 +1,9 @@
 import {
+  applyPixelEdit,
+  validateSnap,
+  type PixelEdit,
+} from "../shared/pixel-snap";
+import {
   replayRegionSelection,
   type RegionSelectionRecord,
   type RegionSelection,
@@ -463,6 +468,41 @@ export class ProjectService {
         );
         if (hashBytes(pixels.data) !== q.colorCorrection.pixelSha256)
           throw new Error("Farb-Pixelprovenienz verändert.");
+      }
+    for (const q of project.qualityAssets)
+      if (q.pixelEdit) {
+        const source = [
+          ...project.masters,
+          ...project.assets,
+          ...project.masterCandidates,
+          ...project.qualityAssets,
+        ].find((a) => a.id === q.sourceId)!;
+        const pixels = await this.pixels(
+          await readLimited(await safePath(root, source.file), MAX_IMAGE_BYTES),
+        );
+        const protection = await readColorMask(
+          q.pixelEdit.protectedMask,
+          q.width,
+          q.height,
+        );
+        const e = q.pixelEdit.edit;
+        const edit: PixelEdit =
+          e.kind === "snap"
+            ? e
+            : {
+                kind: "color",
+                rule: e.rule,
+                weights: await readColorMask(e.mask, q.width, q.height),
+              };
+        const expected = applyPixelEdit(pixels, edit, protection);
+        const actual = decodePixels(
+          await readLimited(await safePath(root, q.file), MAX_IMAGE_BYTES),
+        );
+        if (
+          hashBytes(actual.data) !== q.pixelEdit.pixelSha256 ||
+          !Buffer.from(expected.data).equals(actual.data)
+        )
+          throw new Error("Pixelbearbeitungsrezept oder Ergebnis verändert.");
       }
     for (const migration of project.styleMigrations)
       for (const source of migration.sources)
@@ -1116,6 +1156,82 @@ export class ProjectService {
               pixelSha256: hashBytes(output.data),
               regions,
               protectedMask,
+            },
+          });
+        } finally {
+          this.discard(image.token);
+        }
+        break;
+      }
+
+      case "createPixelEdit": {
+        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        const source = this.qualitySource(cmd.sourceId);
+        if (source.sha256 !== cmd.sourceSha256)
+          throw new Error("Pixelquelle verändert.");
+        const pixels = await this.pixelEditSource(source.id);
+        if (
+          cmd.protectedWeights.length !== pixels.protectedWeights.length ||
+          pixels.protectedWeights.some((v, i) => v && !cmd.protectedWeights[i])
+        )
+          throw new Error("Originalpixelschutz darf nicht entfernt werden.");
+        const output = applyPixelEdit(pixels, cmd.edit, cmd.protectedWeights);
+        this.assertRelightLock(
+          output,
+          await this.relightProtectedPixels(source.id),
+        );
+        if (hashBytes(output.data) !== cmd.previewPixelSha256)
+          throw new Error("Pixelvorschau veraltet. Neu berechnen.");
+        if (!p.qualityAssets.some((q) => q.pixelEdit) && !this.legacyBytes) {
+          this.legacyBytes = await readLimited(
+            await safePath(this.directory, "laceframe.json"),
+            MAX_MANIFEST_BYTES,
+          );
+          this.legacyBackupName = "laceframe.v2.pre-pixel-edit.backup.json";
+        }
+        const protectedMask = await this.storeColorMask(
+          source.width,
+          source.height,
+          cmd.protectedWeights,
+        );
+        const edit =
+          cmd.edit.kind === "snap"
+            ? cmd.edit
+            : {
+                kind: "color" as const,
+                rule: cmd.edit.rule,
+                mask: await this.storeColorMask(
+                  source.width,
+                  source.height,
+                  cmd.edit.weights,
+                ),
+              };
+        const image = await this.stage(encodePixels(output), "pixel-edit.png");
+        const operation =
+          cmd.edit.kind === "snap"
+            ? ("pixel-snap" as const)
+            : ("color-adjustment" as const);
+        try {
+          p.qualityAssets.push({
+            ...(await this.store("quality", image.token)),
+            format: "png",
+            id: randomUUID(),
+            sourceId: source.id,
+            sourceSha256: source.sha256,
+            characterId: source.characterId,
+            operation,
+            version: 1,
+            createdAt: new Date().toISOString(),
+            status: "candidate",
+            pixelEdit: {
+              algorithm: "spritefusion-native-rgba-v1",
+              revision:
+                p.qualityAssets.filter(
+                  (q) => q.sourceId === source.id && q.operation === operation,
+                ).length + 1,
+              pixelSha256: hashBytes(output.data),
+              protectedMask,
+              edit,
             },
           });
         } finally {
@@ -2565,6 +2681,71 @@ export class ProjectService {
     if (!image) throw new Error("Kein Charakterasset ausgewählt.");
     return image;
   }
+  async pixelEditSource(id: string) {
+    const source = this.qualitySource(id);
+    const pixels = await this.analysisSource(id);
+    validateSnap(pixels);
+    await this.verifyPendingQuality(id);
+    const protectedWeights = new Uint8Array(source.width * source.height);
+    const lock = await this.relightProtectedPixels(id);
+    if (lock) {
+      if (
+        lock.master.width !== source.width ||
+        lock.master.height !== source.height
+      )
+        throw new Error("Originalpixelschutz benötigt gleiche Maße.");
+      lock.weights.forEach((v, i) => {
+        if (!v) protectedWeights[i] = 255;
+      });
+    }
+    // Preserve explicit inherited edit protections; never reinterpret cutout masks as protection.
+    let ancestor = source;
+    const seen = new Set<string>();
+    while ("sourceId" in ancestor && !seen.has(ancestor.id)) {
+      seen.add(ancestor.id);
+      if (ancestor.pixelEdit) {
+        const r = await this.pixelRecipe(ancestor.id);
+        r.protectedWeights.forEach((v, i) => {
+          if (v) protectedWeights[i] = 255;
+        });
+      }
+      if (ancestor.colorCorrection) {
+        const r = await this.colorRecipe(ancestor.id);
+        r.protectedWeights.forEach((v, i) => {
+          if (v) protectedWeights[i] = 255;
+        });
+      }
+      ancestor = this.qualitySource(ancestor.sourceId);
+    }
+    return { ...pixels, protectedWeights };
+  }
+  private async pixelRecipe(id: string) {
+    const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);
+    if (!q?.pixelEdit) throw new Error("Pixelrezept fehlt.");
+    const load = async (m: { file: string; sha256: string }) => {
+      const bytes = await readLimited(
+        await safePath(this.directory, m.file),
+        MAX_IMAGE_BYTES,
+      );
+      if (hashBytes(bytes) !== m.sha256)
+        throw new Error("Pixelmaske verändert.");
+      const p = decodePixels(bytes);
+      if (p.width !== q.width || p.height !== q.height)
+        throw new Error("Pixelmaske hat falsche Maße.");
+      return maskWeights(p);
+    };
+    const protectedWeights = await load(q.pixelEdit.protectedMask),
+      e = q.pixelEdit.edit;
+    const edit: PixelEdit =
+      e.kind === "snap"
+        ? e
+        : {
+            kind: "color",
+            rule: e.rule,
+            weights: new Uint8Array(await load(e.mask)),
+          };
+    return { edit, protectedWeights };
+  }
   async analysisSource(id: string) {
     const source = this.qualitySourceOrStyle(id);
     if (source.width * source.height > MAX_ANALYSIS_PIXELS)
@@ -2708,6 +2889,19 @@ export class ProjectService {
           );
           if (hashBytes(actual.data) !== a.colorCorrection.pixelSha256)
             throw new Error("Farb-Pixelprovenienz verändert.");
+        } else if (a.pixelEdit) {
+          const recipe = await this.pixelRecipe(a.id);
+          expected = applyPixelEdit(
+            pixels,
+            recipe.edit,
+            recipe.protectedWeights,
+          );
+          this.assertRelightLock(
+            expected,
+            await this.relightProtectedPixels(a.sourceId),
+          );
+          if (hashBytes(actual.data) !== a.pixelEdit.pixelSha256)
+            throw new Error("Pixelrezept verändert.");
         } else if (a.operation === "relighting") {
           if (!a.relighting) throw new Error("Lichtrezept fehlt.");
           const recipe = await this.relightRecipe(a.id);

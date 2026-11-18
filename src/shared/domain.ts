@@ -1,3 +1,4 @@
+import { pixelEditInputSchema, MAX_SNAP_PIXELS } from "./pixel-snap";
 import {
   paletteSchema,
   paletteInputSchema,
@@ -350,50 +351,80 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     )
       fail("Invalid quality source");
     if (
-      q.operation === "color-correction"
-        ? !q.colorCorrection ||
-          Boolean(q.mask) ||
-          Boolean(q.profile) ||
-          Boolean(q.relighting) ||
+      q.pixelEdit
+        ? !["pixel-snap", "color-adjustment"].includes(q.operation) ||
+          (q.operation === "pixel-snap") !==
+            (q.pixelEdit.edit.kind === "snap") ||
+          Boolean(
+            q.mask ||
+            q.profile ||
+            q.relighting ||
+            q.colorCorrection ||
+            q.smartCutout,
+          ) ||
           source?.width !== q.width ||
           source?.height !== q.height ||
-          q.width * q.height > MAX_COLOR_PIXELS ||
-          !p.masterPalettes.some(
-            (m) =>
-              m.id === q.colorCorrection?.paletteId &&
-              m.characterId === q.characterId,
-          ) ||
+          q.width * q.height > MAX_SNAP_PIXELS ||
           [
-            q.colorCorrection.protectedMask,
-            ...q.colorCorrection.regions.map((r) => r.mask),
-          ].some((m) => m.file !== assetFile("color-masks", m.sha256, "png"))
-        : Boolean(q.colorCorrection) ||
-          (q.operation === "relighting"
-            ? !q.relighting ||
+            q.pixelEdit.protectedMask,
+            ...(q.pixelEdit.edit.kind === "color"
+              ? [q.pixelEdit.edit.mask]
+              : []),
+          ].some((m) => m.file !== assetFile("color-masks", m.sha256, "png")) ||
+          q.pixelEdit.revision !==
+            p.qualityAssets
+              .filter(
+                (a) => a.sourceId === q.sourceId && a.operation === q.operation,
+              )
+              .findIndex((a) => a.id === q.id) +
+              1
+        : ["pixel-snap", "color-adjustment"].includes(q.operation) ||
+          (q.operation === "color-correction"
+            ? !q.colorCorrection ||
               Boolean(q.mask) ||
               Boolean(q.profile) ||
+              Boolean(q.relighting) ||
               source?.width !== q.width ||
               source?.height !== q.height ||
-              q.width * q.height > MAX_RELIGHT_PIXELS ||
-              new Set(q.relighting.regions.map((r) => r.id)).size !==
-                q.relighting.regions.length ||
-              q.relighting.regions.some(
-                (r) =>
-                  r.mask.file !==
-                  assetFile("relight-masks", r.mask.sha256, "png"),
+              q.width * q.height > MAX_COLOR_PIXELS ||
+              !p.masterPalettes.some(
+                (m) =>
+                  m.id === q.colorCorrection?.paletteId &&
+                  m.characterId === q.characterId,
+              ) ||
+              [
+                q.colorCorrection.protectedMask,
+                ...q.colorCorrection.regions.map((r) => r.mask),
+              ].some(
+                (m) => m.file !== assetFile("color-masks", m.sha256, "png"),
               )
-            : q.relighting ||
-              (q.operation === "cutout"
-                ? !q.mask ||
-                  Boolean(q.profile) ||
-                  q.mask.file !==
-                    assetFile("cutout-masks", q.mask.sha256, "png") ||
-                  source?.width !== q.width ||
-                  source?.height !== q.height
-                : !q.profile ||
+            : Boolean(q.colorCorrection) ||
+              (q.operation === "relighting"
+                ? !q.relighting ||
                   Boolean(q.mask) ||
-                  q.profile.width !== q.width ||
-                  q.profile.height !== q.height))
+                  Boolean(q.profile) ||
+                  source?.width !== q.width ||
+                  source?.height !== q.height ||
+                  q.width * q.height > MAX_RELIGHT_PIXELS ||
+                  new Set(q.relighting.regions.map((r) => r.id)).size !==
+                    q.relighting.regions.length ||
+                  q.relighting.regions.some(
+                    (r) =>
+                      r.mask.file !==
+                      assetFile("relight-masks", r.mask.sha256, "png"),
+                  )
+                : q.relighting ||
+                  (q.operation === "cutout"
+                    ? !q.mask ||
+                      Boolean(q.profile) ||
+                      q.mask.file !==
+                        assetFile("cutout-masks", q.mask.sha256, "png") ||
+                      source?.width !== q.width ||
+                      source?.height !== q.height
+                    : !q.profile ||
+                      Boolean(q.mask) ||
+                      q.profile.width !== q.width ||
+                      q.profile.height !== q.height)))
     )
       fail("Invalid quality operation");
     if (q.colorCorrection) {
@@ -1048,6 +1079,7 @@ export const commandSchema = z.discriminatedUnion("type", [
   paletteInputSchema.extend({ type: z.literal("saveMasterPalette") }),
   correctionInputSchema.extend({ type: z.literal("createColorCorrection") }),
   relightInputSchema.extend({ type: z.literal("createRelighting") }),
+  pixelEditInputSchema.extend({ type: z.literal("createPixelEdit") }),
   z
     .object({
       type: z.literal("createCutout"),
