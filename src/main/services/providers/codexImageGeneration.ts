@@ -1,3 +1,4 @@
+import { tr } from "../../../shared/locales/index";
 import {
   TRANSPARENT_CHARACTER_INSTRUCTION,
   VISUAL_STYLE_INSTRUCTION,
@@ -62,7 +63,9 @@ const notification = z.object({
 export class CodexImageGenerationProvider implements ImageGenerationProvider {
   descriptor: ProviderDescriptor = {
     id: "codex-native",
-    label: "Codex · bestehende ChatGPT-Anmeldung",
+    get label() {
+      return tr("errors.mc765b54508");
+    },
     capabilities: {
       canGenerate: false,
       supportsReferenceImages: true,
@@ -72,7 +75,9 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
   };
   status: CodexStatus = {
     state: "unavailable",
-    message: "Codex-Verfügbarkeit noch nicht geprüft.",
+    get message() {
+      return tr("errors.m9f051e5efe");
+    },
   };
   onProgress?: (phase: GenerationPhase) => void;
   private client?: AppServerClient;
@@ -92,7 +97,11 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
   }
   private async preflight(client: AppServerClient) {
     await client.request("initialize", {
-      clientInfo: { name: "laceframe", title: "Laceframe", version: "0.1.0" },
+      clientInfo: {
+        name: tr("errors.mf3e0fcaa4f"),
+        title: tr("errors.mf45e62f0e8"),
+        version: "0.1.0",
+      },
       capabilities: { experimentalApi: true },
     });
     client.notify("initialized");
@@ -101,19 +110,13 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
       await client.request("account/read", { refreshToken: false }),
     );
     if (account?.type !== "chatgpt")
-      throw new CodexError(
-        "not-authenticated",
-        "Nicht mit ChatGPT angemeldet. Im Terminal „codex login“ ausführen; keine API-Keys verwenden.",
-      );
+      throw new CodexError("not-authenticated", tr("common.m58565f2d6c"));
     this.onProgress?.("checking-capability");
     const features = featuresSchema.parse(
       await client.request("experimentalFeature/list", {}),
     );
     if (!features.data.some((f) => f.name === "image_generation" && f.enabled))
-      throw new CodexError(
-        "unavailable",
-        "ImageGen ist in dieser Codex-Installation nicht verfügbar oder deaktiviert.",
-      );
+      throw new CodexError("unavailable", tr("common.m17061686b6"));
     this.descriptor.capabilities.supportsMultipleReferences = await (
       this.options.probeReferences ?? probeReferenceCapability
     )();
@@ -130,7 +133,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
       message:
         error instanceof CodexError
           ? error.message
-          : "Codex-Ergebnis konnte nicht sicher verarbeitet werden. Version, Bilddatei und Projekt prüfen.",
+          : tr("common.m3336e07a17"),
     };
   }
   async check(): Promise<CodexStatus> {
@@ -145,8 +148,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
       this.descriptor.capabilities.canGenerate = true;
       this.status = {
         state: "ready",
-        message:
-          "Codex bereit · bestehende ChatGPT-Anmeldung · ImageGen aktiv.",
+        message: tr("errors.md5bc012081"),
       };
     } catch (error) {
       this.setError(error);
@@ -162,7 +164,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
     return s.state === "ready"
       ? {
           status: "authenticated" as const,
-          accountLabel: "Bestehende Codex ChatGPT-Anmeldung",
+          accountLabel: tr("errors.m8ffd9ae5fb"),
         }
       : { status: "unavailable" as const, reason: s.message };
   }
@@ -183,15 +185,12 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         styleOnlyReferences: draft.styleReferences ?? [],
         localHardLock: draft.mask,
         inpaintingMaskSent: false,
-        referenceRoles:
-          "First image = identity/edit target; all subsequent images = rendering only. Never transfer face, hair or outfit.",
+        referenceRoles: tr("errors.mc8d3a4de36"),
       }),
     };
   };
   acceptImportedResult(): never {
-    throw new Error(
-      "Codex-Ergebnisse werden ausschließlich vom aktiven App-Server-Auftrag übernommen.",
-    );
+    throw new Error(tr("errors.m75345e03c7"));
   }
   generateImage(request: GenerationRequest) {
     return this.editImage(request);
@@ -212,15 +211,13 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         return f.id !== r.id || f.sha256 !== r.sha256;
       })
     )
-      throw new Error(
-        "Identitäts-/Stilreferenzen sind unvollständig oder vertauscht.",
-      );
+      throw new Error(tr("errors.mb8f4557861"));
     return this.runImageJob(request);
   }
   private async runImageJob(
     request: GenerationRequest | CharacterMasterRequest,
   ): Promise<GenerationResult> {
-    if (this.client) throw new Error("Es läuft bereits ein Codex-Auftrag.");
+    if (this.client) throw new Error(tr("errors.mcfd23e3b52"));
     this.cancelled = false;
     this.threadId = undefined;
     this.turnId = undefined;
@@ -232,12 +229,12 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
     const ownedReferences: string[] = [];
     this.status = {
       state: "running",
-      message: "Generierung läuft · Anmeldung und ImageGen werden geprüft.",
+      message: tr("errors.me3a5f75078"),
     };
     try {
       await this.preflight(client);
       if (this.cancelled)
-        throw new CodexError("cancelled", "Generierung abgebrochen.");
+        throw new CodexError("cancelled", tr("common.m52589e2b31"));
       const creation = "operation" in request;
       const expected = request.styleReferences ?? [],
         files = creation
@@ -249,7 +246,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
           (f, i) => f.id !== expected[i].id || f.sha256 !== expected[i].sha256,
         )
       )
-        throw new Error("Stilreferenzen sind unvollständig.");
+        throw new Error(tr("errors.m89fa74b991"));
       const identityFiles = creation
         ? request.identityFiles
         : [{ path: request.referenceAssetPath, sha256: request.masterSha256 }];
@@ -257,10 +254,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         identityFiles.length + files.length > 1 &&
         !this.descriptor.capabilities.supportsMultipleReferences
       )
-        throw new CodexError(
-          "failed",
-          "Mehrere Bildreferenzen werden von dieser Codex-Installation nicht bestätigt. Weniger Referenzen auswählen.",
-        );
+        throw new CodexError("failed", tr("common.m1c467b1b5f"));
       const referencePaths: string[] = [];
       for (const [i, file] of [...identityFiles, ...files].entries()) {
         const isStyle = i >= identityFiles.length;
@@ -271,7 +265,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
             : 32 * 1024 * 1024;
         const bytes = await readLimited(file.path, limit);
         if (hashBytes(bytes) !== file.sha256)
-          throw new Error("Referenzintegrität verletzt.");
+          throw new Error(tr("errors.m9b8af4fa3d"));
         if (creation && !isStyle) inspectIdentityImage(bytes);
         else inspectImage(bytes);
         const target = path.join(
@@ -289,11 +283,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         await client.request("model/list", { includeHidden: false }),
       );
       const model = models.data.find((m) => m.isDefault) ?? models.data[0];
-      if (!model)
-        throw new CodexError(
-          "unavailable",
-          "Kein Codex-Modell für dieses Konto verfügbar.",
-        );
+      if (!model) throw new CodexError("unavailable", tr("common.m7451785884"));
       const thread = threadSchema.parse(
         await client.request("thread/start", {
           cwd,
@@ -317,13 +307,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
         let image: string | undefined;
         let imageCount = 0;
         const timer = setTimeout(
-          () =>
-            finish(
-              new CodexError(
-                "failed",
-                "Codex-Zeitlimit erreicht. Keine automatische Wiederholung.",
-              ),
-            ),
+          () => finish(new CodexError("failed", tr("common.mb05e49df2d"))),
           this.options.timeout ?? 600000,
         );
         const fail = (error: Error) => finish(error);
@@ -333,17 +317,11 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
           client.off("failure", fail);
           if (error) reject(error);
           else if (image) resolve(image);
-          else
-            reject(
-              new CodexError(
-                "failed",
-                "Codex hat kein bestätigtes Bild mit savedPath geliefert.",
-              ),
-            );
+          else reject(new CodexError("failed", tr("common.m6bbf5ed233")));
         };
         const receive = (method: string, raw: unknown) => {
           if (this.cancelled) {
-            finish(new CodexError("cancelled", "Generierung abgebrochen."));
+            finish(new CodexError("cancelled", tr("common.m52589e2b31")));
             return;
           }
           const parsed = notification.safeParse(raw);
@@ -361,8 +339,8 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
               new CodexError(
                 "failed",
                 data.willRetry
-                  ? "Codex wollte die Anfrage wiederholen; Auftrag wurde gestoppt."
-                  : "Codex meldet einen Fehler. Anmeldung, Kontingent und Verbindung prüfen.",
+                  ? tr("common.m0ca2538665")
+                  : tr("common.m87be965e3d"),
               ),
             );
             return;
@@ -372,12 +350,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
             data.item?.type === "imageGeneration" &&
             ++imageCount > 1
           ) {
-            finish(
-              new CodexError(
-                "failed",
-                "Mehrere Bildoperationen wurden abgelehnt.",
-              ),
-            );
+            finish(new CodexError("failed", tr("common.m5ac9c0dc50")));
             return;
           }
           if (
@@ -392,12 +365,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
               "webSearch",
             ].includes(data.item.type)
           ) {
-            finish(
-              new CodexError(
-                "failed",
-                "Codex hat ein nicht erlaubtes Werkzeug angefordert.",
-              ),
-            );
+            finish(new CodexError("failed", tr("common.mdc3fa376af")));
             return;
           }
           if (
@@ -409,12 +377,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
               data.item.failure ||
               !data.item.savedPath
             ) {
-              finish(
-                new CodexError(
-                  "failed",
-                  "Bildgenerierung fehlgeschlagen oder Nutzungslimit erreicht.",
-                ),
-              );
+              finish(new CodexError("failed", tr("common.m4ccef0fbe9")));
               return;
             }
             image = data.item.savedPath;
@@ -424,10 +387,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
             finish(
               data.turn?.status === "completed"
                 ? undefined
-                : new CodexError(
-                    "failed",
-                    "Codex-Generierung wurde nicht erfolgreich abgeschlossen.",
-                  ),
+                : new CodexError("failed", tr("common.m4a1219f465")),
             );
         };
         client.on("notification", receive);
@@ -461,13 +421,12 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
           .catch(fail);
       });
       if (this.cancelled)
-        throw new CodexError("cancelled", "Generierung abgebrochen.");
+        throw new CodexError("cancelled", tr("common.m52589e2b31"));
       // Validate now and again immediately before project ingestion; no renderer path is accepted.
       await readGeneratedImage(output, this.threadId, this.options.resultRoot);
       this.status = {
         state: "completed",
-        message:
-          "Generierung abgeschlossen · Bild muss manuell geprüft werden.",
+        message: tr("errors.m5009fff1cd"),
       };
       return {
         providerId: "codex-native",
@@ -491,7 +450,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
     }
   }
   async resultBytes(result: GenerationResult) {
-    if (!this.threadId) throw new Error("Kein aktiver Codex-Thread.");
+    if (!this.threadId) throw new Error(tr("errors.m65f018aef3"));
     return readGeneratedImage(
       result.outputAssetPath,
       this.threadId,
@@ -513,8 +472,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
     await client.close();
     this.status = {
       state: "cancelled",
-      message:
-        "Generierung abgebrochen. Späte Ergebnisse werden nicht importiert.",
+      message: tr("errors.m90e08106ff"),
     };
   }
   async dispose() {
@@ -528,7 +486,7 @@ export class CodexImageGenerationProvider implements ImageGenerationProvider {
     const attempt = project.attempts.find(
       (a) => a.id === id && a.providerId === "codex-native",
     );
-    if (!attempt) throw new Error("Unbekannter Codex-Versuch.");
+    if (!attempt) throw new Error(tr("errors.m99da10decf"));
     const asset = project.assets.find((a) => a.attemptId === id);
     return asset
       ? {

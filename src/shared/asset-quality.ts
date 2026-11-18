@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { pixelEditRecordSchema } from "./pixel-snap";
 import { correctionRecordSchema } from "./color-consistency";
 import { smartCutoutRecordSchema } from "./smart-cutout";
@@ -20,21 +21,27 @@ export const resolutionProfileSchema = z
 export type ResolutionProfile = z.infer<typeof resolutionProfileSchema>;
 export const RESOLUTION_PROFILES: ResolutionProfile[] = [
   {
-    name: "Portrait 1024",
+    get name() {
+      return tr("common.m3bf27e998a");
+    },
     width: 1024,
     height: 1024,
     sampling: "bilinear",
     fit: "contain",
   },
   {
-    name: "Portrait 512",
+    get name() {
+      return tr("common.mc4550d017d");
+    },
     width: 512,
     height: 512,
     sampling: "bilinear",
     fit: "contain",
   },
   {
-    name: "Pixel 128",
+    get name() {
+      return tr("common.m117e495072");
+    },
     width: 128,
     height: 128,
     sampling: "nearest",
@@ -77,7 +84,12 @@ export const qualityDerivativeSchema = z
         sha256: sha,
         file: z.string(),
         type: z.literal("foreground-alpha"),
-        name: z.string().trim().min(1).max(120).default("Freistellung"),
+        name: z
+          .string()
+          .trim()
+          .min(1)
+          .max(120)
+          .default(tr("common.m222429dd22")),
       })
       .strict()
       .optional(),

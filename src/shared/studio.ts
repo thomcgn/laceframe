@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { newComposer, updateComposer, type ComposerState } from "./generation";
 import type { Project } from "./domain";
 export type Workspace =
@@ -41,16 +42,14 @@ export function promptRequirements(
   if (mode === "expert" && state.pendingBase !== undefined)
     return [
       {
-        message:
-          "Promptrevision muss übernommen oder der Expert Override ausdrücklich bestätigt werden.",
+        message: tr("studio.mef617c52e3"),
         target: "prompt-builder",
       },
     ];
   if (!state.text.trim() || (mode !== "expert" && state.base !== base))
     return [
       {
-        message:
-          "Der Prompt wird aus den vollständigen Einstellungen aufgebaut.",
+        message: tr("studio.m4a6847a574"),
         target: "prompt-builder",
       },
     ];
@@ -59,35 +58,55 @@ export function promptRequirements(
 export function libraryAssets(p: Project, characterId: string) {
   return [
     ...p.masters
-      .filter((a) => a.characterId === characterId && !("discardedAt" in a && a.discardedAt))
+      .filter(
+        (a) =>
+          a.characterId === characterId &&
+          !("discardedAt" in a && a.discardedAt),
+      )
       .map((a) => ({
         ...a,
         kind: "master" as const,
-        label: `Master V${a.version}`,
+        label: tr("studio.mf483464116", { v0: a.version }),
         state: "approved" as const,
       })),
     ...p.masterCandidates
-      .filter((a) => a.characterId === characterId && !("discardedAt" in a && a.discardedAt))
+      .filter(
+        (a) =>
+          a.characterId === characterId &&
+          !("discardedAt" in a && a.discardedAt),
+      )
       .map((a, i) => ({
         ...a,
         kind: "master-candidate" as const,
-        label: `Masterkandidat ${i + 1}`,
+        label: tr("studio.m89ca618483", { v0: i + 1 }),
         state: a.status,
       })),
     ...p.assets
-      .filter((a) => a.characterId === characterId && !("discardedAt" in a && a.discardedAt))
+      .filter(
+        (a) =>
+          a.characterId === characterId &&
+          !("discardedAt" in a && a.discardedAt),
+      )
       .map((a) => ({
         ...a,
         kind: "expression" as const,
-        label: `${p.variants.find((v) => v.id === a.variantId)?.label ?? "Expression"}${a.composite ? " · Composite" : ""}`,
+        label: tr("studio.m255c5feafc", {
+          v0:
+            p.variants.find((v) => v.id === a.variantId)?.label ?? "Expression",
+          v1: a.composite ? " · Composite" : "",
+        }),
         state: a.status,
       })),
     ...p.qualityAssets
-      .filter((a) => a.characterId === characterId && !("discardedAt" in a && a.discardedAt))
+      .filter(
+        (a) =>
+          a.characterId === characterId &&
+          !("discardedAt" in a && a.discardedAt),
+      )
       .map((a, i) => ({
         ...a,
         kind: "quality" as const,
-        label: `Qualitätsvariante ${i + 1} · ${a.operation}`,
+        label: tr("studio.m672261d1a3", { v0: i + 1, v1: a.operation }),
         state: a.status,
       })),
   ];

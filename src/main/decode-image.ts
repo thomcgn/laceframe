@@ -1,3 +1,4 @@
+import { tr } from "../shared/locales/index";
 import { BrowserWindow, nativeImage } from "electron";
 
 /** Validate pixels locally; never transform or replace the imported bytes. */
@@ -17,7 +18,7 @@ export async function decodeImage(
         (format === "jpg" && size.width === height && size.height === width)
       )
     )
-      throw new Error("Das PNG/JPEG kann nicht vollständig dekodiert werden.");
+      throw new Error(tr("errors.m2fab06a474"));
     return;
   }
   // nativeImage only supports PNG/JPEG buffers on Linux. Use Chromium's built-in
@@ -49,9 +50,9 @@ export async function decodeImage(
       image.close(); return size;
     })()`);
     if (size.width !== width || size.height !== height)
-      throw new Error("WebP-Abmessungen stimmen nicht überein.");
+      throw new Error(tr("errors.m91c73d6775"));
   } catch (cause) {
-    throw new Error("Das WebP kann nicht vollständig dekodiert werden.", {
+    throw new Error(tr("errors.m076d642edc"), {
       cause,
     });
   } finally {
@@ -66,10 +67,9 @@ export async function decodeAssetPixels(bytes: Uint8Array) {
   const { imageSize } = await import("image-size");
   const info = imageSize(bytes);
   if (!info.width || !info.height || info.width * info.height > 16_000_000)
-    throw new Error("Qualitätsprüfung/Verarbeitung: maximal 16 Megapixel.");
+    throw new Error(tr("errors.mf20fc17c90"));
   if (info.type === "png") return decodePixels(bytes);
-  if (info.type !== "webp")
-    throw new Error("Qualitätsprüfung unterstützt PNG/WebP.");
+  if (info.type !== "webp") throw new Error(tr("errors.m7d50e46fe5"));
   const decoder = new BrowserWindow({
     show: false,
     webPreferences: {
@@ -95,7 +95,7 @@ export async function decodeAssetPixels(bytes: Uint8Array) {
       `(async()=>{const b=Uint8Array.from(atob(${JSON.stringify(Buffer.from(bytes).toString("base64"))}),c=>c.charCodeAt(0));const img=await createImageBitmap(new Blob([b],{type:'image/webp'}));const c=new OffscreenCanvas(img.width,img.height);const ctx=c.getContext('2d');ctx.drawImage(img,0,0);img.close();return new Uint8Array(ctx.getImageData(0,0,c.width,c.height).data);})()`,
     );
     if (data.length !== info.width * info.height * 4)
-      throw new Error("Ungültige RGBA-Daten.");
+      throw new Error(tr("errors.md965aa9a1a"));
     return {
       width: info.width,
       height: info.height,

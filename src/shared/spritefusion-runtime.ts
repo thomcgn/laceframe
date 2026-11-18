@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import {
   initSync,
   process_rgba,
@@ -13,10 +14,7 @@ export function spriteFusionPixels(
   p: ColorPixels,
   s: SpriteFusionSettings,
 ): ColorPixels & { png: Uint8Array } {
-  if (poisoned)
-    throw new Error(
-      "Sprite Fusion WASM wurde angehalten. Anwendung neu starten; kein Ergebnis gespeichert.",
-    );
+  if (poisoned) throw new Error(tr("common.m07f2427e28"));
   const count = p.width * p.height;
   if (
     p.width < 2 ||
@@ -25,16 +23,12 @@ export function spriteFusionPixels(
     p.data.length !== count * 4 ||
     count * s.colors > 67_108_864
   )
-    throw new Error(
-      "Sprite Fusion: maximal 4 MP und 67.108.864 Pixel×Farben. Weniger Farben oder eine kleinere separate Quelle wählen; keine automatische Skalierung.",
-    );
+    throw new Error(tr("common.m5f80be6cad"));
   if (
     s.pixelSize !== undefined &&
     s.pixelSize > Math.min(p.width, p.height) / 2
   )
-    throw new Error(
-      "Rastergröße darf höchstens die Hälfte der kleineren Bildkante betragen.",
-    );
+    throw new Error(tr("common.m635d965b99"));
   if (!ready) {
     initSync({
       module: Uint8Array.from(atob(SPRITEFUSION_WASM_BASE64), (c) =>
@@ -60,19 +54,21 @@ export function spriteFusionPixels(
       png[2] !== 78 ||
       png[3] !== 71
     )
-      throw new Error("Ungültiges Engine-PNG.");
+      throw new Error(tr("common.m84a06c2f78"));
     const view = new DataView(png.buffer, png.byteOffset, png.byteLength),
       width = view.getUint32(16),
       height = view.getUint32(20);
     if (!width || !height || width * height > 4_194_304)
-      throw new Error("Ungültige Ausgabemaße.");
+      throw new Error(tr("common.m76cccac895"));
     const data = decode_png(png);
     if (data.length !== width * height * 4)
-      throw new Error("Ungültige RGBA-Ausgabe.");
+      throw new Error(tr("common.m6dae756c98"));
     return { width, height, data, png };
   } catch (error) {
     // A trapped instance is not reused; normal validation errors allow another explicit request.
     if (error instanceof WebAssembly.RuntimeError) poisoned = true;
-    throw new Error(`Sprite Fusion fehlgeschlagen: ${String(error)}`, { cause: error });
+    throw new Error(tr("common.m441e33731b", { v0: String(error) }), {
+      cause: error,
+    });
   }
 }

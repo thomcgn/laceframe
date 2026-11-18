@@ -1,3 +1,4 @@
+import { tr } from "../shared/locales/index";
 import { hasOtherAssetReference } from "../shared/asset-retention";
 import {
   applyPixelEdit,
@@ -132,21 +133,21 @@ export async function safePath(
       .split("/")
       .some((x) => !x || x === ".." || x === "." || x.includes(":"))
   )
-    throw new Error("Unsicherer Projektpfad.");
+    throw new Error(tr("errors.m6c13dae5c2"));
   let current = root;
   if ((await fs.lstat(root)).isSymbolicLink())
-    throw new Error("Projektpfad ist ein Symlink.");
+    throw new Error(tr("errors.m298231511e"));
   for (const part of relative.split("/")) {
     current = path.join(current, part);
     if ((await exists(current)) && (await fs.lstat(current)).isSymbolicLink())
-      throw new Error("Symlinks im Projekt sind nicht erlaubt.");
+      throw new Error(tr("errors.medab4239c3"));
   }
   return current;
 }
 export async function readLimited(file: string, max: number): Promise<Buffer> {
   const info = await fs.lstat(file);
   if (!info.isFile() || info.isSymbolicLink() || info.size > max)
-    throw new Error("Datei fehlt, ist unsicher oder zu groß.");
+    throw new Error(tr("errors.m29a3571f22"));
   const handle = await fs.open(
     file,
     constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
@@ -159,7 +160,7 @@ export async function readLimited(file: string, max: number): Promise<Buffer> {
       stat.ino !== info.ino ||
       stat.dev !== info.dev
     )
-      throw new Error("Datei ist unsicher oder zu groß.");
+      throw new Error(tr("errors.m9ce05045b7"));
     const bytes = Buffer.alloc(Math.min(stat.size, max) + 1);
     let offset = 0;
     while (offset < bytes.length) {
@@ -172,7 +173,7 @@ export async function readLimited(file: string, max: number): Promise<Buffer> {
       if (!bytesRead) break;
       offset += bytesRead;
     }
-    if (offset > max) throw new Error("Datei zu groß.");
+    if (offset > max) throw new Error(tr("errors.m586fc5a0ba"));
     return bytes.subarray(0, offset);
   } finally {
     await handle.close();
@@ -180,7 +181,7 @@ export async function readLimited(file: string, max: number): Promise<Buffer> {
 }
 export function inspectIdentityImage(bytes: Uint8Array) {
   if (!bytes.length || bytes.length > 16 * 1024 * 1024)
-    throw new Error("Identitätsbilder dürfen höchstens 16 MiB groß sein.");
+    throw new Error(tr("errors.mbb17100a71"));
   const info = imageSize(bytes);
   if (
     !["png", "webp", "jpg"].includes(info.type ?? "") ||
@@ -190,7 +191,7 @@ export function inspectIdentityImage(bytes: Uint8Array) {
     info.height > 16384 ||
     info.width * info.height > 16_000_000
   )
-    throw new Error("Identitätsbilder: PNG/JPEG/WebP bis 16 Megapixel.");
+    throw new Error(tr("errors.mdce29bdb7f"));
   // Match Chromium's oriented JPEG preview dimensions; retain every original byte.
   const rotated =
     info.type === "jpg" && [5, 6, 7, 8].includes(info.orientation ?? 1);
@@ -206,7 +207,7 @@ export function inspectImage(bytes: Uint8Array): {
   format: "png" | "webp";
 } {
   if (!bytes.length || bytes.length > MAX_IMAGE_BYTES)
-    throw new Error("Bilder dürfen höchstens 32 MiB groß sein.");
+    throw new Error(tr("errors.m8939035af7"));
   const info = imageSize(bytes);
   if (
     (info.type !== "png" && info.type !== "webp") ||
@@ -216,9 +217,7 @@ export function inspectImage(bytes: Uint8Array): {
     info.height > 16384 ||
     info.width * info.height > 64_000_000
   )
-    throw new Error(
-      "Nur PNG/WebP bis 16.384 Pixel Kantenlänge und 64 Megapixel sind erlaubt.",
-    );
+    throw new Error(tr("errors.m02554abb8f"));
   return { width: info.width, height: info.height, format: info.type };
 }
 function preview(bytes: Uint8Array, format: string) {
@@ -252,7 +251,7 @@ export class ProjectService {
     this.staged = undefined;
   }
   snapshot(): Snapshot {
-    if (!this.project) throw new Error("Bitte zuerst ein Projekt öffnen.");
+    if (!this.project) throw new Error(tr("errors.m97f49487e9"));
     return {
       directory: this.directory,
       project: structuredClone(this.project),
@@ -261,7 +260,7 @@ export class ProjectService {
   async create(directory: string, name: string): Promise<Snapshot> {
     const root = await fs.realpath(directory);
     if ((await fs.readdir(root)).length)
-      throw new Error("Bitte einen leeren Projektordner auswählen.");
+      throw new Error(tr("errors.m2d0e9b2a52"));
     const now = new Date().toISOString();
     const project = projectSchema.parse({
       schemaVersion: 2,
@@ -324,9 +323,7 @@ export class ProjectService {
         MAX_IMAGE_BYTES,
       );
       if (hashBytes(contents) !== image.sha256)
-        throw new Error(
-          "Bildintegrität verletzt. Projekt wurde nicht geöffnet.",
-        );
+        throw new Error(tr("errors.ma083c96fee"));
       const identity = project.identityAssets.some((a) => a.id === image.id);
       const info = identity
         ? inspectIdentityImage(contents)
@@ -336,14 +333,14 @@ export class ProjectService {
         info.height !== image.height ||
         info.format !== image.format
       )
-        throw new Error("Bildmetadaten stimmen nicht überein.");
+        throw new Error(tr("errors.m9dc99fcf96"));
       if (identity)
         await this.decode(contents, info.width, info.height, info.format);
       if (project.masks.some((m) => m.id === image.id))
         maskWeights(decodePixels(contents));
       if (project.styleAssets.some((a) => a.id === image.id)) {
         if (contents.length > MAX_STYLE_BYTES)
-          throw new Error("Stilreferenz überschreitet 8 MiB.");
+          throw new Error(tr("errors.m36eee0b538"));
         await this.decode(contents, info.width, info.height, info.format);
       }
     }
@@ -354,10 +351,10 @@ export class ProjectService {
           MAX_IMAGE_BYTES,
         );
         if (hashBytes(b) !== q.mask.sha256)
-          throw new Error("Freistellungsmaske verändert.");
+          throw new Error(tr("errors.mb794cb3526"));
         const mask = decodePixels(b);
         if (mask.width !== q.width || mask.height !== q.height)
-          throw new Error("Falsche Freistellungsmaske.");
+          throw new Error(tr("errors.m01d9424e5c"));
         maskWeights(mask);
       }
     for (const q of project.qualityAssets.filter((q) => !q.discardedAt))
@@ -369,13 +366,13 @@ export class ProjectService {
               MAX_IMAGE_BYTES,
             );
           if (hashBytes(b) !== m.sha256)
-            throw new Error("Freistellungs-Schutzmaske verändert.");
+            throw new Error(tr("errors.mbb0e46ac2e"));
           const pixels = decodePixels(b);
           if (pixels.width !== q.width || pixels.height !== q.height)
-            throw new Error("Falsche Schutzmaskengröße.");
+            throw new Error(tr("errors.m1814712cef"));
           const weights = maskWeights(pixels);
           if (role !== "manual" && weights.some((v) => v !== 0 && v !== 255))
-            throw new Error("Ungültige binäre Schutzmaske.");
+            throw new Error(tr("errors.m22600e4b5d"));
         }
         if (
           hashBytes(
@@ -384,7 +381,7 @@ export class ProjectService {
             ).data,
           ) !== q.smartCutout.pixelSha256
         )
-          throw new Error("Freistellungs-Pixelprovenienz verändert.");
+          throw new Error(tr("errors.m81903bad1f"));
       }
     for (const q of project.qualityAssets.filter((q) => !q.discardedAt))
       if (q.relighting) {
@@ -392,17 +389,17 @@ export class ProjectService {
           await readLimited(await safePath(root, q.file), MAX_IMAGE_BYTES),
         );
         if (hashBytes(image.data) !== q.relighting.pixelSha256)
-          throw new Error("Licht-Pixelprovenienz verändert.");
+          throw new Error(tr("errors.mfb47732004"));
         for (const r of q.relighting.regions) {
           const b = await readLimited(
             await safePath(root, r.mask.file),
             MAX_IMAGE_BYTES,
           );
           if (hashBytes(b) !== r.mask.sha256)
-            throw new Error("Lichtmaske verändert.");
+            throw new Error(tr("errors.m1b18ddcdc5"));
           const m = decodePixels(b);
           if (m.width !== q.width || m.height !== q.height)
-            throw new Error("Falsche Lichtmaske.");
+            throw new Error(tr("errors.maafb16215e"));
           maskWeights(m);
         }
       }
@@ -416,10 +413,10 @@ export class ProjectService {
         MAX_IMAGE_BYTES,
       );
       if (hashBytes(bytes) !== ref.sha256)
-        throw new Error("Farbmaske verändert.");
+        throw new Error(tr("errors.m9178d201d8"));
       const pixels = decodePixels(bytes);
       if (pixels.width !== width || pixels.height !== height)
-        throw new Error("Falsche Farbmaskengröße.");
+        throw new Error(tr("errors.m5545bbda0f"));
       return new Uint8Array(maskWeights(pixels));
     };
     for (const palette of project.masterPalettes) {
@@ -457,13 +454,13 @@ export class ProjectService {
               Buffer.from(weights),
             )
           )
-            throw new Error("Farbauswahl-Rezept verändert.");
+            throw new Error(tr("errors.m28534643a6"));
         }
         if (
           JSON.stringify(extractPalette(pixels, weights)) !==
           JSON.stringify(r.colors)
         )
-          throw new Error("Masterpalette verändert.");
+          throw new Error(tr("errors.m182a3b43ec"));
       }
     }
     for (const q of project.qualityAssets.filter((q) => !q.discardedAt))
@@ -477,7 +474,7 @@ export class ProjectService {
           await readLimited(await safePath(root, q.file), MAX_IMAGE_BYTES),
         );
         if (hashBytes(pixels.data) !== q.colorCorrection.pixelSha256)
-          throw new Error("Farb-Pixelprovenienz verändert.");
+          throw new Error(tr("errors.m0d7576f70e"));
       }
     for (const q of project.qualityAssets.filter((q) => !q.discardedAt))
       if (q.pixelEdit) {
@@ -514,12 +511,12 @@ export class ProjectService {
           hashBytes(actual.data) !== q.pixelEdit.pixelSha256 ||
           !Buffer.from(expected.data).equals(actual.data)
         )
-          throw new Error("Pixelbearbeitungsrezept oder Ergebnis verändert.");
+          throw new Error(tr("errors.mee293dfecc"));
       }
     for (const migration of project.styleMigrations)
       for (const source of migration.sources)
         if (hashBytes(Buffer.from(source.text)) !== source.sha256)
-          throw new Error("Stilmigrations-Originalhash verändert.");
+          throw new Error(tr("errors.me1e90985ed"));
     const source = raw as Record<string, unknown>;
     const versionOne = source.schemaVersion === 1;
     const needsArtMigration =
@@ -605,7 +602,7 @@ export class ProjectService {
   }
   private pending(token: string) {
     if (!this.staged || this.staged.image.token !== token)
-      throw new Error("Importvorschau abgelaufen. Bild erneut wählen.");
+      throw new Error(tr("errors.m744e69aace"));
     return this.staged;
   }
   private async store(
@@ -622,8 +619,7 @@ export class ProjectService {
     token: string,
   ) {
     const { image, bytes } = this.pending(token);
-    if (image.format === "jpg")
-      throw new Error("JPEG ist nur als Identitätsreferenz erlaubt.");
+    if (image.format === "jpg") throw new Error(tr("errors.md95c6841ea"));
     const relative = assetFile(kind, image.sha256, image.format);
     if (kind !== "originals" && kind !== "candidates")
       await fs.mkdir(await safePath(this.directory, `assets/${kind}`), {
@@ -635,7 +631,7 @@ export class ProjectService {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       if (!(await readLimited(file, MAX_IMAGE_BYTES)).equals(bytes))
-        throw new Error("Asset-Kollision oder beschädigte Datei.", {
+        throw new Error(tr("errors.m82282ed9a5"), {
           cause: error,
         });
     }
@@ -650,25 +646,22 @@ export class ProjectService {
   identitySlots(characterId: string, replaceId?: string) {
     const p = this.snapshot().project;
     if (!p.characters.some((c) => c.id === characterId))
-      throw new Error("Figur fehlt.");
+      throw new Error(tr("errors.m0b88139e9c"));
     const active = p.identityAssets.filter(
       (a) => a.characterId === characterId && !a.removedAt,
     );
     if (replaceId && !active.some((a) => a.id === replaceId))
-      throw new Error("Aktive Identitätsreferenz fehlt.");
+      throw new Error(tr("errors.m348d56db5b"));
     return replaceId ? 1 : 3 - active.length;
   }
   async importIdentityImages(input: IdentityImport): Promise<Snapshot> {
     const request = identityImportSchema.parse(input),
       slots = this.identitySlots(request.characterId, request.replaceId),
       files = request.files;
-    if (!files?.length) throw new Error("Keine Identitätsbilder ausgewählt.");
+    if (!files?.length) throw new Error(tr("errors.m91d7f63c5a"));
     if (files.length > slots)
-      throw new Error(
-        `Noch ${slots} von 3 Plätzen verfügbar. Die gesamte Auswahl wurde abgelehnt.`,
-      );
-    if (this.staged)
-      throw new Error("Zuerst den offenen Bildimport abschließen.");
+      throw new Error(tr("errors.mda4aff8a61", { v0: slots }));
+    if (this.staged) throw new Error(tr("errors.m6ad511cb61"));
     const p = this.snapshot().project,
       hashes = new Set(
         p.identityAssets
@@ -684,15 +677,12 @@ export class ProjectService {
           info = inspectIdentityImage(bytes),
           sha256 = hashBytes(bytes);
         await this.decode(bytes, info.width, info.height, info.format);
-        if (hashes.has(sha256))
-          throw new Error(
-            "Identitätsbild bereits vorhanden oder doppelt ausgewählt.",
-          );
+        if (hashes.has(sha256)) throw new Error(tr("errors.mc0842e89ad"));
         hashes.add(sha256);
         prepared.push({ bytes, ...info, sha256, name: file.name });
       } catch (error) {
         errors.push(
-          `${file.name}: ${error instanceof Error ? error.message : "Bild ungültig."}`,
+          `${file.name}: ${error instanceof Error ? error.message : tr("common.mf2689163c6")}`,
         );
       }
     }
@@ -720,10 +710,9 @@ export class ProjectService {
               image.bytes,
             )
           )
-            throw new Error(
-              `${image.name}: Identitätsdatei kollidiert oder wurde verändert.`,
-              { cause: error },
-            );
+            throw new Error(tr("errors.ma7d129a4c1", { v0: image.name }), {
+              cause: error,
+            });
         }
         p.identityAssets.push({
           id: randomUUID(),
@@ -765,7 +754,7 @@ export class ProjectService {
       hashBytes(await readLimited(destination, MAX_MANIFEST_BYTES)) !==
       this.diskHash
     )
-      throw new Error("Projekt wurde extern geändert. Bitte erneut öffnen.");
+      throw new Error(tr("errors.m66f87397d0"));
     if (this.legacyBytes) {
       const backup = await safePath(this.directory, this.legacyBackupName);
       try {
@@ -780,14 +769,14 @@ export class ProjectService {
             this.legacyBytes,
           )
         )
-          throw new Error("Migrationssicherung existiert mit anderem Inhalt.", {
+          throw new Error(tr("errors.m1fbd17e879"), {
             cause: error,
           });
       }
     }
     const bytes = Buffer.from(JSON.stringify(validated, null, 2));
     if (bytes.length > MAX_MANIFEST_BYTES)
-      throw new Error("Projektmanifest zu groß.");
+      throw new Error(tr("errors.m073701c8df"));
     const temp = await safePath(
       this.directory,
       `.laceframe-${randomUUID()}.tmp`,
@@ -813,7 +802,7 @@ export class ProjectService {
     const p = this.snapshot().project;
     const character = (id: string) => {
       const c = p.characters.find((c) => c.id === id);
-      if (!c) throw new Error("Figur fehlt.");
+      if (!c) throw new Error(tr("errors.m0b88139e9c"));
       return c;
     };
     let removeFile: { file: string; sha256: string } | undefined;
@@ -821,7 +810,7 @@ export class ProjectService {
       case "updateStructuredStyle": {
         const profile = p.artDirections.find((a) => a.id === cmd.profileId);
         if (!profile || profile.revision !== cmd.sourceRevision)
-          throw new Error("Stilrevision geändert. Erneut öffnen.");
+          throw new Error(tr("errors.m8a404636d7"));
         // Only text data; imported reference hashes are descriptive, never filesystem commands.
         parsePackJSON(
           JSON.stringify({
@@ -841,14 +830,14 @@ export class ProjectService {
       case "migrateStyleRules": {
         const profile = p.artDirections.find((a) => a.id === cmd.profileId);
         if (!profile || profile.revision !== cmd.sourceRevision)
-          throw new Error("Stilrevision geändert. Erneut öffnen.");
+          throw new Error(tr("errors.m8a404636d7"));
         const lines = migrationLines(profile);
         if (
           lines.length !== cmd.choices.length ||
           new Set(cmd.choices.map((c) => c.index)).size !== lines.length ||
           cmd.choices.some((c) => c.index >= lines.length)
         )
-          throw new Error("Migration passt nicht zur Originalrevision.");
+          throw new Error(tr("errors.mf8dc207d83"));
         const clean = emptyStyle(profile.name);
         clean.positiveRules = cmd.choices
           .filter((c) => c.category === "style" && c.text.trim())
@@ -858,7 +847,7 @@ export class ProjectService {
           .map((c) => c.text)
           .join("\n");
         if (!clean.positiveRules.length)
-          throw new Error("Mindestens eine Stilregel ausdrücklich auswählen.");
+          throw new Error(tr("errors.m3bbfc50fa0"));
         clean.referenceHashes = (profile.styleReferenceIds ?? []).map(
           (id) => p.styleAssets.find((a) => a.id === id)!.sha256,
         );
@@ -899,16 +888,14 @@ export class ProjectService {
         // Revalidate the same bounded wire format even for direct IPC commands.
         const pack = parsePackJSON(JSON.stringify(cmd.pack));
         if (cmd.projectHash !== hashBytes(Buffer.from(JSON.stringify(p))))
-          throw new Error(
-            "Projekt seit der Vorschau geändert. Pack erneut prüfen.",
-          );
+          throw new Error(tr("errors.mf5dc2e0f7b"));
         const rows = planPack(p, pack);
         if (
           cmd.choices.length !== rows.length ||
           new Set(cmd.choices.map((c) => c.key)).size !== rows.length ||
           rows.some((r) => !cmd.choices.some((c) => c.key === r.key))
         )
-          throw new Error("Importentscheidungen passen nicht zur Vorschau.");
+          throw new Error(tr("errors.mb22b7e7ea8"));
         for (const row of rows) {
           const choice = cmd.choices.find((c) => c.key === row.key)!;
           if (choice.action === "skip") continue;
@@ -916,9 +903,7 @@ export class ProjectService {
             choice.action === "update" &&
             (!row.targetId || row.status === "Konflikt")
           )
-            throw new Error(
-              "Kein eindeutiges Importziel. Als neu importieren oder überspringen.",
-            );
+            throw new Error(tr("errors.m2d8a2925d9"));
           if (pack.format === "laceframe.style") {
             const data = pack.style;
             const target =
@@ -1001,10 +986,7 @@ export class ProjectService {
                       (a.portableId ?? a.id) === v.id,
                   )
                 : [];
-              if (targets.length > 1)
-                throw new Error(
-                  "Mehrdeutige Varianten-ID; als neue Familie importieren.",
-                );
+              if (targets.length > 1) throw new Error(tr("errors.mf24a2879e1"));
               const existing = targets[0];
               const { id: externalId, ...fields } = v;
               if (existing) Object.assign(existing, fields);
@@ -1021,14 +1003,12 @@ export class ProjectService {
         break;
       }
       case "saveMasterPalette": {
-        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const master = p.masters.find((m) => m.id === cmd.masterId);
         if (!master || master.sha256 !== cmd.masterSha256)
-          throw new Error(
-            "Freigegebenen Master mit unverändertem Hash auswählen.",
-          );
+          throw new Error(tr("errors.m6b6163c0cd"));
         if (new Set(cmd.regions.map((r) => r.id)).size !== cmd.regions.length)
-          throw new Error("Doppelte Farbregion.");
+          throw new Error(tr("errors.mcdaf9c9a83"));
         const pixels = await this.analysisSource(master.id);
         const colors = cmd.regions.map((r) => {
           if (
@@ -1037,9 +1017,7 @@ export class ProjectService {
               Buffer.from(r.weights),
             )
           )
-            throw new Error(
-              "Farbauswahl stimmt nicht mit der gespeicherten Region überein.",
-            );
+            throw new Error(tr("errors.m4732dcdeb4"));
           return extractPalette(pixels, r.weights);
         });
         await this.colorBackup();
@@ -1087,7 +1065,7 @@ export class ProjectService {
         break;
       }
       case "createColorCorrection": {
-        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const source = this.qualitySource(cmd.sourceId),
           expression = this.colorExpression(source.id);
         const { palette } = await this.colorPalette(cmd.paletteId);
@@ -1096,14 +1074,12 @@ export class ProjectService {
           palette.characterId !== source.characterId ||
           source.sha256 !== cmd.sourceSha256
         )
-          throw new Error(
-            "Farbpalette gehört nicht zu diesem Master / dieser Expression.",
-          );
+          throw new Error(tr("errors.m7eb116c461"));
         if (
           new Set(cmd.regions.map((r) => r.paletteRegionId)).size !==
           cmd.regions.length
         )
-          throw new Error("Doppelte Kandidatenregion.");
+          throw new Error(tr("errors.md1c5ae9a8d"));
         const pixels = await this.analysisSource(source.id);
         await this.validateColorTargets(palette.id, cmd.regions);
         const output = correctColors(pixels, {
@@ -1117,7 +1093,7 @@ export class ProjectService {
           await this.relightProtectedPixels(source.id),
         );
         if (hashBytes(output.data) !== cmd.previewPixelSha256)
-          throw new Error("Farbvorschau veraltet. Berechnung abwarten.");
+          throw new Error(tr("errors.md141ff2408"));
         const regions = [];
         for (const { weights, ...r } of cmd.regions)
           regions.push({
@@ -1177,23 +1153,23 @@ export class ProjectService {
       }
 
       case "createPixelEdit": {
-        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const source = this.qualitySource(cmd.sourceId);
         if (source.sha256 !== cmd.sourceSha256)
-          throw new Error("Pixelquelle verändert.");
+          throw new Error(tr("errors.ma3e3b35f28"));
         const pixels = await this.pixelEditSource(source.id);
         if (
           cmd.protectedWeights.length !== pixels.protectedWeights.length ||
           pixels.protectedWeights.some((v, i) => v && !cmd.protectedWeights[i])
         )
-          throw new Error("Originalpixelschutz darf nicht entfernt werden.");
+          throw new Error(tr("errors.mb94aef9fa1"));
         const output = applyPixelEdit(pixels, cmd.edit, cmd.protectedWeights);
         this.assertRelightLock(
           output,
           await this.relightProtectedPixels(source.id),
         );
         if (hashBytes(output.data) !== cmd.previewPixelSha256)
-          throw new Error("Pixelvorschau veraltet. Neu berechnen.");
+          throw new Error(tr("errors.md10143792a"));
         if (
           cmd.edit.kind === "spritefusion" &&
           !p.qualityAssets.some(
@@ -1272,16 +1248,14 @@ export class ProjectService {
       }
 
       case "createRelighting": {
-        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const source = this.qualitySource(cmd.sourceId);
         const pixels = await this.relightSource(source.id);
         if (pixels.sha256 !== cmd.sourceSha256)
-          throw new Error(
-            "Die Relighting-Quelle wurde seit dem Öffnen verändert. Quelle erneut prüfen.",
-          );
+          throw new Error(tr("errors.m80b205ce63"));
         const ids = new Set(cmd.regions.map((r) => r.id));
         if (ids.size !== cmd.regions.length)
-          throw new Error("Doppelte Lichtregion.");
+          throw new Error(tr("errors.mb823555270"));
         for (const r of cmd.regions)
           if (r.reusedExpressionMask) {
             const m = p.masks.find((m) => m.id === r.reusedExpressionMask!.id);
@@ -1293,14 +1267,12 @@ export class ProjectService {
               m.sha256 !== r.reusedExpressionMask.sha256 ||
               m.revision !== r.reusedExpressionMask.revision
             )
-              throw new Error("Ungültige wiederverwendete Bearbeitungsmaske.");
+              throw new Error(tr("errors.mfb821e3cd7"));
             const original = maskWeights(
               decodePixels(await this.verifiedBytes(m.id)),
             );
             if (!Buffer.from(original).equals(Buffer.from(r.weights)))
-              throw new Error(
-                "Wiederverwendete Maske wurde verändert; als eigene Lichtrevision speichern.",
-              );
+              throw new Error(tr("errors.m4a65bba6ef"));
           }
         const output = relightPixels(pixels, cmd.light, cmd.regions);
         this.assertRelightLock(
@@ -1308,9 +1280,7 @@ export class ProjectService {
           await this.relightProtectedPixels(source.id),
         );
         if (hashBytes(output.data) !== cmd.previewPixelSha256)
-          throw new Error(
-            "Lichtvorschau veraltet. Aktuelle Berechnung abwarten.",
-          );
+          throw new Error(tr("errors.mb9e22aca9b"));
         // First semantic relighting write keeps an exact pre-feature manifest for older strict readers.
         if (!p.qualityAssets.some((q) => q.relighting) && !this.legacyBytes) {
           this.legacyBytes = await readLimited(
@@ -1376,8 +1346,7 @@ export class ProjectService {
       }
       case "createCutout":
       case "deriveResolution": {
-        if (this.staged)
-          throw new Error("Zuerst den ausstehenden Bildimport abschließen.");
+        if (this.staged) throw new Error(tr("errors.mb35383fb68"));
         const source = this.qualitySource(cmd.sourceId),
           bytes = await this.verifiedBytes(source.id),
           pixels = await this.pixels(bytes);
@@ -1385,9 +1354,7 @@ export class ProjectService {
         if (cmd.type === "createCutout" && cmd.smart) {
           const result = selectBackground(pixels, cmd.smart);
           if (!Buffer.from(result.weights).equals(Buffer.from(cmd.weights)))
-            throw new Error(
-              "Freistellungsvorschau veraltet. Berechnung abwarten.",
-            );
+            throw new Error(tr("errors.m42110201eb"));
           const previous = cmd.smart.previousId
             ? p.qualityAssets.find((q) => q.id === cmd.smart!.previousId)
             : undefined;
@@ -1397,7 +1364,7 @@ export class ProjectService {
               previous.sourceId !== source.id ||
               previous.characterId !== source.characterId)
           )
-            throw new Error("Falsche Freistellungsherkunft.");
+            throw new Error(tr("errors.m4f13951bb0"));
         }
         const output =
           cmd.type === "createCutout"
@@ -1407,7 +1374,7 @@ export class ProjectService {
           let root = source;
           const seen = new Set<string>();
           while ("sourceId" in root) {
-            if (seen.has(root.id)) throw new Error("Zyklische Herkunft.");
+            if (seen.has(root.id)) throw new Error(tr("errors.m9a125cf039"));
             seen.add(root.id);
             root = this.qualitySource(root.sourceId);
           }
@@ -1415,7 +1382,7 @@ export class ProjectService {
             attempt = p.attempts.find((a) => a.id === expression?.attemptId);
           if (attempt?.mask) {
             if (!expression?.composite)
-              throw new Error("Hard Lock: Rohbild zuerst compositen.");
+              throw new Error(tr("errors.m55dc009e4e"));
             const master = p.masters.find((a) => a.id === expression.masterId)!,
               saved = p.masks.find((a) => a.id === attempt.mask!.id)!;
             const m = decodePixels(await this.verifiedBytes(master.id)),
@@ -1423,9 +1390,7 @@ export class ProjectService {
                 decodePixels(await this.verifiedBytes(saved.id)),
               );
             if (output.width !== m.width || output.height !== m.height)
-              throw new Error(
-                "Hard Lock: Freistellung benötigt ursprüngliche Pixelkoordinaten.",
-              );
+              throw new Error(tr("errors.mc37f44e59f"));
             for (let i = 0; i < weights.length; i++)
               if (
                 weights[i] === 0 &&
@@ -1433,9 +1398,7 @@ export class ProjectService {
                   (c) => output.data[i * 4 + c] !== m.data[i * 4 + c],
                 )
               )
-                throw new Error(
-                  "Hard Lock schützt diese Pixel. Für Hintergrundkorrektur eine neue Masterversion freistellen.",
-                );
+                throw new Error(tr("errors.m6a54034318"));
           }
         }
         if (cmd.type === "createCutout" && cmd.smart) {
@@ -1537,27 +1500,25 @@ export class ProjectService {
       case "reviewQuality": {
         const q = p.qualityAssets.find((a) => a.id === cmd.id);
         if (!q || q.status !== "candidate")
-          throw new Error("Ungeprüfte Qualitätsversion auswählen.");
+          throw new Error(tr("errors.m8157c9d3e2"));
         if (cmd.status === "approved") {
           await this.verifyPendingQuality(q.id);
           const report = await this.qualityReport(q.id);
           if (report.status !== "transparent")
-            throw new Error(
-              "Freistellung erforderlich: deckende, leere oder verdächtige Bilder sind nicht produktionsfertig.",
-            );
+            throw new Error(tr("errors.med661664f7"));
           let source = this.qualitySource(q.sourceId);
           let resized = q.operation === "resolution";
           const visited = new Set<string>();
           while ("sourceId" in source) {
-            if (visited.has(source.id)) throw new Error("Zyklische Herkunft.");
+            if (visited.has(source.id))
+              throw new Error(tr("errors.m9a125cf039"));
             visited.add(source.id);
             resized ||= source.operation === "resolution";
             source = this.qualitySource(source.sourceId);
           }
           const c = character(q.characterId),
             now = new Date().toISOString();
-          if (this.staged)
-            throw new Error("Zuerst den ausstehenden Bildimport abschließen.");
+          if (this.staged) throw new Error(tr("errors.mb35383fb68"));
           const staged = await this.stage(
             await this.verifiedBytes(q.id),
             "quality-approved.png",
@@ -1570,9 +1531,7 @@ export class ProjectService {
               !expression.composite &&
               p.attempts.find((a) => a.id === expression.attemptId)?.mask
             )
-              throw new Error(
-                "Hard Lock: zuerst ein Composite erstellen; Qualitätsvarianten umgehen den Schutz nicht.",
-              );
+              throw new Error(tr("errors.m272a5c68b8"));
             // Resolution derivatives remain independent exports; only native-coordinate cutouts promote assets.
             if (expression && !resized) {
               const id = randomUUID();
@@ -1591,16 +1550,14 @@ export class ProjectService {
                 candidate = p.masterCandidates.find((m) => m.id === source.id);
               if (candidate) {
                 if (candidate.status !== "candidate")
-                  throw new Error("Masterkandidat bereits geprüft.");
+                  throw new Error(tr("errors.mc179ee4877"));
                 validateMasterTarget(
                   p,
                   p.masterAttempts.find((a) => a.id === candidate.attemptId)!,
                 );
               }
               if (previous ? c.masterId !== previous.id : !candidate)
-                throw new Error(
-                  "Nur den aktuellen Master verbessern; veraltete oder fremde Kandidaten ersetzen keinen gesperrten Master.",
-                );
+                throw new Error(tr("errors.m6b69846fe8"));
               const id = randomUUID();
               p.masters.push({
                 ...(await this.store("originals", staged.token)),
@@ -1636,7 +1593,9 @@ export class ProjectService {
                 p.outfits.push({
                   id: randomUUID(),
                   characterId: c.id,
-                  name: `Master V${p.masters.at(-1)!.version} outfit`,
+                  name: tr("errors.m87055258fa", {
+                    v0: p.masters.at(-1)!.version,
+                  }),
                   notes: attempt.outfit,
                 });
               }
@@ -1657,7 +1616,7 @@ export class ProjectService {
           p.identityAssets.filter((a) => a.characterId === c.id && !a.removedAt)
             .length >= 3
         )
-          throw new Error("Maximal drei aktive Identitätsreferenzen.");
+          throw new Error(tr("errors.mc957c9df71"));
         const { image, bytes } = this.pending(cmd.token);
         inspectIdentityImage(bytes);
         await this.decode(bytes, image.width, image.height, image.format);
@@ -1669,7 +1628,7 @@ export class ProjectService {
               !a.removedAt,
           )
         )
-          throw new Error("Identitätsbild bereits vorhanden.");
+          throw new Error(tr("errors.m08dc356275"));
         const file = `assets/identities/${image.sha256}.${image.format}`;
         await fs.mkdir(await safePath(this.directory, "assets/identities"), {
           recursive: true,
@@ -1682,10 +1641,7 @@ export class ProjectService {
             (e as NodeJS.ErrnoException).code !== "EEXIST" ||
             !(await readLimited(destination, MAX_IMAGE_BYTES)).equals(bytes)
           )
-            throw new Error(
-              "Identitätsdatei kollidiert oder wurde verändert.",
-              { cause: e },
-            );
+            throw new Error(tr("errors.m414bbe0825"), { cause: e });
         }
         p.identityAssets.push({
           id: randomUUID(),
@@ -1703,7 +1659,7 @@ export class ProjectService {
         const asset = p.identityAssets.find(
           (a) => a.id === cmd.id && !a.removedAt,
         );
-        if (!asset) throw new Error("Aktive Identitätsreferenz fehlt.");
+        if (!asset) throw new Error(tr("errors.m348d56db5b"));
         await this.preview(asset.id);
         const referenced = p.masterAttempts.some((a) =>
           a.identityReferences.some((r) => r.id === asset.id),
@@ -1724,9 +1680,7 @@ export class ProjectService {
             cmd.draft.prompt.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, ""),
           )
         )
-          throw new Error(
-            "Prompt widerspricht der verbindlichen Alpha-Transparenz. Hintergrundanweisung korrigieren.",
-          );
+          throw new Error(tr("errors.md4dc2ff574"));
         for (const r of [
           ...cmd.draft.identityReferences,
           ...cmd.draft.styleReferences,
@@ -1752,7 +1706,7 @@ export class ProjectService {
       case "reviewMasterCandidate": {
         const candidate = p.masterCandidates.find((a) => a.id === cmd.id);
         if (!candidate || candidate.status !== "candidate")
-          throw new Error("Ungeprüften Masterkandidaten auswählen.");
+          throw new Error(tr("errors.mf1242c9e53"));
         const c = character(candidate.characterId);
         await this.preview(candidate.id);
         if (cmd.status === "approved") {
@@ -1766,8 +1720,7 @@ export class ProjectService {
           );
           const previous = p.masters.find((m) => m.id === c.masterId);
           const bytes = await this.verifiedBytes(candidate.id);
-          if (this.staged)
-            throw new Error("Zuerst den ausstehenden Import abschließen.");
+          if (this.staged) throw new Error(tr("errors.m58fcdba47b"));
           const image = await this.stage(bytes, "approved-master");
           try {
             const id = randomUUID();
@@ -1794,7 +1747,7 @@ export class ProjectService {
             p.outfits.push({
               id: randomUUID(),
               characterId: c.id,
-              name: `Master V${p.masters.at(-1)!.version} outfit`,
+              name: tr("errors.m87055258fa", { v0: p.masters.at(-1)!.version }),
               notes: attempt.outfit,
             });
           } finally {
@@ -1812,7 +1765,7 @@ export class ProjectService {
           !master ||
           (cmd.previousId && (!previous || previous.masterId !== master.id))
         )
-          throw new Error("Ungültige Masken-/Masterzuordnung.");
+          throw new Error(tr("errors.mc55071f62a"));
         if (
           previous &&
           p.masks.some(
@@ -1821,14 +1774,11 @@ export class ProjectService {
               m.revision > previous.revision,
           )
         )
-          throw new Error(
-            "Maske wurde inzwischen geändert. Aktuelle Revision laden.",
-          );
+          throw new Error(tr("errors.ma7c491f1b6"));
         await this.preview(master.id);
         const bytes = encodeMask(master.width, master.height, cmd.weights);
         // Derived asset has its own staging lifecycle; never replace the user's pending import.
-        if (this.staged)
-          throw new Error("Zuerst den ausstehenden Bildimport abschließen.");
+        if (this.staged) throw new Error(tr("errors.mb35383fb68"));
         const staged = await this.stage(bytes, "mask.png");
         try {
           p.masks.push({
@@ -1860,22 +1810,18 @@ export class ProjectService {
           !master ||
           mask.masterId !== master.id
         )
-          throw new Error(
-            "Gespeicherten Rohkandidaten und zugeordnete Maske auswählen.",
-          );
+          throw new Error(tr("errors.mc516e84d84"));
         if (attempt.execution && attempt.execution.status !== "completed")
-          throw new Error("Generierung ist nicht erfolgreich abgeschlossen.");
+          throw new Error(tr("errors.m2dee9e8bb7"));
         if (
           p.assets.some(
             (a) =>
               a.composite?.rawId === raw.id && a.composite.maskId === mask.id,
           )
         )
-          throw new Error("Composite existiert bereits.");
+          throw new Error(tr("errors.mb6459c16f4"));
         if (raw.width !== master.width || raw.height !== master.height)
-          throw new Error(
-            "Hard Lock blockiert: unterschiedliche Abmessungen. Keine Skalierung.",
-          );
+          throw new Error(tr("errors.m3a1ea2b9ab"));
         const pixels = await Promise.all(
           [master, raw, mask].map(async (image) => {
             await this.preview(image.id);
@@ -1884,15 +1830,14 @@ export class ProjectService {
               MAX_IMAGE_BYTES,
             );
             if (hashBytes(b) !== image.sha256)
-              throw new Error("Bildintegrität verletzt.");
+              throw new Error(tr("errors.ma64f97b724"));
             return decodePixels(b);
           }),
         );
         const output = encodePixels(
           compositePixels(pixels[0], pixels[1], pixels[2]),
         );
-        if (this.staged)
-          throw new Error("Zuerst den ausstehenden Bildimport abschließen.");
+        if (this.staged) throw new Error(tr("errors.mb35383fb68"));
         const staged = await this.stage(output, "composite.png");
         try {
           const { reviewedAt: _, composite: __, ...source } = raw;
@@ -1931,7 +1876,7 @@ export class ProjectService {
             MAX_IMAGE_BYTES,
           );
           if (hashBytes(bytes) !== master.sha256)
-            throw new Error("Bildintegrität verletzt.");
+            throw new Error(tr("errors.ma64f97b724"));
           decodePixels(bytes); // Unsupported master formats fail before any native image turn.
         }
         const { basePrompt, prompt, supplementaryInstructions, ...selection } =
@@ -1954,25 +1899,21 @@ export class ProjectService {
       }
       case "importResult": {
         const attempt = p.attempts.find((a) => a.id === cmd.attemptId);
-        if (!attempt) throw new Error("Gespeicherten Versuch auswählen.");
+        if (!attempt) throw new Error(tr("errors.m4c73bac592"));
         if (p.assets.some((a) => a.attemptId === attempt.id))
-          throw new Error(
-            "Versuch hat bereits ein Ergebnis. Neuen Versuch anlegen; vorheriges Ergebnis bleibt erhalten.",
-          );
+          throw new Error(tr("errors.mc173d86c3f"));
         if (attempt.providerId !== "manual-import")
-          throw new Error(
-            "Native Ergebnisse können nicht über manuellen Import zugeordnet werden.",
-          );
+          throw new Error(tr("errors.m615a6c40c1"));
         await this.attachResult(p, attempt, cmd.token);
         break;
       }
       case "adoptStyleAnalysis": {
-        if (this.staged) throw new Error("Zuerst den Bildimport abschließen.");
+        if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const profile = p.artDirections.find((a) => a.id === cmd.profileId);
         if (!profile || profile.revision !== cmd.expectedRevision)
-          throw new Error("Stilrevision wurde geändert. Analyse neu prüfen.");
+          throw new Error(tr("errors.m42fb08aa8a"));
         if (p.styleAnalyses.length >= 100)
-          throw new Error("Maximal 100 gespeicherte Analysen pro Projekt.");
+          throw new Error(tr("errors.m84c082bccc"));
         const references: AnalysisResult[] = [];
         for (const ref of cmd.references) {
           const source = await this.analysisSource(ref.id);
@@ -1985,18 +1926,14 @@ export class ProjectService {
         const suggestions = suggestRules(references);
         const fields = adoptedRules(suggestions, cmd.edits);
         if (!fields.renderRules.trim())
-          throw new Error(
-            "Mindestens eine Rendering-Regel oder eigene Regel erforderlich.",
-          );
+          throw new Error(tr("errors.md3a40bd21f"));
         // Explicit adoption also binds these immutable originals as style-only references.
         const images = [];
         for (const ref of references) {
           const source = this.qualitySourceOrStyle(ref.id);
           const bytes = await this.verifiedBytes(ref.id);
           if (bytes.length > MAX_STYLE_BYTES)
-            throw new Error(
-              "Analysefreigabe: Stilreferenzen dürfen höchstens 8 MiB haben.",
-            );
+            throw new Error(tr("errors.m65158053e3"));
           images.push({ source, bytes, type: ref.type });
         }
         const newHashes = new Set(
@@ -2012,7 +1949,7 @@ export class ProjectService {
             .map((i) => i.source.sha256),
         );
         if (p.styleAssets.length + newHashes.size > 128)
-          throw new Error("Maximal 128 Stilassets pro Projekt.");
+          throw new Error(tr("errors.mf03e734434"));
         const ids: string[] = [];
         for (const { source, bytes, type } of images) {
           let asset = p.styleAssets.find(
@@ -2070,7 +2007,7 @@ export class ProjectService {
       }
       case "updateArtDirection": {
         const profile = p.artDirections.find((a) => a.id === cmd.id);
-        if (!profile) throw new Error("Art Direction fehlt.");
+        if (!profile) throw new Error(tr("errors.mec49f156ff"));
         const { type: _, id: __, ...fields } = cmd;
         void _;
         void __;
@@ -2090,16 +2027,12 @@ export class ProjectService {
       case "importStyleReference": {
         const profile = p.artDirections.find((a) => a.id === cmd.profileId);
         if (!profile || (profile.styleReferenceIds ?? []).length >= 6)
-          throw new Error(
-            "Stilprofil fehlt oder hat bereits sechs Referenzen.",
-          );
+          throw new Error(tr("errors.m6a5072c794"));
         const staged = this.pending(cmd.token);
         if (staged.image.width * staged.image.height > MAX_STYLE_PIXELS)
-          throw new Error(
-            "Stilreferenzen dürfen höchstens 16 Megapixel haben.",
-          );
+          throw new Error(tr("errors.m62f1486973"));
         if (staged.bytes.length > MAX_STYLE_BYTES)
-          throw new Error("Stilreferenzen dürfen höchstens 8 MiB groß sein.");
+          throw new Error(tr("errors.m83b29bab94"));
         const image = await this.store("styles", cmd.token);
         let asset = p.styleAssets.find(
           (a) => a.sha256 === image.sha256 && a.format === image.format,
@@ -2114,7 +2047,7 @@ export class ProjectService {
           p.styleAssets.push(asset);
         }
         if ((profile.styleReferenceIds ?? []).includes(asset.id))
-          throw new Error("Stilreferenz ist bereits zugeordnet.");
+          throw new Error(tr("errors.m8918870101"));
         profile.styleReferenceIds = [
           ...(profile.styleReferenceIds ?? []),
           asset.id,
@@ -2125,10 +2058,10 @@ export class ProjectService {
       }
       case "setStyleReferences": {
         const profile = p.artDirections.find((a) => a.id === cmd.profileId);
-        if (!profile) throw new Error("Stilprofil fehlt.");
+        if (!profile) throw new Error(tr("errors.m4aa30c9318"));
         for (const id of cmd.ids) {
           const asset = p.styleAssets.find((a) => a.id === id);
-          if (!asset) throw new Error("Stilreferenz fehlt.");
+          if (!asset) throw new Error(tr("errors.m36305d11df"));
           await this.preview(id);
         }
         profile.styleReferenceIds = cmd.ids;
@@ -2138,14 +2071,14 @@ export class ProjectService {
       }
       case "setArtDirection": {
         if (!p.artDirections.some((a) => a.id === cmd.id))
-          throw new Error("Art Direction fehlt.");
+          throw new Error(tr("errors.mec49f156ff"));
         p.defaultArtDirectionId = cmd.id;
         break;
       }
       case "setExpressionPerformance": {
         character(cmd.characterId);
         if (!p.variants.some((v) => v.id === cmd.variantId))
-          throw new Error("Emotionsvariante fehlt.");
+          throw new Error(tr("errors.med0f136abc"));
         const index = p.expressionPerformances.findIndex(
           (e) =>
             e.characterId === cmd.characterId && e.variantId === cmd.variantId,
@@ -2187,7 +2120,7 @@ export class ProjectService {
         break;
       case "editFamily": {
         const f = p.families.find((f) => f.id === cmd.id);
-        if (!f) throw new Error("Familie fehlt.");
+        if (!f) throw new Error(tr("errors.me5d9a7f08c"));
         Object.assign(f, { label: cmd.label, slug: cmd.slug });
         if (f.portableSlug) f.portableSlug = cmd.slug;
         if (f.portableOrigin) f.portableOrigin.revision++;
@@ -2205,7 +2138,7 @@ export class ProjectService {
         break;
       case "editVariant": {
         const index = p.variants.findIndex((v) => v.id === cmd.variant.id);
-        if (index < 0) throw new Error("Variante fehlt.");
+        if (index < 0) throw new Error(tr("errors.m5f8c77fd64"));
         p.variants[index] = cmd.variant;
         const family = p.families.find((f) => f.id === cmd.variant.familyId);
         if (family?.portableOrigin) family.portableOrigin.revision++;
@@ -2213,14 +2146,11 @@ export class ProjectService {
       }
       case "confirmMaster": {
         const c = character(cmd.characterId);
-        if (c.masterId)
-          throw new Error(
-            "Master V1 ist gesperrt und kann nicht ersetzt werden.",
-          );
+        if (c.masterId) throw new Error(tr("errors.m221821d259"));
         const pending = this.pending(cmd.token);
         const review = masterApprovalInputSchema.parse(cmd.review);
         if (review.sourceSha256 !== pending.image.sha256)
-          throw new Error("Master-Quellhash stimmt nicht überein.");
+          throw new Error(tr("errors.mb34b88dd4c"));
         const report = analyzePixels(
           await this.pixels(pending.bytes),
           pending.image.format,
@@ -2244,11 +2174,11 @@ export class ProjectService {
       case "importCandidate": {
         const c = character(cmd.characterId),
           master = p.masters.find((m) => m.id === c.masterId);
-        if (!master) throw new Error("Zuerst einen Master bestätigen.");
+        if (!master) throw new Error(tr("errors.m5d8bd159d0"));
         if (!p.variants.some((v) => v.id === cmd.variantId))
-          throw new Error("Variante fehlt.");
+          throw new Error(tr("errors.m5f8c77fd64"));
         if (this.pending(cmd.token).image.format !== "png")
-          throw new Error("Kandidaten müssen PNG-Dateien sein.");
+          throw new Error(tr("errors.me739225d7a"));
         const image = await this.store("candidates", cmd.token);
         p.assets.push({
           ...image,
@@ -2265,16 +2195,14 @@ export class ProjectService {
       }
       case "review": {
         const index = p.assets.findIndex((a) => a.id === cmd.id);
-        if (index < 0) throw new Error("Kandidat fehlt.");
+        if (index < 0) throw new Error(tr("errors.m9624621831"));
         const item = p.assets[index];
         if (
           cmd.status === "approved" &&
           !item.composite &&
           p.attempts.find((a) => a.id === item.attemptId)?.mask
         )
-          throw new Error(
-            "Hard-Lock-Rohkandidat: zuerst Composite erstellen und manuell prüfen.",
-          );
+          throw new Error(tr("errors.m9e40d80417"));
         p.assets[index] = review(p.assets[index], cmd.status);
         break;
       }
@@ -2343,9 +2271,7 @@ export class ProjectService {
         hashBytes(await readLimited(file, MAX_IMAGE_BYTES)) !==
         removeFile.sha256
       )
-        throw new Error(
-          "Referenz entfernt, aber veränderte Datei nicht gelöscht.",
-        );
+        throw new Error(tr("errors.m3d9d080fe1"));
       if (process.platform === "win32") await fs.chmod(file, 0o600);
       await fs.unlink(file);
     }
@@ -2373,11 +2299,9 @@ export class ProjectService {
       p = this.snapshot().project;
     const profile = p.artDirections.find((a) => a.id === request.profileId);
     if (request.kind === "style" && !profile)
-      throw new Error("Stilprofil auswählen.");
+      throw new Error(tr("errors.m5801686dac"));
     if (request.kind === "style" && request.styleScopeReviewed !== true)
-      throw new Error(
-        "Style-Export erst nach manueller Prüfung: nur Rendering, keine Identität, Outfits oder Emotionsanweisungen.",
-      );
+      throw new Error(tr("errors.maca29913e3"));
     const pack =
       request.kind === "style"
         ? exportStyle(p, profile!)
@@ -2386,7 +2310,11 @@ export class ProjectService {
             request.familyIds ?? p.families.map((f) => f.id),
           );
     return {
-      name: `${request.kind}-${pack.id}-r${pack.revision}.json`,
+      name: tr("errors.mb165f0f395", {
+        v0: request.kind,
+        v1: pack.id,
+        v2: pack.revision,
+      }),
       bytes: Buffer.from(serializePack(pack)),
     };
   }
@@ -2405,7 +2333,7 @@ export class ProjectService {
     const asset = this.snapshot().project.styleAssets.find(
       (a) => a.id === id && a.sha256 === sha256,
     );
-    if (!asset) throw new Error("Stilreferenz fehlt oder wurde verändert.");
+    if (!asset) throw new Error(tr("errors.m304002ede0"));
     await this.preview(id);
     return safePath(this.directory, asset.file);
   }
@@ -2415,7 +2343,7 @@ export class ProjectService {
     token: string,
   ) {
     if (p.assets.some((a) => a.attemptId === attempt.id))
-      throw new Error("Versuch hat bereits ein Ergebnis.");
+      throw new Error(tr("errors.ma5f4a85aa9"));
     // An imported result belongs to the saved immutable attempt, even after
     // the project's active style/performance has changed. New drafts are
     // validated against live settings in prepareAttempt, not retroactively here.
@@ -2427,7 +2355,7 @@ export class ProjectService {
         m.locked,
     );
     if (!master || !p.variants.some((v) => v.id === attempt.variantId))
-      throw new Error("Ungültige gespeicherte Master- oder Variantenreferenz.");
+      throw new Error(tr("errors.mb3ff181658"));
     await this.preview(attempt.masterId);
     const image = await this.store("candidates", token);
     p.assets.push({
@@ -2455,7 +2383,7 @@ export class ProjectService {
       attempt = p.attempts.find(
         (a) => a.id === attemptId && a.providerId === "codex-native",
       );
-    if (!attempt) throw new Error("Unbekannter Codex-Versuch.");
+    if (!attempt) throw new Error(tr("errors.m99da10decf"));
     const staged = await this.stage(bytes, "codex-result");
     try {
       await this.attachResult(p, attempt, staged.token);
@@ -2478,9 +2406,7 @@ export class ProjectService {
         (a) => a.id === attemptId && a.providerId === "codex-native",
       );
     if (!attempt || attempt.execution?.endedAt)
-      throw new Error(
-        "Generierungsmetadaten fehlen oder sind bereits abgeschlossen.",
-      );
+      throw new Error(tr("errors.m6464a1a1fc"));
     attempt.execution = generationExecutionSchema.parse(execution);
     p.updatedAt = new Date().toISOString();
     await this.save(p);
@@ -2517,7 +2443,7 @@ export class ProjectService {
       attempt.execution?.status !== "running" ||
       p.masterCandidates.some((c) => c.attemptId === attemptId)
     )
-      throw new Error("Kein offener Masterauftrag.");
+      throw new Error(tr("errors.m163109f071"));
     const staged = await this.stage(bytes, "master-candidate");
     try {
       p.masterCandidates.push({
@@ -2530,7 +2456,7 @@ export class ProjectService {
       });
       const execution = generationExecutionSchema.parse(complete());
       if (execution.status !== "completed")
-        throw new Error("Kein erfolgreich abgeschlossenes Masterergebnis.");
+        throw new Error(tr("errors.mcff07d9d6b"));
       attempt.execution = execution;
       p.updatedAt = new Date().toISOString();
       await this.save(p);
@@ -2550,13 +2476,13 @@ export class ProjectService {
       ...p.masterCandidates,
       ...p.qualityAssets,
     ].find((a) => a.id === id);
-    if (!image) throw new Error("Unbekanntes Bild.");
+    if (!image) throw new Error(tr("errors.m6966c74212"));
     const bytes = await readLimited(
       await safePath(this.directory, image.file),
       MAX_IMAGE_BYTES,
     );
     if (hashBytes(bytes) !== image.sha256)
-      throw new Error("Bildintegrität verletzt.");
+      throw new Error(tr("errors.ma64f97b724"));
     return bytes;
   }
   private async validateColorTargets(
@@ -2572,8 +2498,7 @@ export class ProjectService {
     const master = await this.analysisSource(palette.masterId);
     for (const rule of rules) {
       const ref = referenceRegions.find((r) => r.id === rule.paletteRegionId);
-      if (!ref)
-        throw new Error("Farbregion fehlt in der gespeicherten Masterpalette.");
+      if (!ref) throw new Error(tr("errors.m005b48f925"));
       const targets = new Set([
         rule.targetColor,
         ...(rule.transferGroups ?? []).map((g) => g.targetColor),
@@ -2581,10 +2506,7 @@ export class ProjectService {
       for (let i = 0; i < ref.weights.length && targets.size; i++)
         if (ref.weights[i] >= 128 && master.data[i * 4 + 3] >= 128)
           targets.delete(rgbHex(master.data.subarray(i * 4, i * 4 + 3)));
-      if (targets.size)
-        throw new Error(
-          "Referenzfarbe muss aus der zugeordneten Masterregion stammen.",
-        );
+      if (targets.size) throw new Error(tr("errors.m735e571f03"));
     }
   }
 
@@ -2633,10 +2555,7 @@ export class ProjectService {
           ),
         ).equals(Buffer.from(bytes))
       )
-        throw new Error(
-          "Farbauswahl-Backupkonflikt; bestehendes Backup bleibt unverändert.",
-          { cause: e },
-        );
+        throw new Error(tr("errors.m7753638c71"), { cause: e });
     }
   }
 
@@ -2646,26 +2565,26 @@ export class ProjectService {
     height: number,
   ) {
     if (ref.file !== assetFile("color-masks", ref.sha256, "png"))
-      throw new Error("Ungültiger Farbmaskenpfad.");
+      throw new Error(tr("errors.m56c0c39c32"));
     const bytes = await readLimited(
       await safePath(this.directory, ref.file),
       MAX_IMAGE_BYTES,
     );
     if (hashBytes(bytes) !== ref.sha256)
-      throw new Error("Farbmaske verändert.");
+      throw new Error(tr("errors.m9178d201d8"));
     const p = decodePixels(bytes);
     if (p.width !== width || p.height !== height)
-      throw new Error("Farbmaskengröße verändert.");
+      throw new Error(tr("errors.m8e5309b171"));
     return new Uint8Array(maskWeights(p));
   }
   async colorPalette(id: string) {
     const palette = this.snapshot().project.masterPalettes.find(
       (p) => p.id === id,
     );
-    if (!palette) throw new Error("Masterpalette fehlt.");
+    if (!palette) throw new Error(tr("errors.m03a913cc57"));
     const master = await this.analysisSource(palette.masterId);
     if (master.sha256 !== palette.masterSha256)
-      throw new Error("Masterpalette: Quellhash verändert.");
+      throw new Error(tr("errors.mb9ae947de7"));
     const regions = [];
     for (const r of palette.regions) {
       const weights = await this.colorMask(r.mask, master.width, master.height);
@@ -2673,7 +2592,7 @@ export class ProjectService {
         JSON.stringify(extractPalette(master, weights)) !==
         JSON.stringify(r.colors)
       )
-        throw new Error("Referenzpalette passt nicht zum Master.");
+        throw new Error(tr("errors.m8f293d8552"));
       const selection = r.selection
         ? await this.readRegionSelection(
             r.selection,
@@ -2687,7 +2606,7 @@ export class ProjectService {
           Buffer.from(weights),
         )
       )
-        throw new Error("Farbauswahl-Rezept verändert.");
+        throw new Error(tr("errors.m28534643a6"));
       regions.push({ ...r, weights, selection });
     }
     return { palette, regions };
@@ -2697,23 +2616,19 @@ export class ProjectService {
     const seen = new Set<string>();
     while ("sourceId" in source) {
       if (seen.has(source.id) || seen.size >= 64)
-        throw new Error("Zyklische Farbherkunft.");
+        throw new Error(tr("errors.m476ae426c8"));
       seen.add(source.id);
       source = this.qualitySource(source.sourceId);
     }
     const expression = this.snapshot().project.assets.find(
       (a) => a.id === source.id,
     );
-    if (!expression)
-      throw new Error(
-        "Farbkorrektur benötigt eine Expression mit freigegebenem Referenzmaster.",
-      );
+    if (!expression) throw new Error(tr("errors.ma017143896"));
     return expression;
   }
   async colorRecipe(id: string) {
     const q = this.snapshot().project.qualityAssets.find((a) => a.id === id);
-    if (!q?.colorCorrection)
-      throw new Error("Keine gespeicherte Farbkorrektur.");
+    if (!q?.colorCorrection) throw new Error(tr("errors.m559e6b89f4"));
     const recipe = q.colorCorrection;
     const regions = [];
     for (const { mask, ...r } of recipe.regions)
@@ -2766,7 +2681,7 @@ export class ProjectService {
       ...p.masterCandidates,
       ...p.qualityAssets,
     ].find((a) => a.id === id);
-    if (!image) throw new Error("Kein Charakterasset ausgewählt.");
+    if (!image) throw new Error(tr("errors.m05772dd2f6"));
     return image;
   }
   async pixelEditSource(id: string) {
@@ -2781,7 +2696,7 @@ export class ProjectService {
         lock.master.width !== source.width ||
         lock.master.height !== source.height
       )
-        throw new Error("Originalpixelschutz benötigt gleiche Maße.");
+        throw new Error(tr("errors.me673d6086c"));
       lock.weights.forEach((v, i) => {
         if (!v) protectedWeights[i] = 255;
       });
@@ -2809,7 +2724,7 @@ export class ProjectService {
   }
   private async pixelRecipe(id: string) {
     const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);
-    if (!q?.pixelEdit) throw new Error("Pixelrezept fehlt.");
+    if (!q?.pixelEdit) throw new Error(tr("errors.m53bd2927ee"));
     const source = this.qualitySource(q.sourceId);
     const load = async (m: { file: string; sha256: string }) => {
       const bytes = await readLimited(
@@ -2817,10 +2732,10 @@ export class ProjectService {
         MAX_IMAGE_BYTES,
       );
       if (hashBytes(bytes) !== m.sha256)
-        throw new Error("Pixelmaske verändert.");
+        throw new Error(tr("errors.m7b3919e07d"));
       const p = decodePixels(bytes);
       if (p.width !== source.width || p.height !== source.height)
-        throw new Error("Pixelmaske hat falsche Maße.");
+        throw new Error(tr("errors.m80f7aa18bf"));
       return maskWeights(p);
     };
     const protectedWeights = await load(q.pixelEdit.protectedMask),
@@ -2838,9 +2753,7 @@ export class ProjectService {
   async analysisSource(id: string) {
     const source = this.qualitySourceOrStyle(id);
     if (source.width * source.height > MAX_ANALYSIS_PIXELS)
-      throw new Error(
-        "Stilanalyse: maximal 4 Megapixel pro Bild. Keine automatische Skalierung.",
-      );
+      throw new Error(tr("errors.m3f5a74a34e"));
     const pixels = await this.pixels(await this.verifiedBytes(id));
     return {
       width: pixels.width,
@@ -2859,24 +2772,20 @@ export class ProjectService {
       ...p.qualityAssets,
     ];
     const source = all.find((a) => a.id === id);
-    if (!source) throw new Error("Kein Charakterasset ausgewählt.");
+    if (!source) throw new Error(tr("errors.m05772dd2f6"));
     if (source.width * source.height > 4_194_304)
-      throw new Error(
-        "Live Relighting: maximal 4 Megapixel; keine automatische Verkleinerung.",
-      );
+      throw new Error(tr("errors.m143b5d733b"));
     const chain: typeof all = [],
       seen = new Set<string>();
     let node = source,
       cutoutId: string | undefined;
     while (true) {
       if (seen.has(node.id) || chain.length >= 64)
-        throw new Error("Ungültige oder zu lange Freistellungs-Herkunft.");
+        throw new Error(tr("errors.m70589fe480"));
       seen.add(node.id);
       chain.push(node);
       if (node.characterId !== source.characterId)
-        throw new Error(
-          "Freistellungs-Herkunft gehört zu einer anderen Figur.",
-        );
+        throw new Error(tr("errors.m1b63993855"));
       let parentId: string | undefined;
       if ("sourceId" in node) {
         if (
@@ -2885,9 +2794,7 @@ export class ProjectService {
             !node.reviewedAt ||
             !node.notes?.trim())
         )
-          throw new Error(
-            "Live Relighting erfordert eine ausdrücklich freigegebene Freistellung und freigegebene Folgeversionen.",
-          );
+          throw new Error(tr("errors.m8a115ef97f"));
         if (node.operation === "cutout") cutoutId ??= node.id;
         parentId = node.sourceId;
       } else if ("qualitySourceId" in node && node.qualitySourceId) {
@@ -2903,28 +2810,23 @@ export class ProjectService {
             ? q.approvedMasterId !== node.id
             : q.approvedExpressionId !== node.id)
         )
-          throw new Error("Ungültige Freigabe-Verknüpfung der Freistellung.");
+          throw new Error(tr("errors.mafe126b308"));
         parentId = q.id;
       }
       if (!parentId) break;
       const parent = all.find((a) => a.id === parentId);
-      if (!parent) throw new Error("Freistellungs-Herkunft fehlt.");
+      if (!parent) throw new Error(tr("errors.m87d5bde11e"));
       if ("sourceId" in node && parent.sha256 !== node.sourceSha256)
-        throw new Error("Quellhash der Freistellung stimmt nicht überein.");
+        throw new Error(tr("errors.m148e959df8"));
       node = parent;
     }
-    if (!cutoutId)
-      throw new Error(
-        "Live Relighting ist erst nach der Freistellung und Freigabe dieses Portraits möglich.",
-      );
+    if (!cutoutId) throw new Error(tr("errors.m58fec20563"));
     const pixels = await this.verifyQualityChain(chain.reverse());
     if (
       !pixels ||
       analyzePixels(pixels, source.format).status !== "transparent"
     )
-      throw new Error(
-        "Live Relighting benötigt echte, nicht leere Alpha-Transparenz. Hintergrund freistellen und freigeben.",
-      );
+      throw new Error(tr("errors.md0670c97a7"));
     validateRelightSize(pixels);
     return {
       width: pixels.width,
@@ -2942,33 +2844,33 @@ export class ProjectService {
     for (const a of chain) {
       const actual = await this.pixels(await this.verifiedBytes(a.id));
       if (actual.width !== a.width || actual.height !== a.height)
-        throw new Error("Bildabmessungen der Herkunft stimmen nicht überein.");
+        throw new Error(tr("errors.mc01b21282a"));
       if ("sourceId" in a) {
-        if (!pixels) throw new Error("Freistellungsquelle fehlt.");
+        if (!pixels) throw new Error(tr("errors.m2bab45584c"));
         let expected: Pixels;
         if (a.operation === "cutout") {
-          if (!a.mask) throw new Error("Freistellungsmaske fehlt.");
+          if (!a.mask) throw new Error(tr("errors.m908dcf7850"));
           const bytes = await readLimited(
             await safePath(this.directory, a.mask.file),
             MAX_IMAGE_BYTES,
           );
           if (hashBytes(bytes) !== a.mask.sha256)
-            throw new Error("Freistellungsmaske verändert.");
+            throw new Error(tr("errors.mb794cb3526"));
           const mask = decodePixels(bytes);
           if (mask.width !== a.width || mask.height !== a.height)
-            throw new Error("Falsche Freistellungsmaske.");
+            throw new Error(tr("errors.m01d9424e5c"));
           const weights = maskWeights(mask);
           if (a.smartCutout) {
             const draft = await this.smartCutoutRecipe(a.id);
             const verified = selectBackground(pixels, draft);
             if (!Buffer.from(verified.weights).equals(Buffer.from(weights)))
-              throw new Error("Freistellungsrezept passt nicht zur Maske.");
+              throw new Error(tr("errors.m92175966a2"));
             if (hashBytes(actual.data) !== a.smartCutout.pixelSha256)
-              throw new Error("Freistellungs-Pixelprovenienz verändert.");
+              throw new Error(tr("errors.m81903bad1f"));
           }
           expected = cutoutPixels(pixels, weights);
         } else if (a.operation === "color-correction") {
-          if (!a.colorCorrection) throw new Error("Farbkorrekturrezept fehlt.");
+          if (!a.colorCorrection) throw new Error(tr("errors.mc779a46cb6"));
           const recipe = await this.colorRecipe(a.id);
           await this.validateColorTargets(recipe.paletteId, recipe.regions);
           expected = correctColors(pixels, recipe);
@@ -2977,7 +2879,7 @@ export class ProjectService {
             await this.relightProtectedPixels(a.sourceId),
           );
           if (hashBytes(actual.data) !== a.colorCorrection.pixelSha256)
-            throw new Error("Farb-Pixelprovenienz verändert.");
+            throw new Error(tr("errors.m0d7576f70e"));
         } else if (a.pixelEdit) {
           const recipe = await this.pixelRecipe(a.id);
           expected = applyPixelEdit(
@@ -2990,9 +2892,9 @@ export class ProjectService {
             await this.relightProtectedPixels(a.sourceId),
           );
           if (hashBytes(actual.data) !== a.pixelEdit.pixelSha256)
-            throw new Error("Pixelrezept verändert.");
+            throw new Error(tr("errors.mbf43ec0000"));
         } else if (a.operation === "relighting") {
-          if (!a.relighting) throw new Error("Lichtrezept fehlt.");
+          if (!a.relighting) throw new Error(tr("errors.m8536133dd4"));
           const recipe = await this.relightRecipe(a.id);
           expected = relightPixels(
             pixels,
@@ -3003,9 +2905,9 @@ export class ProjectService {
             })),
           );
           if (hashBytes(actual.data) !== a.relighting.pixelSha256)
-            throw new Error("Licht-Pixelprovenienz verändert.");
+            throw new Error(tr("errors.mfb47732004"));
         } else {
-          if (!a.profile) throw new Error("Auflösungsprofil fehlt.");
+          if (!a.profile) throw new Error(tr("errors.mb88db96a4f"));
           expected = resizePixels(pixels, a.profile);
         }
         if (
@@ -3013,22 +2915,18 @@ export class ProjectService {
           expected.height !== actual.height ||
           !Buffer.from(expected.data).equals(Buffer.from(actual.data))
         )
-          throw new Error(
-            "Abgeleitete Pixel stimmen nicht mit der Freistellungs-Herkunft überein.",
-          );
+          throw new Error(tr("errors.m3b3c77e140"));
       } else if (
         pixels &&
         (!Buffer.from(pixels.data).equals(Buffer.from(actual.data)) ||
           pixels.width !== actual.width ||
           pixels.height !== actual.height)
       ) {
-        throw new Error(
-          "Freigegebene Assetkopie stimmt nicht mit der Herkunft überein.",
-        );
+        throw new Error(tr("errors.m4bff4ab8cf"));
       }
       pixels = actual;
     }
-    if (!pixels) throw new Error("Bildquelle fehlt.");
+    if (!pixels) throw new Error(tr("errors.mc7482db03d"));
     return pixels;
   }
   private async verifyPendingQuality(id: string) {
@@ -3038,7 +2936,7 @@ export class ProjectService {
     const characterId = a.characterId;
     while (true) {
       if (seen.has(a.id) || chain.length >= 64 || a.characterId !== characterId)
-        throw new Error("Ungültige Qualitäts-Herkunft.");
+        throw new Error(tr("errors.m3a9ba80336"));
       seen.add(a.id);
       chain.push(a);
       const parentId =
@@ -3050,7 +2948,7 @@ export class ProjectService {
       if (!parentId) break;
       const parent = this.qualitySource(parentId);
       if ("sourceId" in a && a.sourceSha256 !== parent.sha256)
-        throw new Error("Quellhash der Qualitätsversion stimmt nicht überein.");
+        throw new Error(tr("errors.m93b923826d"));
       a = parent;
     }
     return this.verifyQualityChain(chain.reverse());
@@ -3060,14 +2958,13 @@ export class ProjectService {
     if ("discardedAt" in selected && selected.discardedAt)
       return {
         allowed: false,
-        reason: "Abgelehnter Kandidat wurde verworfen.",
+        reason: tr("errors.m6ef7690686"),
       };
     try {
       const source = await this.checkedRelightSource(id);
       return {
         allowed: true,
-        reason:
-          "Freistellung freigegeben · Herkunft, Bildintegrität und Alpha geprüft.",
+        reason: tr("errors.m63553a7cf4"),
         sourceSha256: source.sha256,
         cutoutId: source.cutoutId,
       };
@@ -3078,7 +2975,7 @@ export class ProjectService {
           error instanceof Error &&
           !/ENOENT|EACCES|ENOTDIR|ZodError/.test(error.message)
             ? error.message
-            : "Freistellungs-Herkunft oder Bildintegrität konnte nicht bestätigt werden.",
+            : tr("common.m6d82ed6a77"),
       };
     }
   }
@@ -3087,7 +2984,7 @@ export class ProjectService {
   }
   async relightRecipe(id: string) {
     const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);
-    if (!q?.relighting) throw new Error("Keine gespeicherte Lichtrevision.");
+    if (!q?.relighting) throw new Error(tr("errors.m1890f86eb7"));
     const weights = [];
     for (const r of q.relighting.regions) {
       const b = await readLimited(
@@ -3095,10 +2992,10 @@ export class ProjectService {
         MAX_IMAGE_BYTES,
       );
       if (hashBytes(b) !== r.mask.sha256)
-        throw new Error("Lichtmaske verändert.");
+        throw new Error(tr("errors.m1b18ddcdc5"));
       const m = decodePixels(b);
       if (m.width !== q.width || m.height !== q.height)
-        throw new Error("Falsche Lichtmaske.");
+        throw new Error(tr("errors.maafb16215e"));
       weights.push(maskWeights(m));
     }
     return { recipe: q.relighting, weights };
@@ -3108,15 +3005,14 @@ export class ProjectService {
     let source = this.qualitySource(id);
     const seen = new Set<string>();
     while ("sourceId" in source) {
-      if (seen.has(source.id)) throw new Error("Zyklische Herkunft.");
+      if (seen.has(source.id)) throw new Error(tr("errors.m9a125cf039"));
       seen.add(source.id);
       source = this.qualitySource(source.sourceId);
     }
     const expression = p.assets.find((a) => a.id === source.id);
     const attempt = p.attempts.find((a) => a.id === expression?.attemptId);
     if (!attempt?.mask) return undefined;
-    if (!expression?.composite)
-      throw new Error("Hard Lock: Rohbild zuerst compositen.");
+    if (!expression?.composite) throw new Error(tr("errors.m55dc009e4e"));
     const mask = p.masks.find((m) => m.id === attempt.mask!.id)!;
     return {
       master: decodePixels(await this.verifiedBytes(expression.masterId)),
@@ -3132,29 +3028,24 @@ export class ProjectService {
       output.width !== lock.master.width ||
       output.height !== lock.master.height
     )
-      throw new Error("Hard Lock benötigt ursprüngliche Pixelkoordinaten.");
+      throw new Error(tr("errors.mfa7de2aa3f"));
     for (let i = 0; i < lock.weights.length; i++)
       if (lock.weights[i] === 0)
         for (let c = 0; c < 4; c++)
           if (output.data[i * 4 + c] !== lock.master.data[i * 4 + c])
-            throw new Error(
-              "Hard Lock schützt diese Pixel. Lichtregion auf erlaubte Pixel begrenzen oder neuen Master verwenden.",
-            );
+            throw new Error(tr("errors.mda59e44857"));
   }
   async cutoutSource(id: string) {
     const source = this.qualitySource(id);
     if (source.width * source.height > MAX_SMART_PIXELS)
-      throw new Error(
-        "Automatische Freistellung: maximal 4 Megapixel, keine automatische Skalierung.",
-      );
+      throw new Error(tr("errors.m52540a3b1f"));
     const p = await this.pixels(await this.verifiedBytes(id));
     validateCutoutImage(p);
     return { width: p.width, height: p.height, data: new Uint8Array(p.data) };
   }
   async smartCutoutRecipe(id: string): Promise<CutoutDraft> {
     const q = this.snapshot().project.qualityAssets.find((a) => a.id === id);
-    if (!q?.smartCutout)
-      throw new Error("Keine automatische Freistellungsrevision.");
+    if (!q?.smartCutout) throw new Error(tr("errors.ma7d9245ef2"));
     const result: CutoutDraft = {
       previousId: q.id,
       settings: q.smartCutout.settings,
@@ -3168,22 +3059,23 @@ export class ProjectService {
           await safePath(this.directory, m.file),
           MAX_IMAGE_BYTES,
         );
-      if (hashBytes(b) !== m.sha256) throw new Error("Schutzmaske verändert.");
+      if (hashBytes(b) !== m.sha256) throw new Error(tr("errors.m6d3267f51b"));
       const p = decodePixels(b);
       if (p.width !== q.width || p.height !== q.height)
-        throw new Error("Falsche Schutzmaskengröße.");
+        throw new Error(tr("errors.m1814712cef"));
       result[role] = new Uint8Array(maskWeights(p));
     }
     return result;
   }
   async cutoutMask(id: string) {
     const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);
-    if (!q?.mask) throw new Error("Keine Freistellungsmaske.");
+    if (!q?.mask) throw new Error(tr("errors.ma074eb24b8"));
     const b = await readLimited(
       await safePath(this.directory, q.mask.file),
       MAX_IMAGE_BYTES,
     );
-    if (hashBytes(b) !== q.mask.sha256) throw new Error("Maske verändert.");
+    if (hashBytes(b) !== q.mask.sha256)
+      throw new Error(tr("errors.mb4d72d1264"));
     return maskWeights(decodePixels(b));
   }
   private requireMasterTransparency(
@@ -3193,17 +3085,14 @@ export class ProjectService {
       throw new Error(
         report.status === "opaque"
           ? "Dieser Master-Kandidat hat keinen echten transparenten Hintergrund. Hintergrund freistellen oder erneut generieren."
-          : "Transparenz verdächtig oder Bild leer: Korrektur erforderlich. Keine Masterfreigabe.",
+          : tr("common.md3fc2de0c9"),
       );
   }
   private masterReviewRecord(
     review: MasterApprovalInput,
     report: import("../shared/asset-quality").QualityReport,
   ) {
-    if (!review.rasterConfirmed)
-      throw new Error(
-        "Vor der Masterfreigabe Rasterqualität bei 1:1 und Vergrößerung prüfen und ausdrücklich bestätigen. Pixel Snap ist optional; unsichere Konturen manuell beurteilen.",
-      );
+    if (!review.rasterConfirmed) throw new Error(tr("errors.m0ce17de191"));
     return {
       ...review,
       checkedAt: new Date().toISOString(),
@@ -3219,11 +3108,11 @@ export class ProjectService {
     const source = this.qualitySource(id),
       review = masterApprovalInputSchema.parse(input);
     if (source.sha256 !== review.sourceSha256)
-      throw new Error("Master-Kandidat oder Quellhash wurde verändert.");
+      throw new Error(tr("errors.m4b9671131c"));
     const bytes = await this.verifiedBytes(id),
       pixels = await this.pixels(bytes);
     if (pixels.width !== source.width || pixels.height !== source.height)
-      throw new Error("Ungültige Bildabmessungen.");
+      throw new Error(tr("errors.mebe14d9202"));
     const report = analyzePixels(pixels, source.format);
     this.requireMasterTransparency(report);
     return this.masterReviewRecord(review, report);
@@ -3244,7 +3133,7 @@ export class ProjectService {
       ...p.qualityAssets,
       ...p.styleAssets,
     ].find((a) => a.id === id);
-    if (!a) throw new Error("Unbekanntes Charakter-/Stilasset.");
+    if (!a) throw new Error(tr("errors.mcf830faf3d"));
     return a;
   }
   /** Main-only export payload; renderer supplies IDs, never destination paths or bytes. */
@@ -3259,9 +3148,7 @@ export class ProjectService {
       "locked" in source ||
       ("status" in source && source.status === "approved");
     if (!request.raw && (!approved || report.status !== "transparent"))
-      throw new Error(
-        "Kein freigegebenes transparentes Produktionsasset. Freistellen/prüfen oder ausdrücklich als Rohbild exportieren.",
-      );
+      throw new Error(tr("errors.me1f1acb378"));
     const c = p.characters.find((c) => c.id === source.characterId)!;
     const safe = (text: string) =>
       text
@@ -3316,7 +3203,7 @@ export class ProjectService {
   }
   async masterFile(id: string): Promise<string> {
     const master = this.snapshot().project.masters.find((m) => m.id === id);
-    if (!master) throw new Error("Unbekannter Master.");
+    if (!master) throw new Error(tr("errors.m8a99e53409"));
     await this.preview(id);
     return safePath(this.directory, master.file);
   }
@@ -3331,13 +3218,13 @@ export class ProjectService {
       ...p.masterCandidates,
       ...p.qualityAssets,
     ].find((a) => a.id === id);
-    if (!image) throw new Error("Unbekanntes Bild.");
+    if (!image) throw new Error(tr("errors.m6966c74212"));
     const bytes = await readLimited(
       await safePath(this.directory, image.file),
       MAX_IMAGE_BYTES,
     );
     if (hashBytes(bytes) !== image.sha256)
-      throw new Error("Bildintegrität verletzt.");
+      throw new Error(tr("errors.ma64f97b724"));
     const info = p.identityAssets.some((a) => a.id === id)
       ? inspectIdentityImage(bytes)
       : inspectImage(bytes);
@@ -3346,7 +3233,7 @@ export class ProjectService {
       info.height !== image.height ||
       info.format !== image.format
     )
-      throw new Error("Bildmetadaten stimmen nicht überein.");
+      throw new Error(tr("errors.m9dc99fcf96"));
     if (p.identityAssets.some((a) => a.id === id))
       await this.decode(bytes, info.width, info.height, info.format);
     if (p.masks.some((m) => m.id === id)) maskWeights(decodePixels(bytes));

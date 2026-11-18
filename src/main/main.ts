@@ -1,3 +1,6 @@
+import { AppPreferences } from "./app-preferences";
+import { setLanguage } from "../shared/locales";
+import { tr } from "../shared/locales/index";
 import { identityImportSchema } from "../shared/identity-import";
 import { ImageDialogService } from "./image-dialog";
 import { MAX_PACK_BYTES, packSelectionSchema } from "../shared/packs";
@@ -63,10 +66,12 @@ function handle<T>(
             event.senderFrame !== window.webContents.mainFrame ||
             event.senderFrame.url !== rendererURL()
           )
-            throw new Error("Unzulässiger IPC-Absender.");
+            throw new Error(tr("errors.m00a41fab00"));
           if (
             generation.running &&
             ![
+              "app:preferences",
+              "app:set-language",
               "generation:status",
               "generation:cancel",
               "generation:providers",
@@ -74,16 +79,14 @@ function handle<T>(
               "image:quality",
             ].includes(channel)
           )
-            throw new Error(
-              "Während der Generierung ist das Projekt gesperrt. Erst abbrechen oder auf das Ergebnis warten.",
-            );
+            throw new Error(tr("errors.m4ff6dd9974"));
           return { ok: true, value: await operation(input) };
         } catch (error) {
           return {
             ok: false,
             error:
               error instanceof z.ZodError
-                ? "Ungültige Projektdaten oder Eingabe. Schema/Referenzen prüfen."
+                ? tr("common.mc55a393d0e")
                 : error instanceof Error
                   ? error.message
                   : "Vorgang fehlgeschlagen.",
@@ -100,7 +103,16 @@ function rendererURL() {
     ? new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL).href
     : "laceframe://app/index.html";
 }
-function registerIPC() {
+function registerIPC(preferences: AppPreferences) {
+  handle("app:preferences", (input) => {
+    z.undefined().parse(input);
+    return preferences.get();
+  });
+  handle("app:set-language", async (input) => {
+    const value = await preferences.set(input);
+    await setLanguage(value.language);
+    return value;
+  });
   const imageDialogs = new ImageDialogService(
     app.getPath("userData"),
     (options) => dialog.showOpenDialog(window, options),
@@ -108,23 +120,21 @@ function registerIPC() {
   handle("identity:import", async (input) => {
     const request = identityImportSchema.parse(input);
     const slots = service.identitySlots(request.characterId, request.replaceId);
-    if (!slots) throw new Error("Maximal drei aktive Identitätsreferenzen.");
+    if (!slots) throw new Error(tr("errors.mc957c9df71"));
     if (!request.files) {
       const files = await imageDialogs.choose({
-        title: "Identitätsbilder hinzufügen",
+        title: tr("errors.mda01dbf3c1"),
         properties: ["openFile", "multiSelections"],
         filters: [
           {
-            name: "Identitätsbilder",
+            name: tr("errors.m6dce2f7c26"),
             extensions: ["png", "jpg", "jpeg", "webp"],
           },
         ],
       });
       if (!files) return null;
       if (files.length > slots)
-        throw new Error(
-          `Noch ${slots} von 3 Plätzen verfügbar. Die gesamte Auswahl wurde abgelehnt.`,
-        );
+        throw new Error(tr("errors.mda4aff8a61", { v0: slots }));
       const inputs = [],
         errors = [];
       for (const file of files) {
@@ -148,9 +158,9 @@ function registerIPC() {
     const kind = z.enum(["style", "expressions"]).parse(input);
     service.snapshot();
     const selected = await dialog.showOpenDialog(window, {
-      title: "JSON-Pack prüfen",
+      title: tr("errors.m30be6279f1"),
       properties: ["openFile"],
-      filters: [{ name: "Laceframe JSON", extensions: ["json"] }],
+      filters: [{ name: tr("errors.m39185e458e"), extensions: ["json"] }],
     });
     if (selected.canceled) return null;
     const bytes = await readLimited(selected.filePaths[0], MAX_PACK_BYTES);
@@ -158,13 +168,13 @@ function registerIPC() {
       new TextDecoder("utf-8", { fatal: true }).decode(bytes),
     );
     if (preview.pack.format !== `laceframe.${kind}`)
-      throw new Error("Falscher Pack-Typ für diesen Workspace.");
+      throw new Error(tr("errors.m19e95e4b8d"));
     return preview;
   });
   handle("pack:export", async (input) => {
     const payload = service.exportPack(packSelectionSchema.parse(input));
     const selected = await dialog.showOpenDialog(window, {
-      title: "JSON-Exportordner (außerhalb des Projekts)",
+      title: tr("errors.md3a6a0efe8"),
       properties: ["openDirectory", "createDirectory"],
     });
     if (selected.canceled) return null;
@@ -211,7 +221,7 @@ function registerIPC() {
   handle("image:export", async (input) => {
     const payload = await service.exportPayload(exportAssetSchema.parse(input));
     const selected = await dialog.showOpenDialog(window, {
-      title: "Exportordner auswählen (neue Dateien, kein Überschreiben)",
+      title: tr("errors.md0c1b8cae0"),
       properties: ["openDirectory", "createDirectory"],
     });
     if (selected.canceled) return null;
@@ -252,7 +262,7 @@ function registerIPC() {
     const attempt = service
       .snapshot()
       .project.attempts.find((a) => a.id === id);
-    if (!attempt) throw new Error("Gespeicherten Versuch auswählen.");
+    if (!attempt) throw new Error(tr("errors.m4c73bac592"));
     clipboard.writeText(attempt.promptRevision.prompt);
     return null;
   });
@@ -269,7 +279,7 @@ function registerIPC() {
   handle("project:create", async (input) => {
     const name = z.string().trim().min(1).max(120).parse(input);
     const selected = await dialog.showOpenDialog(window, {
-      title: "Leeren Projektordner auswählen",
+      title: tr("errors.m874581407c"),
       properties: ["openDirectory", "createDirectory"],
     });
     return selected.canceled
@@ -279,7 +289,7 @@ function registerIPC() {
   handle("project:open", async (input) => {
     z.undefined().parse(input);
     const selected = await dialog.showOpenDialog(window, {
-      title: "Laceframe-Projekt öffnen",
+      title: tr("errors.m5f40032eda"),
       properties: ["openDirectory"],
     });
     return selected.canceled ? null : service.open(selected.filePaths[0]);
@@ -292,13 +302,11 @@ function registerIPC() {
       z.literal("identity").optional().parse(input) === "identity";
     service.snapshot();
     const selected = await imageDialogs.choose({
-      title: identity
-        ? "Private Identitätsreferenz importieren"
-        : "PNG/WebP importieren",
+      title: identity ? tr("common.m35ea099a61") : "PNG/WebP importieren",
       properties: ["openFile"],
       filters: [
         {
-          name: "Portrait",
+          name: tr("errors.mf71094c301"),
           extensions: identity
             ? ["png", "jpg", "jpeg", "webp"]
             : ["png", "webp"],
@@ -344,7 +352,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     backgroundColor: "#141820",
-    title: "Laceframe",
+    title: tr("errors.mf45e62f0e8"),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -372,7 +380,12 @@ else {
       window.focus();
     }
   });
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
+    const preferences = new AppPreferences(
+      app.getPath("userData"),
+      app.getPreferredSystemLanguages(),
+    );
+    await setLanguage((await preferences.load()).language);
     session.defaultSession.setPermissionRequestHandler(
       (_webContents, _permission, callback) => callback(false),
     );
@@ -401,7 +414,7 @@ else {
       );
       return new Response(response.body, { status: response.status, headers });
     });
-    registerIPC();
+    registerIPC(preferences);
     createWindow();
     app.on("activate", () => {
       if (!BrowserWindow.getAllWindows().length) createWindow();

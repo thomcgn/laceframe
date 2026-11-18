@@ -1,3 +1,4 @@
+import { tr } from "../shared/locales/index";
 import type { Pixels } from "./mask-composite";
 import type { QualityReport, ResolutionProfile } from "../shared/asset-quality";
 import { resolutionProfileSchema } from "../shared/asset-quality";
@@ -8,9 +9,7 @@ function validate(p: Pixels) {
     p.width * p.height > 16_000_000 ||
     p.data.length !== p.width * p.height * 4
   )
-    throw new Error(
-      "Pixelverarbeitung: höchstens 16 Megapixel, vollständige RGBA8-Daten erforderlich.",
-    );
+    throw new Error(tr("errors.m05d0893fab"));
 }
 /** Statistics are evidence for review, never a semantic cutout/style classifier. */
 export function analyzePixels(p: Pixels, format = "png"): QualityReport {
@@ -139,33 +138,22 @@ export function analyzePixels(p: Pixels, format = "png"): QualityReport {
     for (let y = 0; y < p.height && match; y++)
       match = matches(0, y) && matches(p.width - 1, y);
     if (match) {
-      r.warnings.push(
-        "Verdacht auf eingebranntes Schachbrett: exakt wiederholte deckende Graukacheln am gesamten Rand. Visuell prüfen.",
-      );
+      r.warnings.push(tr("common.m1b6cae6af9"));
       if (r.status === "transparent") r.status = "suspicious";
       break;
     }
   }
-  if (r.status === "opaque")
-    r.warnings.push(
-      "Vollständig deckend: Hintergrund freistellen; kein produktionsfertiger Transparenzexport.",
-    );
-  if (r.status === "empty")
-    r.warnings.push("Vollständig transparent: keine sichtbare Figur.");
-  if (r.status === "suspicious")
-    r.warnings.push(
-      "Hintergrund verdächtig: zu wenige vollständig transparente Randpixel. Silhouette manuell prüfen.",
-    );
-  r.warnings.push(
-    "Alpha beweist keine perfekte Freistellung. Eingebrannte Flächen/Schachbrett und Stil müssen visuell geprüft werden; keine automatische Segmentierung.",
-  );
+  if (r.status === "opaque") r.warnings.push(tr("common.m769470c5b8"));
+  if (r.status === "empty") r.warnings.push(tr("common.mc6dac5eb0e"));
+  if (r.status === "suspicious") r.warnings.push(tr("common.m341793f670"));
+  r.warnings.push(tr("common.m89a3a6163c"));
   return r;
 }
 /** Foreground retention weights; never infer a background from RGB (including black). */
 export function cutoutPixels(source: Pixels, weights: Uint8Array): Pixels {
   validate(source);
   if (weights.length !== source.width * source.height)
-    throw new Error("Freistellungsmaske hat falsche Abmessungen.");
+    throw new Error(tr("errors.m26d121c5ff"));
   const data = new Uint8Array(source.data);
   weights.forEach((w, i) => {
     data[i * 4 + 3] = Math.round((source.data[i * 4 + 3] * w) / 255);

@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { z } from "zod";
 export const MAX_POLYGON_POINTS = 128;
 export const POLYGON_VERSION = "pixel-center-even-odd-v1" as const;
@@ -57,10 +58,7 @@ export const polygonOperationSchema = z
       )
       .min(3)
       .max(MAX_POLYGON_POINTS)
-      .refine(
-        simplePolygon,
-        "Ungültiges Polygon: doppelte/flache Ecken oder Selbstüberschneidung.",
-      ),
+      .refine(simplePolygon, tr("common.m8fa5eda4b2")),
   })
   .strict();
 export type PolygonOperation = z.infer<typeof polygonOperationSchema>;
@@ -70,7 +68,7 @@ export function validatePolygonBounds(
   height: number,
 ) {
   if (points.some((p) => p.x > width || p.y > height))
-    throw new Error("Polygon außerhalb des Bildes.");
+    throw new Error(tr("editing.m70de91dc38"));
 }
 // Scanline parity at (x+.5,y+.5). Half-open edge Y range, left inclusive/right
 // exclusive X interval. No antialiasing; winding-independent, concave supported.
@@ -86,7 +84,7 @@ export function rasterizePolygon(
     height < 1 ||
     width * height > 4_194_304
   )
-    throw new Error("Polygon: maximal 4 Megapixel.");
+    throw new Error(tr("editing.med228eb6cd"));
   const { points } = polygonOperationSchema.parse(input);
   validatePolygonBounds(points, width, height);
   const out = new Uint8Array(width * height);

@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { z } from "zod";
 import { characterCreationDraftSchema } from "../../shared/character-creation";
 import {
@@ -10,21 +11,41 @@ import { ProjectService } from "../project-service";
 import { CodexImageGenerationProvider } from "./providers/codexImageGeneration";
 import { GenerationClock } from "./generation-clock";
 const phases: Record<GenerationPhase, string> = {
-  preparing: "Versuch und Masterreferenz werden vorbereitet.",
-  "checking-account": "Codex prüft die bestehende ChatGPT-Anmeldung.",
-  "checking-capability": "Codex prüft die verfügbare Bildfunktion.",
-  "starting-model": "Codex-Modell und Thread werden gestartet.",
-  processing: "Codex bearbeitet den Auftrag.",
-  "generating-image": "Das Codex-Bildwerkzeug arbeitet.",
-  "validating-image": "Codex-Ergebnis wird sicher geprüft.",
-  importing: "Bild wird als Kandidat im Projekt gespeichert.",
-  stopping: "Abbruch angefordert · Codex wird beendet.",
+  get preparing() {
+    return tr("errors.m505e1b126f");
+  },
+  get "checking-account"() {
+    return tr("errors.m0d759f8f36");
+  },
+  get "checking-capability"() {
+    return tr("errors.mc551f1ce1b");
+  },
+  get "starting-model"() {
+    return tr("errors.m76fd1b1cab");
+  },
+  get processing() {
+    return tr("errors.m84829f68ea");
+  },
+  get "generating-image"() {
+    return tr("errors.m4f1f6c09e6");
+  },
+  get "validating-image"() {
+    return tr("errors.ma137226094");
+  },
+  get importing() {
+    return tr("errors.mddc1b7b01f");
+  },
+  get stopping() {
+    return tr("errors.mae172dd073");
+  },
 };
 /** A single job owns the project until result/terminal metadata are durably stored. */
 export class GenerationController {
   private state: CodexStatus = {
     state: "unavailable",
-    message: "Codex-Verfügbarkeit noch nicht geprüft.",
+    get message() {
+      return tr("errors.m9f051e5efe");
+    },
   };
   private cancelled = false;
   private importing = false;
@@ -43,11 +64,11 @@ export class GenerationController {
     return this.state.state === "running";
   }
   resetProject() {
-    if (this.running) throw new Error("Es läuft bereits ein Bildauftrag.");
+    if (this.running) throw new Error(tr("errors.m1bf90fc9fe"));
     this.clock = undefined;
     this.state = {
       state: "unavailable",
-      message: "Codex-Verfügbarkeit noch nicht geprüft.",
+      message: tr("errors.m9f051e5efe"),
     };
   }
   status(): CodexStatus {
@@ -69,13 +90,13 @@ export class GenerationController {
     return this.status();
   }
   async start(input: unknown) {
-    if (this.running) throw new Error("Es läuft bereits ein Bildauftrag.");
+    if (this.running) throw new Error(tr("errors.m1bf90fc9fe"));
     const draft = z
       .union([characterCreationDraftSchema, generationDraftSchema])
       .parse(input);
     const creation = "operation" in draft;
     if (!creation && draft.providerId !== "codex-native")
-      throw new Error("Codex-Anbieter auswählen.");
+      throw new Error(tr("errors.m05a25a2c24"));
     this.cancelled = false;
     this.importing = false;
     this.clock = this.createClock();
@@ -118,9 +139,9 @@ export class GenerationController {
             "operation" in request
               ? await this.provider.createCharacterMaster(request)
               : await this.provider.editImage(request);
-          if (this.cancelled) throw new Error("Cancelled");
+          if (this.cancelled) throw new Error(tr("errors.md353a99eb4"));
           const bytes = await this.provider.resultBytes(result);
-          if (this.cancelled) throw new Error("Cancelled");
+          if (this.cancelled) throw new Error(tr("errors.md353a99eb4"));
           this.importing = true;
           this.phase("importing");
           let completion: GenerationExecution | undefined;
@@ -140,8 +161,7 @@ export class GenerationController {
           this.clock!.seal(completion!);
           this.state = {
             state: "completed",
-            message:
-              "Generierung abgeschlossen · Kandidat importiert. Identität vor der Freigabe prüfen.",
+            message: tr("errors.m33860efdf5"),
             attemptId: attempt.id,
           };
         } catch {
@@ -153,7 +173,7 @@ export class GenerationController {
             : status.state === "completed"
               ? "Generierung fehlgeschlagen: Ergebnis konnte nicht sicher gespeichert werden."
               : status.state === "running" || status.state === "ready"
-                ? "Generierung fehlgeschlagen. Projekt und Verbindung prüfen."
+                ? tr("common.m39b9a542ee")
                 : status.message;
           try {
             await this.service.recordGeneration(attempt.id, execution);
@@ -184,8 +204,7 @@ export class GenerationController {
       this.state = {
         ...this.state,
         state: "failed",
-        message:
-          "Generierung konnte nicht gestartet werden. Master und Projektdaten prüfen.",
+        message: tr("errors.m4d3f54045f"),
       };
       throw error;
     }

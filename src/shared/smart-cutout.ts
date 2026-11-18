@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { z } from "zod";
 import {
   polygonOperationSchema,
@@ -86,9 +87,7 @@ export function validateCutoutImage(p: CutoutImage) {
     p.width * p.height > MAX_SMART_PIXELS ||
     p.data.length !== p.width * p.height * 4
   )
-    throw new Error(
-      "Automatische Freistellung: gültiges RGBA8-Bild mit maximal 4 Megapixeln erforderlich.",
-    );
+    throw new Error(tr("editing.md8349e3049"));
 }
 // Exact sRGB byte linearization, D65 XYZ, CIE L*a*b*. Delta E 1976, not CIEDE2000.
 const linear = Float64Array.from({ length: 256 }, (_, c) => {
@@ -125,9 +124,7 @@ export function validateCutoutDraft(p: CutoutImage, input: CutoutDraft) {
     d.protected.some((v) => v !== 0 && v !== 255) ||
     d.forced.some((v) => v !== 0 && v !== 255)
   )
-    throw new Error(
-      "Ungültige Schutz-/Hintergrundmaske; binäre native Masken erforderlich.",
-    );
+    throw new Error(tr("editing.m4d74faf9a1"));
   for (const op of d.settings.polygons ?? [])
     validatePolygonBounds(op.points, p.width, p.height);
   for (const s of d.settings.seeds) {
@@ -137,9 +134,7 @@ export function validateCutoutDraft(p: CutoutImage, input: CutoutDraft) {
       s.rgba.some((v, c) => v !== p.data[(s.y * p.width + s.x) * 4 + c]) ||
       !s.rgba[3]
     )
-      throw new Error(
-        "Seed außerhalb des Bildes, transparent oder nicht vom Originalpixel aufgenommen.",
-      );
+      throw new Error(tr("editing.m2c71a731df"));
   }
   return d;
 }
@@ -198,7 +193,7 @@ export function selectBackground(
   const d = validateCutoutDraft(p, input),
     n = p.width * p.height,
     lab = prepared ?? prepareCutout(p);
-  if (lab.length !== n * 3) throw new Error("Ungültiger Lab-Puffer");
+  if (lab.length !== n * 3) throw new Error(tr("editing.meb49a67d95"));
   const protectedMask = d.protected.slice(),
     forcedMask = d.forced.slice(),
     limited = new Uint8Array(n),

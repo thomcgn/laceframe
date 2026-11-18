@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { LaceframeBridge } from "../shared/bridge";
 // Each operation has its own channel. No generic invoke, filesystem or Node API escapes.
 const bridge: LaceframeBridge = {
+  preferences: () => ipcRenderer.invoke("app:preferences"),
+  setLanguage: (language) => ipcRenderer.invoke("app:set-language", language),
   closeProject: () => ipcRenderer.invoke("project:close"),
   colorPalette: (id) => ipcRenderer.invoke("image:color-palette", id),
   colorRecipe: (id) => ipcRenderer.invoke("image:color-recipe", id),

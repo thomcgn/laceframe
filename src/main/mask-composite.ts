@@ -1,3 +1,4 @@
+import { tr } from "../shared/locales/index";
 import { inflateSync } from "node:zlib";
 import { PNG } from "pngjs";
 import { MAX_MASK_PIXELS } from "../shared/masking";
@@ -11,22 +12,20 @@ export function decodePixels(bytes: Uint8Array): Pixels {
     !b.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")) ||
     b[24] > 8
   )
-    throw new Error(
-      "Hard Pixel Lock benötigt PNG mit höchstens 8 Bit pro Kanal; WebP/16-Bit werden nicht konvertiert.",
-    );
+    throw new Error(tr("errors.m890aaa9d53"));
   const width = b.readUInt32BE(16),
     height = b.readUInt32BE(20);
   if (!width || !height || width * height > MAX_MASK_PIXELS)
-    throw new Error("Masken und Composites sind auf 16 Megapixel begrenzt.");
+    throw new Error(tr("errors.m20bb2b4c7a"));
   // Reject animated PNGs rather than silently processing an arbitrary frame.
   const compressed: Buffer[] = [];
   for (let offset = 8; offset + 12 <= b.length; ) {
     const n = b.readUInt32BE(offset);
-    if (offset + n + 12 > b.length) throw new Error("Ungültiges PNG.");
+    if (offset + n + 12 > b.length) throw new Error(tr("errors.m7e822a840a"));
     const type = b.toString("ascii", offset + 4, offset + 8);
     if (type === "IDAT")
       compressed.push(b.subarray(offset + 8, offset + 8 + n));
-    if (type === "acTL") throw new Error("Animiertes PNG nicht unterstützt.");
+    if (type === "acTL") throw new Error(tr("errors.mcfb0647430"));
     offset += n + 12;
   }
   // Bound decompression also for Adam7 inputs (pngjs otherwise inflates these without a limit).
@@ -39,7 +38,7 @@ export function decodePixels(bytes: Uint8Array): Pixels {
     p.height !== height ||
     p.data.length !== width * height * 4
   )
-    throw new Error("Ungültige Pixeldaten.");
+    throw new Error(tr("errors.maa9e46626d"));
   return p;
 }
 export function encodePixels(p: Pixels): Buffer {
@@ -47,7 +46,7 @@ export function encodePixels(p: Pixels): Buffer {
     p.data.length !== p.width * p.height * 4 ||
     p.width * p.height > MAX_MASK_PIXELS
   )
-    throw new Error("Ungültige Pixeldaten.");
+    throw new Error(tr("errors.maa9e46626d"));
   return PNG.sync.write({
     width: p.width,
     height: p.height,
@@ -60,7 +59,7 @@ export function encodeMask(
   weights: Uint8Array,
 ): Buffer {
   if (weights.length !== width * height || weights.length > MAX_MASK_PIXELS)
-    throw new Error("Maske muss exakt den Master-Abmessungen entsprechen.");
+    throw new Error(tr("errors.mbd0b7c8277"));
   const data = Buffer.alloc(weights.length * 4);
   weights.forEach((w, i) => {
     data.fill(w, i * 4, i * 4 + 3);
@@ -77,7 +76,7 @@ export function maskWeights(p: Pixels): Uint8Array {
       p.data[k] !== p.data[k + 2] ||
       p.data[k + 3] !== 255
     )
-      throw new Error("Maske muss deckende Graustufen enthalten.");
+      throw new Error(tr("errors.m46bd3fef1f"));
     weights[i] = p.data[k];
   }
   return weights;
@@ -96,9 +95,7 @@ export function compositePixels(
         p.data.length !== master.data.length,
     )
   )
-    throw new Error(
-      "Hard Lock blockiert: Abmessungen/Pixelkoordinaten stimmen nicht überein. Keine Skalierung.",
-    );
+    throw new Error(tr("errors.m47e7d98d50"));
   const weights = maskWeights(mask),
     data = new Uint8Array(master.data);
   // V2 blends premultiplied encoded RGB, then unpremultiplies. V1 remains reproducible. Endpoints copy exact RGBA including hidden RGB.

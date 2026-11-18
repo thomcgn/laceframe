@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { hasOtherAssetReference } from "./asset-retention";
 import { pixelEditInputSchema, MAX_SNAP_PIXELS } from "./pixel-snap";
 import {
@@ -155,10 +156,7 @@ export const artDirectionSchema = z
       .string()
       .min(1)
       .max(8000)
-      .refine(
-        (t) => t.trim().length > 0,
-        "Rendering-Regeln dürfen nicht leer sein.",
-      ),
+      .refine((t) => t.trim().length > 0, tr("common.mcd624ce784")),
     ...styleRules,
   })
   .strict();
@@ -367,10 +365,10 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
             ["snap", "spritefusion"].includes(q.pixelEdit.edit.kind) ||
           Boolean(
             q.mask ||
-            q.profile ||
-            q.relighting ||
-            q.colorCorrection ||
-            q.smartCutout,
+              q.profile ||
+              q.relighting ||
+              q.colorCorrection ||
+              q.smartCutout,
           ) ||
           (q.pixelEdit.edit.kind !== "spritefusion" &&
             (source?.width !== q.width || source?.height !== q.height)) ||
@@ -634,7 +632,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
   const analysisIds = new Set<string>();
   for (const analysis of p.styleAnalyses) {
     if (analysisIds.has(analysis.id))
-      ctx.addIssue({ code: "custom", message: "Duplicate analysis ID" });
+      ctx.addIssue({ code: "custom", message: tr("common.m83a6b69dd8") });
     analysisIds.add(analysis.id);
     if (
       !p.artDirectionRevisions.some(
@@ -645,7 +643,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
     )
       ctx.addIssue({
         code: "custom",
-        message: "Missing analysis profile revision",
+        message: tr("common.m76a86d8e64"),
       });
     const savedRevision = p.artDirectionRevisions.find(
       (r) =>
@@ -694,7 +692,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       )
         ctx.addIssue({
           code: "custom",
-          message: "Invalid analysis provenance",
+          message: tr("common.mf3097f4265"),
         });
     }
   }
@@ -1094,7 +1092,7 @@ export const commandSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("createCutout"),
       sourceId: idSchema,
-      name: label.default("Freistellung"),
+      name: label.default(tr("common.m222429dd22")),
       smart: cutoutDraftSchema.optional(),
       weights: z
         .instanceof(Uint8Array)
@@ -1275,10 +1273,7 @@ export function review(
   asset: ExpressionAsset,
   status: "approved" | "rejected",
 ): ExpressionAsset {
-  if (asset.status !== "candidate")
-    throw new Error(
-      "Bereits geprüft. Für eine neue Prüfung das Bild erneut importieren.",
-    );
+  if (asset.status !== "candidate") throw new Error(tr("common.m6c42d6b972"));
   return { ...asset, status, reviewedAt: new Date().toISOString() };
 }
 

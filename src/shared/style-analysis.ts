@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { z } from "zod";
 export const ANALYSIS_VERSION = "rgba8-style-v1" as const;
 export const MAX_ANALYSIS_PIXELS = 4_194_304;
@@ -10,12 +11,16 @@ export const referenceTypes = [
   "ui",
 ] as const;
 export const referenceLabels = {
-  dialogue: "Dialogportrait",
-  portrait: "Portrait / Character Master",
-  "full-body": "Ganzkörperfigur",
+  dialogue: tr("common.m0c2b1d58da"),
+  get portrait() {
+    return tr("styles.m1f24176600");
+  },
+  get "full-body"() {
+    return tr("styles.m0e1daa81e2");
+  },
   sprite: "Sprite",
-  environment: "Spielszene / Environment",
-  ui: "UI-Grafik",
+  environment: tr("common.md0329eb47d"),
+  ui: tr("common.m82b625e185"),
 };
 const integer = z.number().int().nonnegative();
 const fraction = z.number().min(0).max(1);
@@ -217,12 +222,10 @@ export function measureStyle(
     width * height > MAX_ANALYSIS_PIXELS ||
     data.length !== width * height * 4
   )
-    throw new Error(
-      "Stilanalyse: maximal 4 Megapixel, gültige RGBA8-Daten erforderlich. Keine automatische Skalierung.",
-    );
+    throw new Error(tr("styles.m60a2505d77"));
   const roi = roiSchema.parse(selected ?? { x: 0, y: 0, width, height });
   if (roi.x + roi.width > width || roi.y + roi.height > height)
-    throw new Error("Analysebereich außerhalb des Bildes.");
+    throw new Error(tr("styles.m8e2ed08ea0"));
   const colors = new Uint32Array(roi.width * roi.height),
     bins = new Uint32Array(32768),
     luminance = Array<number>(16).fill(0),
@@ -438,9 +441,9 @@ export function measureStyle(
   if (gridEvidence < 0.8 || boundedRuns < 8 || uniqueColors < 2)
     gridCandidate = 0;
   const warnings = [
-    "Material, Handzeichnungstechnik, Haut/Haare und virtuelle Originalauflösung sind nicht bestimmt.",
-    "Encoded-sRGB; Farbprofile/HDR werden nicht ausgewertet. Alpha > 0 zählt ungewichtet; Hintergrund kann dominieren – ROI prüfen.",
-    "Skalierung, WebP-Kompression und ähnliche Farbstufen können Indikatoren verfälschen; kein Kompressions- oder Pixelart-Nachweis.",
+    tr("common.md84bd24a6a"),
+    tr("common.m04d18ca263"),
+    tr("common.m653f49f5f9"),
   ];
   if (!visible) warnings.push("Keine sichtbaren Pixel im Analysebereich.");
   if (gridCandidate)
@@ -550,7 +553,7 @@ export function adoptedRules(suggestions: Suggestion[], edits: AnalysisEdits) {
     new Set(edits.rules.map((r) => r.key)).size !== suggestions.length ||
     edits.rules.some((r) => !suggestions.some((s) => s.key === r.key))
   )
-    throw new Error("Regeln passen nicht zur Analyse.");
+    throw new Error(tr("styles.m906c2aa8cb"));
   const get = (group: Suggestion["group"]) =>
     suggestions
       .filter((s) => s.group === group)
@@ -588,21 +591,13 @@ export function compareStyle(a: StyleMetrics, b: StyleMetrics) {
     "ditherLike",
     "blockBoundaryDifference8",
   ] as const;
-  const warnings = [
-    "Kein Stil-, Künstler- oder Identitätsnachweis; manuelle Freigabe bleibt erforderlich.",
-  ];
+  const warnings = [tr("common.m03299a4d91")];
   if (a.width !== b.width || a.height !== b.height)
-    warnings.push(
-      "Unterschiedliche native Dimensionen: Nachbar-/Detailwerte sind nicht maßstabsinvariant.",
-    );
+    warnings.push(tr("common.m414ba61692"));
   if (Math.abs(a.roi.width / a.roi.height - b.roi.width / b.roi.height) > 0.01)
-    warnings.push(
-      "Unterschiedliche ROI-Seitenverhältnisse; Framing nicht direkt vergleichbar.",
-    );
+    warnings.push(tr("common.m181730b8ab"));
   if (Math.abs(a.visibleFraction - b.visibleFraction) > 0.1)
-    warnings.push(
-      "Abweichende sichtbare Flächen / Hintergründe: ROI prüfen, nur bedingt vergleichbar.",
-    );
+    warnings.push(tr("common.m5d18542b6a"));
   return {
     deltas: keys.map((key) => ({
       key,

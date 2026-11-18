@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { structuredStyleText } from "./packs";
 import {
   TRANSPARENT_CHARACTER_INSTRUCTION,
@@ -93,7 +94,7 @@ export function validateMasterTarget(
   },
 ) {
   const c = p.characters.find((c) => c.id === d.characterId);
-  if (!c) throw new Error("Figur fehlt.");
+  if (!c) throw new Error(tr("characters.m0b88139e9c"));
   const base = p.masters.find((m) => m.id === d.baseMasterId);
   if (d.mode === "rebuild") {
     if (
@@ -103,13 +104,9 @@ export function validateMasterTarget(
       base.characterId !== c.id ||
       base.sha256 !== d.baseMasterSha256
     )
-      throw new Error(
-        "Rebuild-Ausgangsmaster ist veraltet oder ungültig. Aktuelle Version erneut auswählen.",
-      );
+      throw new Error(tr("characters.mba1d048a67"));
   } else if (c.masterId || d.baseMasterId || d.baseMasterSha256) {
-    throw new Error(
-      "Eine Entwurfsfigur ohne freigegebenen Master auswählen; vorhandenen Master ausdrücklich neu aufbauen.",
-    );
+    throw new Error(tr("characters.m5fc881c4b0"));
   }
 }
 /** Trusted technical instruction is reattached in main even for Expert Override. */
@@ -148,22 +145,20 @@ export function validateCreatorSelection(
         ),
     )
   )
-    throw new Error(
-      "Identitätsreferenzen fehlen, wurden entfernt oder gehören zu einer anderen Figur.",
-    );
+    throw new Error(tr("characters.mc6dc4e3d70"));
   const style = p.artDirections.find((s) => s.id === d.artDirectionId);
   if (
     (d.artDirectionId === undefined) !==
       (d.artDirectionRevision === undefined) ||
     (d.artDirectionId && (!style || style.revision !== d.artDirectionRevision))
   )
-    throw new Error("Aktuelle Art-Direction-Revision auswählen.");
+    throw new Error(tr("characters.m1f2e6b5ba4"));
   const refs = (style?.styleReferenceIds ?? []).map((id) => {
     const a = p.styleAssets.find((a) => a.id === id)!;
     return { id: a.id, sha256: a.sha256 };
   });
   if (JSON.stringify(refs) !== JSON.stringify(d.styleReferences))
-    throw new Error("Stilreferenzen wurden geändert.");
+    throw new Error(tr("characters.m45bfabf52f"));
 }
 export function composeCharacterPrompt(
   p: Project,

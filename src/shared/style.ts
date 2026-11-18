@@ -1,3 +1,4 @@
+import { tr } from "./locales";
 import { z } from "zod";
 import { styleContentSchema, packProvenanceSchema } from "./packs";
 export const MAX_STYLE_REFERENCES = 6;
@@ -27,10 +28,7 @@ export const revisionSchema = z
       .string()
       .min(1)
       .max(8000)
-      .refine(
-        (t) => t.trim().length > 0,
-        "Rendering-Regeln dürfen nicht leer sein.",
-      ),
+      .refine((t) => t.trim().length > 0, tr("common.mcd624ce784")),
     ...styleRules,
   })
   .strict();

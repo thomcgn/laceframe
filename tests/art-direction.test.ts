@@ -202,7 +202,7 @@ describe("02B validation, history and migration regressions", () => {
     const style = await addStyle();
     await expect(
       service.command({ type: "prepareAttempt", draft }),
-    ).rejects.toThrow("Art Direction");
+    ).rejects.toThrow("Stilgestaltung");
     const withStyle = {
       ...draft,
       artDirectionId: style.id,

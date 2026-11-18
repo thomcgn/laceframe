@@ -1,3 +1,4 @@
+import { tr } from "../../../shared/locales/index";
 import path from "node:path";
 import os from "node:os";
 import * as fs from "node:fs/promises";
@@ -23,11 +24,11 @@ export async function readGeneratedImage(
     savedPath !== path.normalize(savedPath) ||
     /[/\\]\.\.?([/\\]|$)/.test(savedPath)
   )
-    throw new Error("Unsicherer Codex-Ergebnispfad.");
+    throw new Error(tr("errors.m17dd96312c"));
   const threadRoot = await safePath(root, threadId);
   const relative = path.relative(threadRoot, savedPath);
   if (!/^[a-zA-Z0-9_-]+\.(png|webp)$/.test(relative))
-    throw new Error("Codex-Ergebnis gehört nicht zum aktiven Thread.");
+    throw new Error(tr("errors.mee1d570160"));
   const file = await safePath(root, `${threadId}/${relative}`);
   const handle = await fs.open(
     file,
@@ -36,15 +37,14 @@ export async function readGeneratedImage(
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_IMAGE_BYTES)
-      throw new Error("Codex-Ergebnis ist keine Bilddatei bis 32 MiB.");
+      throw new Error(tr("errors.m69ea0e8565"));
     const bytes = Buffer.alloc(stat.size + 1);
     const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
-    if (bytesRead !== stat.size)
-      throw new Error("Codex-Ergebnis wurde während des Imports verändert.");
+    if (bytesRead !== stat.size) throw new Error(tr("errors.m95bef4eafb"));
     const result = bytes.subarray(0, bytesRead);
     const info = inspectImage(result);
     if (path.extname(file) !== "." + info.format)
-      throw new Error("Codex-Bildformat stimmt nicht mit der Datei überein.");
+      throw new Error(tr("errors.mf0d9b11d4c"));
     return result;
   } finally {
     await handle.close();

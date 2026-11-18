@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { spriteFusionPixels } from "./spritefusion-runtime";
 import { rasterGrid, rasterClean } from "./pixel-snap-runtime";
 import { z } from "zod";
@@ -103,9 +104,7 @@ export function validateSnap(p: ColorPixels, protection?: Uint8Array) {
     p.data.length !== p.width * p.height * 4 ||
     (protection && protection.length !== p.width * p.height)
   )
-    throw new Error(
-      "Pixelbearbeitung benötigt RGBA8 bis 4 MP und passende Schutzmasken. Keine Skalierung.",
-    );
+    throw new Error(tr("editing.m52494b6195"));
 }
 const same = (d: Uint8Array, a: number, b: number) =>
   d[a * 4] === d[b * 4] &&
@@ -182,9 +181,7 @@ export function applyPixelEdit(
   validateSnap(p, protectedWeights);
   if (edit.kind === "spritefusion") {
     if (protectedWeights.some(Boolean))
-      throw new Error(
-        "Sprite Fusion verändert die Rastergeometrie. Mit Schutzmasken ist diese Transformation gesperrt; keine ungeprüfte Pixelkopie.",
-      );
+      throw new Error(tr("editing.m75c1b7520a"));
     return spriteFusionPixels(
       p,
       spriteFusionSettingsSchema.parse(edit.settings),

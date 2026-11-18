@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import type { ColorPixels } from "./color-consistency";
 export function pixelReview(source: ColorPixels, output: ColorPixels) {
   const alpha = (p: ColorPixels) => {
@@ -5,7 +6,7 @@ export function pixelReview(source: ColorPixels, output: ColorPixels) {
       p.data.length !== p.width * p.height * 4 ||
       p.width * p.height > 4_194_304
     )
-      throw new Error("Ungültige Vergleichsmaße.");
+      throw new Error(tr("editing.m784dfeeaca"));
     let transparent = 0,
       partial = 0;
     for (let i = 3; i < p.data.length; i += 4) {

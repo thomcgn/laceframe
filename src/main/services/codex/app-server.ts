@@ -1,3 +1,4 @@
+import { tr } from "../../../shared/locales/index";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { z } from "zod";
@@ -85,9 +86,7 @@ export class AppServerClient extends EventEmitter {
     this.child = launch(cwd);
     this.child.stderr.on("data", () => {}); // Can contain account/config data: never log it.
     this.child.stdin.on("error", () =>
-      this.fail(
-        new CodexError("failed", "Codex-Verbindung wurde geschlossen."),
-      ),
+      this.fail(new CodexError("failed", tr("common.m235ebb49c0"))),
     );
     this.child.on("error", (e) =>
       this.fail(
@@ -96,24 +95,20 @@ export class AppServerClient extends EventEmitter {
             ? "not-installed"
             : "failed",
           (e as NodeJS.ErrnoException).code === "ENOENT"
-            ? "Codex nicht installiert oder nicht im PATH. Codex CLI installieren und Laceframe neu starten."
-            : "Codex konnte nicht gestartet werden.",
+            ? tr("common.mf4e073a872")
+            : tr("common.m1126b61e0e"),
         ),
       ),
     );
     this.child.on("exit", () => {
       if (!this.stopped)
-        this.fail(
-          new CodexError("failed", "Codex App Server wurde vorzeitig beendet."),
-        );
+        this.fail(new CodexError("failed", tr("common.m7b961d4ef1")));
     });
     this.child.stdout.setEncoding("utf8");
     this.child.stdout.on("data", (chunk: string) => {
       this.buffer += chunk;
       if (this.buffer.length > 16 * 1024 * 1024) {
-        this.fail(
-          new CodexError("failed", "Codex-Protokollnachricht ist zu groß."),
-        );
+        this.fail(new CodexError("failed", tr("common.m84e14bad6a")));
         this.child.kill();
         return;
       }
@@ -130,10 +125,7 @@ export class AppServerClient extends EventEmitter {
             clearTimeout(pending.timer);
             if (msg.error)
               pending.reject(
-                new CodexError(
-                  "failed",
-                  "Codex hat die Anfrage abgelehnt. Version, Anmeldung und Kontingent prüfen.",
-                ),
+                new CodexError("failed", tr("common.mb35467634a")),
               );
             else pending.resolve(msg.result);
           } else if (msg.id !== undefined) {
@@ -141,16 +133,13 @@ export class AppServerClient extends EventEmitter {
               id: msg.id,
               error: {
                 code: -32601,
-                message:
-                  "Laceframe does not authorize interactive tool requests.",
+                message: tr("errors.ma4b8270b63"),
               },
             });
           } else if (msg.method)
             this.emit("notification", msg.method, msg.params);
         } catch {
-          this.fail(
-            new CodexError("failed", "Ungültige Antwort vom Codex App Server."),
-          );
+          this.fail(new CodexError("failed", tr("common.m99af0a377f")));
           this.child.kill();
         }
       }
@@ -177,18 +166,13 @@ export class AppServerClient extends EventEmitter {
     if (this.failure) return Promise.reject(this.failure);
     if (this.stopped)
       return Promise.reject(
-        new CodexError("cancelled", "Generierung abgebrochen."),
+        new CodexError("cancelled", tr("common.m52589e2b31")),
       );
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(
-          new CodexError(
-            "failed",
-            "Codex antwortet nicht rechtzeitig. Keine automatische Wiederholung.",
-          ),
-        );
+        reject(new CodexError("failed", tr("common.m1b7c5333cb")));
       }, this.timeout);
       this.pending.set(id, { resolve, reject, timer });
       this.send({ id, method, params });
@@ -197,13 +181,10 @@ export class AppServerClient extends EventEmitter {
   async close() {
     if (this.stopped) return;
     this.stopped = true;
-    this.emit(
-      "failure",
-      new CodexError("cancelled", "Generierung abgebrochen."),
-    );
+    this.emit("failure", new CodexError("cancelled", tr("common.m52589e2b31")));
     for (const p of this.pending.values()) {
       clearTimeout(p.timer);
-      p.reject(new CodexError("cancelled", "Generierung abgebrochen."));
+      p.reject(new CodexError("cancelled", tr("common.m52589e2b31")));
     }
     this.pending.clear();
     this.child.stdin.end();

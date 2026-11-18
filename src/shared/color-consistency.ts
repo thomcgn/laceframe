@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { z } from "zod";
 import {
   regionSelectionInputSchema,
@@ -125,9 +126,7 @@ export function validateColorPixels(p: ColorPixels) {
     p.width * p.height > MAX_COLOR_PIXELS ||
     p.data.length !== p.width * p.height * 4
   )
-    throw new Error(
-      "Farbprüfung: vollständige RGBA8-Daten, maximal 4 MP; keine automatische Skalierung.",
-    );
+    throw new Error(tr("editing.m8804b22f41"));
 }
 export function rgbHex(rgb: ArrayLike<number>) {
   return (
@@ -179,9 +178,7 @@ function fromLab([l, a, b]: number[]): number[] {
 }
 function checkMask(p: ColorPixels, w: Uint8Array) {
   if (!(w instanceof Uint8Array) || w.length !== p.width * p.height)
-    throw new Error(
-      "Farbmaske hat falsche Abmessungen; Regionen der Expression separat zuordnen.",
-    );
+    throw new Error(tr("editing.m0a0a21b481"));
 }
 /** Bounded 5-bit histogram; representative is an actual input RGB, not a quantized replacement palette. */
 export function extractPalette(p: ColorPixels, weights: Uint8Array) {
@@ -202,10 +199,7 @@ export function extractPalette(p: ColorPixels, weights: Uint8Array) {
   const colors = [...bins.values()]
     .sort((a, b) => b.count - a.count || a.hex.localeCompare(b.hex))
     .slice(0, 16);
-  if (!colors.length)
-    throw new Error(
-      "Region enthält keine ausreichend sichtbaren, markierten Pixel.",
-    );
+  if (!colors.length) throw new Error(tr("editing.md1c4157c98"));
   return colors;
 }
 /** Chroma-only Delta E76 plus excess L*: darker shades are allowed. Not a style or identity score. */
@@ -216,7 +210,7 @@ export function measureColors(
 ): ColorMeasurement {
   validateColorPixels(p);
   checkMask(p, weights);
-  if (!colors.length) throw new Error("Referenzpalette fehlt.");
+  if (!colors.length) throw new Error(tr("editing.mb7e41754aa"));
   const refs = colors.map((c) => lab(c.hex)),
     maxL = Math.max(...refs.map((c) => c[0]));
   let visible = 0,
@@ -239,8 +233,7 @@ export function measureColors(
       chroma += v[0];
       light += v[1];
     }
-  if (!visible)
-    throw new Error("Kandidatenregion enthält keine sichtbaren Pixel.");
+  if (!visible) throw new Error(tr("editing.m687c7bf39b"));
   return {
     visible,
     chromaticDeltaE76: chroma / visible,
@@ -297,10 +290,7 @@ export function correctColorRegions(
       noChange = groups.every((g) => g.from.every((v, i) => v === g.to[i]));
     for (let i = 0; i < owned.length; i++)
       if (r.weights[i]) {
-        if (owned[i])
-          throw new Error(
-            "Farbregionen überlappen; eindeutige Zuordnung erforderlich.",
-          );
+        if (owned[i]) throw new Error(tr("editing.m36169d87b7"));
         owned[i] = 1;
         const k = i * 4;
         if (
@@ -357,7 +347,7 @@ export function paletteTransferGroups(
   master: { hex: string; count: number }[],
 ) {
   if (!candidate.length || !master.length)
-    throw new Error("Master- und Kandidatenregion zuerst zuweisen.");
+    throw new Error(tr("editing.md70b2f7980"));
   const anchors: { sourceColor: string; targetColor: string }[] = [];
   for (const c of candidate) {
     const from = lab(c.hex);

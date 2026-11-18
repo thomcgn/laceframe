@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 export type Region = { x: number; y: number; width: number; height: number };
 export type IdentityView = {
   zoom: number | "fit";
@@ -102,9 +103,7 @@ export function visibleRegion(
     count > 16_000_000 ||
     rgba.length !== count * 4
   )
-    throw new Error(
-      "Auto-Fit: maximal 16 Megapixel und vollständige RGBA-Daten.",
-    );
+    throw new Error(tr("common.mb6953380c2"));
   const whole = fullRegion({ width, height });
   let visible = 0,
     opaque = 0;

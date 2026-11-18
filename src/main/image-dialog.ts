@@ -1,3 +1,4 @@
+import { tr } from "../shared/locales/index";
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -38,7 +39,7 @@ export class ImageDialogService {
     if (selected.canceled || !selected.filePaths.length) return null;
     const directory = await fs.realpath(path.dirname(selected.filePaths[0]));
     if (!(await fs.stat(directory)).isDirectory())
-      throw new Error("Bildordner nicht verfügbar.");
+      throw new Error(tr("errors.m2d9203c4dd"));
     await fs.mkdir(this.userData, { recursive: true });
     const temp = path.join(this.userData, `.image-dialog-${randomUUID()}.tmp`);
     try {

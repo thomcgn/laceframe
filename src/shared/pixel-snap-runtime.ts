@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { SNAP_WASM_BASE64 } from "./pixel-snap-wasm";
 import type { ColorPixels } from "./color-consistency";
 type Native = {
@@ -33,7 +34,7 @@ function runtime() {
     );
     const module = new WebAssembly.Module(bytes);
     if (WebAssembly.Module.imports(module).length)
-      throw new Error("Pixel Snap WASM darf keine Hostimporte besitzen.");
+      throw new Error(tr("editing.m8a78bee335"));
     native = new WebAssembly.Instance(module).exports as unknown as Native;
   }
   return native;
@@ -47,7 +48,7 @@ export function withRaster<T>(
     owned: { ptr: number; size: number }[] = [];
   const allocate = (size: number) => {
     const ptr = r.allocate(size);
-    if (!ptr) throw new Error("Pixel Snap Speichergrenze erreicht.");
+    if (!ptr) throw new Error(tr("editing.m68b5be57fb"));
     owned.push({ ptr, size });
     return ptr;
   };
@@ -91,9 +92,7 @@ export function rasterClean(
         stats,
       )
     )
-      throw new Error(
-        "Rust-Rasterbereinigung abgelehnt. Keine Änderung gespeichert.",
-      );
+      throw new Error(tr("editing.mc9c9b1693f"));
     const counts = new Uint32Array(r.memory.buffer, stats, 2);
     return {
       width: p.width,
@@ -114,7 +113,7 @@ export function quantizeToPalette(p: ColorPixels, colors: Uint8Array) {
     colors.length > 768 ||
     colors.length % 3
   )
-    throw new Error("Ungültige explizite Palette.");
+    throw new Error(tr("editing.m1ebc792ffd"));
   return withRaster(p, (r, ptr, allocate) => {
     const palette = allocate(colors.length),
       out = allocate(p.data.length);
@@ -128,7 +127,7 @@ export function quantizeToPalette(p: ColorPixels, colors: Uint8Array) {
         out,
       )
     )
-      throw new Error("Palettenzuordnung fehlgeschlagen.");
+      throw new Error(tr("editing.md8c1b38340"));
     return {
       width: p.width,
       height: p.height,

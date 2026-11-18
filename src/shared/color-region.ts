@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { z } from "zod";
 import {
   prepareCutout,
@@ -65,11 +66,9 @@ export function colorSeedMask(
     p.data[i * 4 + 3] < 128 ||
     pixelHex(p, i) !== s.hex
   )
-    throw new Error(
-      "Farbseed muss von einem sichtbaren Originalpixel stammen.",
-    );
+    throw new Error(tr("editing.m2fbbe62680"));
   const labs = prepared ?? prepareCutout(p);
-  if (labs.length !== n * 3) throw new Error("Ungültiger Lab-Puffer.");
+  if (labs.length !== n * 3) throw new Error(tr("editing.m851ca356d4"));
   const eligible = new Uint8Array(n),
     out = new Uint8Array(n),
     k = i * 3,
@@ -112,7 +111,7 @@ export function replayRegionSelection(p: CutoutImage, input: RegionSelection) {
     [d.base, d.override, d.values].some((a) => a.length !== n) ||
     d.override.some((v) => v !== 0 && v !== 255)
   )
-    throw new Error("Farbregion: ungültige Korrekturmasken.");
+    throw new Error(tr("editing.mbafb293434"));
   const out = new Uint8Array(d.base),
     labs = d.seeds.length ? prepareCutout(p) : undefined;
   for (const seed of d.seeds) {
@@ -148,7 +147,7 @@ export function refineRegionSelection(
     override: new Uint8Array(d.base.length),
   });
   if (weights.length !== baseline.length)
-    throw new Error("Falsche Farbmaskengröße.");
+    throw new Error(tr("editing.m5545bbda0f"));
   return {
     ...d,
     override: Uint8Array.from(weights, (v, i) => (v === baseline[i] ? 0 : 255)),

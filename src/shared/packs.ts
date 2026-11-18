@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { z } from "zod";
 import { metricsSchema, ANALYSIS_VERSION } from "./style-analysis";
 import type { ArtDirection, Project } from "./domain";
@@ -8,10 +9,7 @@ const short = z
   .string()
   .min(1)
   .max(120)
-  .refine(
-    (t) => t === t.trim() && !/[\r\n]/.test(t),
-    "Namen normalisieren; keine stillschweigende Änderung beim Import.",
-  );
+  .refine((t) => t === t.trim() && !/[\r\n]/.test(t), tr("common.m8810e0d214"));
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const slug = z
   .string()
@@ -160,7 +158,7 @@ const unsafePath =
 /** Bounds before JSON.parse/Zod, including ignored/unknown input. No executable or path fields. */
 export function parsePackJSON(json: string): Pack {
   if (new TextEncoder().encode(json).length > MAX_PACK_BYTES)
-    throw new Error("Pack zu groß (maximal 512 KiB).");
+    throw new Error(tr("styles.mf1d98c6e8d"));
   let depth = 0,
     quoted = false,
     escaped = false;
@@ -171,21 +169,19 @@ export function parsePackJSON(json: string): Pack {
       else if (c === '"') quoted = false;
     } else if (c === '"') quoted = true;
     else if (c === "[" || c === "{") {
-      if (++depth > 20) throw new Error("JSON zu tief verschachtelt.");
+      if (++depth > 20) throw new Error(tr("styles.m10ccb921ec"));
     } else if (c === "]" || c === "}") depth--;
   }
   const raw: unknown = JSON.parse(json);
   let nodes = 0;
   function visit(v: unknown) {
-    if (++nodes > 30000) throw new Error("Zu viele JSON-Werte.");
+    if (++nodes > 30000) throw new Error(tr("styles.m991879caa7"));
     if (typeof v === "string" && (unsafePath.test(v) || v.includes("\0")))
-      throw new Error(
-        "Pack enthält einen lokalen Pfad, URL oder eingebettete Daten. Vor Export/Import entfernen.",
-      );
+      throw new Error(tr("styles.m0359b7e148"));
     if (v && typeof v === "object")
       for (const [k, x] of Object.entries(v)) {
         if (["__proto__", "prototype", "constructor"].includes(k))
-          throw new Error("Unzulässiges JSON-Feld.");
+          throw new Error(tr("styles.m5a33b43a26"));
         visit(x);
       }
   }
@@ -211,7 +207,7 @@ export function emptyStyle(name: string): StyleContent {
     lighting: "",
     composition: "",
     additionalRules: [],
-    legacy: { renderRules: "Structured rendering rules below." },
+    legacy: { renderRules: tr("styles.m9329a688b9") },
     referenceHashes: [],
     findings: [],
   };
@@ -232,8 +228,8 @@ export function structuredStyleText(s?: StyleContent): string {
         ["Shading", s.shading],
         ["Material rendering", s.materials],
         ["Color treatment", s.colorTreatment],
-        ["Lighting", s.lighting],
-        ["Composition", s.composition],
+        [tr("common.m07607d609f"), s.lighting],
+        [tr("common.m47fca483c8"), s.composition],
       ] as const
     )
       .filter(([, v]) => v)
@@ -299,7 +295,7 @@ export function exportStyle(
     style,
     provenance: profile.portableProvenance ?? {
       application: "laceframe",
-      note: "Text rules and hash-only references; images are not bundled. Measurements are provenance, not a recomputed local analysis.",
+      note: tr("styles.m12e62f6a33"),
     },
   };
 }
@@ -321,11 +317,11 @@ export function exportExpressions(
     revision: origin ? Math.max(...origins.map((o) => o!.revision)) : 1,
     provenance: origin?.provenance ?? {
       application: "laceframe",
-      note: "Global templates only; no character performances, masks, images or prompt history.",
+      note: tr("styles.mc30ca442e0"),
     },
     families: familyIds.map((id) => {
       const f = p.families.find((f) => f.id === id);
-      if (!f) throw new Error("Familie fehlt.");
+      if (!f) throw new Error(tr("styles.me5d9a7f08c"));
       return {
         id: f.portableId ?? f.id,
         slug: f.portableSlug ?? f.slug,
@@ -352,7 +348,7 @@ export function localImportName(base: string, used: string[]): string {
     if (!used.some((n) => n.toLowerCase() === candidate.toLowerCase()))
       return candidate;
   }
-  throw new Error("Zu viele gleichnamige Importdefinitionen.");
+  throw new Error(tr("styles.mca3a03629b"));
 }
 export function planPack(p: Project, pack: Pack): PackRow[] {
   if (pack.format === "laceframe.style") {
@@ -383,7 +379,7 @@ export function planPack(p: Project, pack: Pack): PackRow[] {
                   : "neu",
         targetId: target?.id,
         reason: target
-          ? "Stabile Pack-ID gefunden; bestehende Revision bleibt archiviert."
+          ? tr("common.m7d8dedd147")
           : `Keine eindeutige Pack-ID; gleiche Namen werden nicht automatisch zugeordnet. Als neu: ${localImportName(
               pack.style.name,
               p.artDirections.map((s) => s.name),
@@ -417,7 +413,7 @@ export function planPack(p: Project, pack: Pack): PackRow[] {
                 : "neu",
       targetId: target?.id,
       reason: target
-        ? "Stabile Familien-ID; Varianten werden per stabiler ID zugeordnet. Fehlende Varianten bleiben erhalten."
+        ? tr("common.macd9abc73c")
         : `Keine eindeutige Familien-ID. Namens-/Sluggleichheit ist keine Identität. Als neu: ${localImportName(
             f.slug,
             p.families.map((a) => a.slug),
@@ -448,23 +444,23 @@ export function lintStyle(text: string): {
   )
     return {
       category: "outfit",
-      reason: "Mögliche konkrete Kleidung, nicht bloß Material-Rendering.",
+      reason: tr("styles.m037a3a9f97"),
     };
   if (
     /selfie|freckle|hair|face shape|same person|identit|haare|sommerspross/i.test(
       text,
     )
   )
-    return { category: "identity", reason: "Mögliche Personen-/Fotoreferenz." };
+    return { category: "identity", reason: tr("styles.m582b54b7d3") };
   if (/neutral expression|emotion|smil|shout|mouth|mimik|lächel/i.test(text))
     return {
       category: "expression",
-      reason: "Mögliche Mimik-/Emotionsanweisung.",
+      reason: tr("styles.m59302aa2ef"),
     };
   if (/framing|composition|centered|camera|komposition|ausschnitt/i.test(text))
     return {
       category: "composition",
-      reason: "Mögliche Komposition; kein Identitätsmerkmal.",
+      reason: tr("styles.m58d932028c"),
     };
   if (
     /render|pixel|cluster|shad|light|color|palette|contour|illustrat|outline|material|licht|farbe/i.test(
@@ -473,12 +469,11 @@ export function lintStyle(text: string): {
   )
     return {
       category: "style",
-      reason: "Mögliche Darstellungsregel; manuell bestätigen.",
+      reason: tr("styles.m5c0bd6e682"),
     };
   return {
     category: "unclear",
-    reason:
-      "Unklar; Heuristik kann Bedeutung und gemischte Sätze nicht zuverlässig erkennen.",
+    reason: tr("styles.m2a6cb9a6d5"),
   };
 }
 export function migrationLines(profile: ArtDirection) {

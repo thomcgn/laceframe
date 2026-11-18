@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { structuredStyleText, type StyleContent } from "./packs";
 import {
   TRANSPARENT_CHARACTER_INSTRUCTION,
@@ -39,7 +40,7 @@ export const generationExecutionSchema = z
     if ((value.status === "running") === Boolean(value.endedAt))
       ctx.addIssue({
         code: "custom",
-        message: "Invalid execution completion metadata",
+        message: tr("studio.m9c2ef9d03f"),
       });
   });
 export type GenerationExecution = z.infer<typeof generationExecutionSchema>;
@@ -71,9 +72,16 @@ export function executionLabel(
 ): string {
   if (value.status === "running")
     return live
-      ? `Laufzeit ${formatDuration(value.durationMs)}`
-      : "Nicht abgeschlossen · keine gesicherte Endzeit";
-  return `${value.status === "completed" ? "Generiert" : value.status === "failed" ? "Fehlgeschlagen" : "Abgebrochen"} in ${formatDuration(value.durationMs)}`;
+      ? tr("common.m62d22358ce", { v0: formatDuration(value.durationMs) })
+      : tr("common.m9d0e7238d0");
+  return tr(
+    {
+      completed: "common.m0245d65a56",
+      failed: "common.m441a1f5328",
+      cancelled: "common.mdda5aea012",
+    }[value.status],
+    { v0: formatDuration(value.durationMs) },
+  );
 }
 export const attemptSchema = generationDraftSchema
   .omit({ basePrompt: true, prompt: true, supplementaryInstructions: true })
@@ -143,8 +151,7 @@ export interface ImageGenerationProvider {
 }
 export const CHATGPT_URL = "https://chatgpt.com/";
 export function validateExternalURL(input: unknown): string {
-  if (input !== CHATGPT_URL)
-    throw new Error("Nur https://chatgpt.com/ darf extern geöffnet werden.");
+  if (input !== CHATGPT_URL) throw new Error(tr("studio.m2bbebede0b"));
   return CHATGPT_URL;
 }
 /** Apply technical alpha requirements to future submissions without rewriting historical records. */

@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { z } from "zod";
 export const MAX_RELIGHT_PIXELS = 4_194_304;
 export const RELIGHT_VERSION = "2d-rgba8-lut-v1" as const;
@@ -103,9 +104,7 @@ export function validateRelightSize(p: RelightPixels) {
     p.width * p.height > MAX_RELIGHT_PIXELS ||
     p.data.length !== p.width * p.height * 4
   )
-    throw new Error(
-      "Live Relighting benötigt RGBA8 mit maximal 4 Megapixeln. Keine automatische Verkleinerung.",
-    );
+    throw new Error(tr("common.md6b597fcf8"));
 }
 /** Canonical point-wise encoded-sRGB 2D tone transform. No resampling, alpha edits, surface inference or spatial blur.
  * 256 spatial light bands and byte LUTs deliberately make worker preview/export bit-identical.
@@ -122,7 +121,7 @@ export function relightPixels(
     regions.length > 5 ||
     regions.some((r) => r.weights.length !== source.width * source.height)
   )
-    throw new Error("Ungültige Lichtregionen.");
+    throw new Error(tr("common.m78f4ba4f4b"));
   const data = new Uint8Array(source.data);
   const transforms = [
     light,

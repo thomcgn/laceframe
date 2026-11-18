@@ -1,3 +1,4 @@
+import { tr } from "./locales/index";
 import { z } from "zod";
 export const MAX_MASK_PIXELS = 16_000_000;
 export const maskSelectionSchema = z
@@ -42,7 +43,7 @@ export function paintStroke(
     ![from.x, from.y, to.x, to.y, radius, value].every(Number.isFinite) ||
     radius <= 0
   )
-    throw new Error("Ungültiger Maskenstrich.");
+    throw new Error(tr("common.mc03d56045e"));
   const result = new Uint8Array(bytes);
   const dx = to.x - from.x,
     dy = to.y - from.y,

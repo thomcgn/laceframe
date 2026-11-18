@@ -23,6 +23,8 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  preferences(): Promise<Result<{ language: string }>>;
+  setLanguage(language: string): Promise<Result<{ language: string }>>;
   closeProject(): Promise<Result<null>>;
   pixelEditSource(
     id: string,

@@ -1,3 +1,4 @@
+import { tr } from "../shared/locales/index";
 import * as fs from "node:fs/promises";
 import path from "node:path";
 /** Destination comes exclusively from the native chooser. Exclusive writes never replace files. */
@@ -15,11 +16,9 @@ export async function writeExport(
       relative !== ".." &&
       !path.isAbsolute(relative))
   )
-    throw new Error(
-      "Export außerhalb des Projekts speichern; interne Assets bleiben unverändert.",
-    );
+    throw new Error(tr("errors.m104ca69963"));
   if (!/^[A-Za-z0-9_-]+\.(?:png|json)$/.test(payload.name))
-    throw new Error("Ungültiger Exportname.");
+    throw new Error(tr("errors.m8a26def1c0"));
   const files = [
     { name: payload.name, bytes: payload.bytes },
     ...(payload.provenance
