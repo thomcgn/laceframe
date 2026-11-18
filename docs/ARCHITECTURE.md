@@ -1,6 +1,6 @@
 # Architektur
 
-Gültiger Implementierungsstand: UX-06.1 auf develop, auf Basis des integrierten UX-06 B und DEV-01 (#31–33). [ROADMAP](ROADMAP.md) enthält offene Produktphasen; geplante Architektur wird hier ausdrücklich als geplant bezeichnet. Typen und Validierung im Quellcode sind maßgeblich für die exakten Felder und Grenzen.
+Gültiger Implementierungsstand: PX-01 auf develop nach UX-06.1, auf Basis des integrierten UX-06 B und DEV-01 (#31–33). [ROADMAP](ROADMAP.md) enthält offene Produktphasen; geplante Architektur wird hier ausdrücklich als geplant bezeichnet. Typen und Validierung im Quellcode sind maßgeblich für die exakten Felder und Grenzen.
 
 ## Anwendung und Vertrauensgrenzen
 
@@ -83,7 +83,19 @@ Genau ein Job; Generierung nur durch explizite Aktion, keine Anwendungs-Retrysch
 
 Farbwarnung: mittlere a/b-Distanz >12 oder mittlere Aufhellung über hellster Referenz +8 L* >8. Diese Heuristik ersetzt keine Sichtprüfung und kann Drift übersehen. Regionspaletten zeigen maximal 16 tatsächliche Vertreter aus 5-Bit-Histogrammgruppen; nicht jede seltene Farbe ist vertreten. Candidate-Picker-Schritte sind Bearbeitungshilfen; gespeichert werden die exakte Kandidatenmaske und Korrekturparameter. Master-Auswahlrezepte sind vollständig rekonstruierbar.
 
-Quality Assets sind separate `cutout`, `resolution`, `relighting`, `color-correction`-PNG-Entwürfe. Main prüft Quellhash, Bindungen, Rezept, vorhandene Pixelschutzgrenzen und exakte Preview-Pixel-SHA; bei Freigabe erforderliche Ableitungen erneut nachvollziehen. Manuelle Freigabe erzeugt gegebenenfalls einen neuen Master oder eine Expression mit ursprünglicher Masterbindung. Opaque/empty/suspicious Quellen werden nicht als neue transparente Master zertifiziert; alte Projekte bleiben historisch lesbar.
+Quality Assets sind separate `cutout`, `resolution`, `relighting`, `color-correction`, `pixel-snap`, `color-adjustment`-PNG-Entwürfe. Main prüft Quellhash, Bindungen, Rezept, vorhandene Pixelschutzgrenzen und exakte Preview-Pixel-SHA; bei Freigabe erforderliche Ableitungen erneut nachvollziehen. Manuelle Freigabe erzeugt gegebenenfalls einen neuen Master oder eine Expression mit ursprünglicher Masterbindung. Opaque/empty/suspicious Quellen werden nicht als neue transparente Master zertifiziert; alte Projekte bleiben historisch lesbar.
+
+## Native Pixel-Snap-Pipeline
+
+PX-01 verwendet einen gezielt refaktorierten Auszug des tatsächlichen [Sprite-Fusion-Rust-Codes](https://github.com/Hugo-Dz/spritefusion-pixel-snapper/tree/02f9315d73d3219274d17767b36d9a231a6b1f4b) (MIT, Copyright 2025 Hugo Duprez). Der ursprüngliche WASM-Pfad quantisiert vor der Analyse und reduziert auf einen Pixel je Rasterzelle. Deshalb wird er nicht unverändert eingebunden. `native/pixel-snap` dokumentiert Herkunft und Änderungen; vollständige MIT-Hinweise liegen dort und als mitgelieferte Electron-Ressource vor.
+
+Übernommene Gradientenprofile, Peak-Abstände, Rasterwanderung und Achsenstabilisierung arbeiten direkt auf unquantisiertem RGBA. Plateau-/vergleichbare Peakbehandlung stabilisiert Rastergrenzen bei einzelnen Details. Die dominante Farbauswahl aus dem ursprünglichen `resample` wurde auf bestehende Koordinaten refaktoriert: kein kleineres Zwischenbild, keine Größenänderung, kein nachträgliches Hochskalieren. Nur nahe Minderheitsfarben in stark dominierten Zellen mit lokaler Unterstützung werden geändert. Unsichere oder kontrastreiche Details bleiben stehen. Halbtransparentes und unsichtbares RGBA, Alpha und Schutzpixel bleiben exakt; es gibt keine semantische Gesichts-/Haareinordnung.
+
+`clean_rgba` und `quantize_rgba_to_palette` sind getrennte Rust-/WASM-Einstiege. Rasterbereinigung ruft keine Quantisierung auf. Die optionale explizite Palettenabbildung wird nur separat getestet, nicht durch die Pixel-Snap-Oberfläche verwendet. Automatische K-means-Reduktion ist nicht eingebunden. Vorhandene Lab-Farbkorrektur bleibt in `correctColorRegions` wiederverwendet; der bisherige Palette-Lock ergänzt weiterhin seine eigenen Herkunftsprüfungen. Master und Expressions nutzen denselben Editor und dieselbe Qualitätsablage.
+
+Die auf Rust 1.85.1 gepinnte, abhängigkeitenfreie Bibliothek wird ausdrücklich über `node scripts/build-pixel-snap.cjs` gebaut. Das eingecheckte Modul (Base64 plus SHA im generierten TS) läuft ohne Downloads im Worker sowie Main. Keine Hostimporte; maximal 128 MiB WASM-Speicher und 4.194.304 Pixel, keine automatische Verkleinerung. CSP erlaubt dafür nur zusätzlich `wasm-unsafe-eval`, kein JavaScript-eval. Vorschauänderungen schreiben keine Dateien; Abbruch terminiert den Worker. Zoom/Pan teilen die bestehende `PixelViewport`-Kamera. Adaptive Rastergrenzen werden nicht irreführend als einheitliche Rasterlinien dargestellt.
+
+`createPixelEdit` nimmt ausschließlich Quellen-ID/Hash, begrenzte Einstellungen und Masken sowie den Vorschau-Pixel-SHA an. Main verifiziert Herkunft und Originalpixelschutz, rechnet mit demselben WASM/CPU-Farbkern nach, speichert unveränderliche PNGs/Masken und ein versioniertes Rezept mit Quellbindung. Übernahme erzeugt nur Kandidaten. Öffnen prüft Rezepte, Hashes und Maße; Freigabe rechnet die gesamte Qualitätskette nach. Die erste Pixelableitung sichert das vorherige Manifest nach `laceframe.v2.pre-pixel-edit.backup.json`, sofern nicht bereits eine vorrangige Altformatmigration ansteht. Ältere Projekte öffnen schreibfrei; ältere strikte App-Versionen benötigen das Backup und alle Originalassets.
 
 ## Grenzen und Exportformate
 
