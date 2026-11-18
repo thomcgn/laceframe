@@ -50,7 +50,7 @@ describe("deterministic changed-path risk", () => {
     ["src/renderer/styles.css", "LOW"],
     ["src/renderer/components/MaskEditor.css", "LOW"],
     ["README.md", "LOW"],
-    ["docs/TEST_STRATEGY.md", "LOW"],
+    ["docs/TESTING.md", "LOW"],
     ["src/renderer/icons/add.svg", "LOW"],
     ["src/renderer/components/ImagePreview.tsx", "MEDIUM"],
     ["src/renderer/views/ExpressionDesigner.tsx", "MEDIUM"],

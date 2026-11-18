@@ -1,39 +1,33 @@
-# Laceframe — Codex working instructions
+# Laceframe — Arbeitsregeln
 
-Read `docs/MVP_PLAN.md` and `docs/CHARACTER_EXPRESSIONS.md` before editing. The project starts as an **independent cross-platform Electron desktop app** using React, TypeScript and Vite.
+Vor Änderungen [Architektur](docs/ARCHITECTURE.md), [Workflows](docs/WORKFLOWS.md), [Teststrategie](docs/TESTING.md) und die vollständig aktuelle [Roadmap](docs/ROADMAP.md) lesen. Code, Tests und gemergte PRs sind der Nachweis für implementierte Funktionen. Die Roadmap enthält keine pauschale Freigabe für künftige Phasen.
 
-## Non-negotiables
-- Implement working vertical slices; no empty decorative buttons or fake AI generations.
-- Never redesign Ada Voss master; no character portraits are committed to this public repository.
-- Keep image inputs immutable. Candidates and exports use new paths and SHA-256 provenance.
-- Character profiles are extensible; expression families and variants are data, NOT a closed enum.
-- Keep emotion separate from vocal action / animation / appearance.
-- Portrait Artistic retains image resolution/style. No enforced 64x64 conversion.
-- Renderer: `contextIsolation: true`, `nodeIntegration: false`; file I/O restricted to validated typed preload IPC. Prevent traversal and unsafe protocols.
-- Never place secrets in frontend storage, git or logs.
-- Do not scrape ChatGPT or re-use browser cookies. Generation integration is feature-gated until official supported auth+image usage is verified.
-- Reproducible builds, type safety, targeted unit tests, no heavyweight unnecessary dependencies.
-- Avoid introducing unnecessary background server / database / Docker for this offline app.
-- Always validate on Linux as the immediate dev platform; keep Windows/macOS paths portable.
-- Do not bypass PR review workflow; use feature branches and PRs, never commit directly to main.
-- Before saying done, report commands actually run, passed/failed tests, what is implemented vs mocked.
+## Arbeitsumfang und Git
 
-## UX
-Dark, calm and responsive. Laceframe colors: Ink #141820, Slate #242D3A, Sage #8FADA6, Copper #D9A77E, Ivory #F0E5D3. Clearly communicate import, candidate, approved and rejected states.
+- Nur den ausdrücklich beauftragten Umfang umsetzen; funktionierende vertikale Abläufe, keine dekorativen Schaltflächen oder simulierte KI-Ergebnisse.
+- Aktuellen Git-Status, `origin/main`, offene PRs und relevante Issues prüfen. Bestehendes lokales Repository verwenden; keine Worktrees oder zweite Arbeitskopie.
+- Feature-Branch und PR verwenden, keine direkten Commits auf `main`. PRs nicht automatisch mergen oder Schutzregeln ändern. Nächste Phase erst nach notwendigem Merge und ausdrücklicher Freigabe; explizite mehrteilige Aufträge und deren Reihenfolge beachten.
+- Lokale Änderungen bewahren, insbesondere `.vscode/settings.json`. Nichts ungefragt überschreiben, verwerfen, zurücksetzen oder stashen.
+- Keine privaten Benutzerprojekte verändern. Keine privaten Ada-Voss-Portraits, Selfies oder geschützten Spielgrafiken in Git, Fixtures oder Screenshots. Ada Voss Master niemals neu gestalten. Synthetische Testbilder verwenden.
 
-## Current target
-Task 01 and Task 02 (including live native Codex ImageGen) are implemented per developer report. The 2026-11-16 quality pass reports 91 passing tests, monotonic timing, compact Create UI and registered comparison; see `docs/CODEX_02_UX_VALIDATION_2026-11-16.md`. Verify the quality-pass PR is integrated before Task 02B. Preserve the working provider, timer/status, sticky controls, image registration, overlay and project compatibility. Next Task 02B Art Direction / Expression Identity; then Task 03 Motion.
+## Unverhandelbare Produktregeln
 
-## Additive roadmap: Art Direction / Expression Identity
+- Eigenständige Electron-/React-/TypeScript-/Vite-Anwendung; lokale Projekte, kein unnötiger Server, keine Datenbank und kein Docker.
+- Master, Referenzen und Eingabebilder unveränderlich erhalten. Bearbeitungen/Exporte verwenden neue Pfade, SHA-256-Herkunft und explizite Freigaben. Historische Prompts, IDs und Revisionen nicht nachträglich umschreiben.
+- Art Direction, Identität, Outfit, Emotion/Intensität, Sprechaktion, Erscheinungs-/Zustandsdaten und Motion fachlich trennen. Persönliche Ausdrucksregeln nicht in globale Vorlagen oder andere Figuren übertragen.
+- Familien, Varianten und Profilkennungen bleiben erweiterbare Daten, keine geschlossene Emotionsliste. Portrait Artistic behält tatsächliche Auflösung und Stil; keine erzwungenen 64×64 oder stillen Reskalierungen.
+- Renderer: Sandbox und `contextIsolation: true`, `nodeIntegration: false`. Nur validierte typisierte Preload-IPC; keine beliebigen Dateipfade, Dateisystem-, Prozess- oder Tokenzugriffe. Absender, Formate, Grenzen, Pfade, Symlinks und Hashes im Main prüfen.
+- Keine Geheimnisse im Renderer, Git oder Logs. Keine Cookies/ChatGPT-Sessions auslesen oder undokumentierten Endpunkte. Native Codex-Fähigkeiten vor jedem Job prüfen; keine simulierte Generierung und keine automatische Wiederholung.
+- Keine Live-Bildgenerierung, kostenpflichtigen Anfragen, Modell-/Trainingsdownloads oder Trainingsläufe ohne ausdrückliche Freigabe. Tests verwenden ausschließlich eindeutig bezeichnete Protokoll-Fixtures.
+- Maskenrollen nicht verwechseln; Freistellung, erlaubte Expressionsänderung und geschützte Farb-/Lichtbereiche haben unterschiedliche Bedeutung. Keine automatische Identitäts-/Stilfreigabe oder semantische Segmentierung behaupten.
+- Farbkorrektur erhält zusätzliche Schatten und Details; keine globale Masterpaletten-Ersetzung. Alpha und geschützte Pixel bleiben gemäß jeweiligem dokumentiertem Algorithmus erhalten.
+- Schemaänderungen streng validieren, ältere Projekte schreibfrei öffnen, erforderliche Migration/Backups vor Änderungen durchführen. Linux unmittelbar prüfen, Windows/macOS-Pfade portabel halten; ungetestete Plattformen nicht als validiert melden.
 
-After the current Create workspace / compact UX work is integrated, implement `docs/CODEX_02B_ART_DIRECTION.md` using `docs/ART_DIRECTION_AND_EXPRESSION_IDENTITY.md`. Preserve approved masters and image-generation support from the live feature branch. Art style is project-level; character identity, outfit and personal emotion behavior are independent. Per-character overrides must never overwrite shared emotion definitions or another character's settings. Do not attempt the full photo-to-master wizard until this layer is stable.
+## UX und Qualität
 
-## Risk-based testing (LF-00)
-
-- During implementation, start with the affected unit tests, targeted lint and typecheck; then use `npm run check:fast`. Do not repeatedly package Electron or run unrelated full desktop suites for small changes.
-- Before a PR, run FAST and `npm run classify:changes`. For MEDIUM run `npm run check:targeted` where desktop execution is available; HIGH requires FULL. TARGETED automatically escalates HIGH and offers no skip/level/group override. FAST alone is a development component, not a complete HIGH-risk certificate.
-- `npm run check:full` includes every unit and both complete desktop commands. All existing assertions remain mandatory. After a failure, diagnose and rerun the affected tests; do not repeatedly rerun the whole suite to obtain a green log.
-- Run memory-intensive local profiles sequentially. Reuse packaged artifacts only when the input fingerprint, platform/Node and actual executable/app.asar hashes match; do not mark stale builds as verified.
-- After opening the PR, inspect its actual GitHub Actions results, fix failures and check the required `quality-gate`. Distinguish local evidence, fixture-backed native jobs and actual CI execution. No live generation or private-project fixtures.
-- GitHub Actions is authoritative for complete pre-merge regression when available. If CI is unavailable, perform the required complete coverage locally and report failures/limitations explicitly. Do not merge PRs or change branch-protection rules automatically.
-- See `docs/TEST_STRATEGY.md` for exact mappings, measurements, profile scope and one-time branch-protection setup. Do not start the next product roadmap phase without its required merge and explicit user release.
+- Ruhige, dunkle, responsive Oberfläche: Ink `#141820`, Slate `#242D3A`, Sage `#8FADA6`, Copper `#D9A77E`, Ivory `#F0E5D3`; Inter und JetBrains Mono. Status mit Text erklären, nicht allein mit Farbe.
+- Während Entwicklung betroffene Unit-/Integrationstests, Typecheck und gezielten Lint verwenden. Keine wiederholte vollständige Paketierung/Regression ohne relevante Änderung oder Fehler.
+- Vor PR FAST und Risikoklassifizierung; MEDIUM benötigt betroffene Integrationen, HIGH FULL. TARGETED eskaliert HIGH automatisch. Sicherheits-/Persistenztests nicht auslassen, vorhandene Assertions nicht abschwächen.
+- Speicherintensive Prüfungen sequenziell; Artefakte nur bei nachgewiesener Übereinstimmung wiederverwenden. GitHub Actions ist für vollständige Pre-Merge-Regression maßgeblich; fehlt geeignete CI, erforderliche vollständige Prüfungen lokal ausführen.
+- Tatsächliche CI-Ergebnisse und `quality-gate` prüfen, Fehler gezielt beheben. Fehlende/übersprungene Prüfungen nicht als Erfolg ausgeben. Lokale, CI- und Fixture-Nachweise getrennt berichten.
+- Vor Abschluss tatsächlich ausgeführte Befehle, Ergebnisse, Implementierung versus Mock und verbleibende Grenzen im PR nennen. Historische CI-Protokolle bleiben in PRs/Actions, keine neuen Task-/Validierungsdokumente ohne zwingenden aktuellen Bedarf.
