@@ -10,6 +10,10 @@ Anschließend bleibt dasselbe Bild als Projektmanager sichtbar: **Projekt öffne
 
 **Projekt schließen** in der Projektverwaltung warnt vor ungespeicherten Studio-/Expressions-/Stilentwürfen. Nach Bestätigung verschwindet der Workspace; die Auswahl ist sofort wieder verfügbar, ohne erneute zehn Sekunden. Gespeicherte Projekte und Bilder bleiben unverändert. Während einer Generierung beziehungsweise offenen Bildübernahme ist die Projektverwaltung gesperrt; zuerst Auftrag beenden/abbrechen beziehungsweise Import abschließen/verwerfen. Ein abgebrochener Wechsel aus einem gültigen Workspace erhält dessen ungespeicherte Entwürfe.
 
+## Sprache und Navigation
+
+Im Startfenster oder unten in der Seitenleiste **Sprache / Language** wählen. Deutsch und Englisch wechseln sofort, bleiben nach Neustart erhalten und verändern weder Projekt-/Figurennamen noch Anweisungen. Reihenfolge: Figuren → Studio → Ausdrücke → Bibliothek → Animation → Stilgestaltung (Englisch: Characters → Studio → Expressions → Library → Motion → Art Direction). Historische englische Prompttexte bleiben bewusst unverändert.
+
 ## 1. Projekt erstellen
 
 Über **Projekt erstellen …** einen leeren Ordner außerhalb des Repositorys wählen; alternativ ein vorhandenes Projekt mit `laceframe.json` öffnen. Das gesamte Verzeichnis einschließlich Assets sichern. Projektwechsel warnt vor erkannten ungespeicherten Entwürfen; während einer Generierung erst abbrechen oder Ergebnis abwarten.
@@ -38,7 +42,7 @@ Optional den offiziellen Codex CLI separat installieren und dort mit ChatGPT anm
 
 Identität, Stil, Outfit, Silhouette, tatsächliche Auflösung und Transparenz prüfen. Identitätsvergleich passt unterschiedliche Bilder unabhängig ein; der erweiterte Pixelvergleich zeigt denselben Pixelursprung mit Slider/Overlay. Auto-Fit/Zoom verändert nur die Ansicht, keine Datei und keine Identität.
 
-Neue Masteraktivierung benötigt echte transparente, nichtleere Bilddaten sowie Identitäts-/Silhouetten-/Aktivierungsbestätigung und eine Prüfnotiz. Ein opakes oder verdächtiges generiertes Bild erst freistellen, die separate Ableitung prüfen und freigeben; alternativ ablehnen oder ausdrücklich neu generieren. Ein gestagtes opakes lokales Importbild wird nicht still in einen KI-Versuch umgewandelt.
+Neue Masteraktivierung benötigt echte transparente, nichtleere Bilddaten sowie Identitäts-/Silhouetten-/Aktivierungsbestätigung, ausdrückliche Rasterprüfung bei 1:1 und Vergrößerung und eine Prüfnotiz. Ein opakes oder verdächtiges generiertes Bild erst freistellen, die separate Ableitung prüfen und freigeben; alternativ ablehnen oder ausdrücklich neu generieren. Ein gestagtes opakes lokales Importbild wird nicht still in einen KI-Versuch umgewandelt.
 
 **Master neu aufbauen** verwendet dieselbe Figur und vorhandene Identitäts-/Stil-/Outfitinformationen. Öffnen erzeugt keinen Auftrag. V1 bleibt aktiv, bis eine neue Version ausdrücklich freigegeben wird; bestehende Expressions/Masken behalten V1 als Herkunft. Historische Master können verglichen/exportiert, aber nicht destruktiv gelöscht werden.
 
@@ -57,6 +61,9 @@ Neue Masteraktivierung benötigt echte transparente, nichtleere Bilddaten sowie 
 
 ## 7. Manuell bearbeiten
 
+Mausradzoom erst nach Klick in die jeweilige Bildfläche; ohne Fokus scrollt die Anwendung. Der Akzentrahmen kennzeichnet die aktive Fläche. Klick außerhalb deaktiviert sie. Zoomschaltflächen arbeiten jederzeit.
+
+
 **Studio → Bearbeiten** bietet einen großen Vergleich mit direkt sichtbaren Qualitätswerkzeugen daneben; in der Library bleiben sie über **Assetqualität** erreichbar. Farbkorrektur, Farbauswahl, Masken/Freistellung und Relighting verwenden die gemeinsame fensterfüllende Editorfläche. Unterwerkzeuge ersetzen die sichtbare Fläche; der übergeordnete Entwurf bleibt erhalten und wird danach wieder bedienbar. Eigenschaften stehen seitlich, Übernehmen/Verwerfen bleiben erreichbar. Nicht jedes Werkzeug gilt für jede Quelle.
 
 | Aufgabe | Aktueller Weg / Bedeutung |
@@ -64,7 +71,7 @@ Neue Masteraktivierung benötigt echte transparente, nichtleere Bilddaten sowie 
 | Vorher/Nachher | Master-/Kandidatenvergleich, Slider per Maus/Touch/Pfeiltasten/Shift/Home/End, gemeinsamer Zoom/Pan, Overlay-Deckkraft; unterschiedliche Maße bleiben sichtbar. |
 | Originalpixel erhalten | **Originalpixel erhalten**: erlaubte Expressionsmaske bearbeiten/speichern, tatsächliches Rohresultat importieren, gleiche Maße und Registrierung manuell bestätigen, separates geschütztes Ergebnis erstellen und prüfen. Weiß erlaubt Änderung, Schwarz erhält den Master. Soft Lock ist nicht verfügbar. |
 | Hintergrund entfernen | **Hintergrund freistellen**: Original/Ergebnis/Alpha prüfen; Pipette/Toleranz, Schutz-/Entfernen-Pinsel, Polygon und Feinkorrektur nutzen. Weiß erhält Vordergrund, Schwarz entfernt Alpha. Speichern erstellt eine separate Ableitung, noch keine Freigabe. |
-| Pixelraster bereinigen | **Pixel Snap öffnen** nutzt Sprite Fusions Original-WASM: Automatik oder manuelle Rastergröße, Farbanzahl und optional eigene Hex-Palette wählen, Motiv/Silhouette prüfen, **Pixel bereinigen**. Das Original quantisiert vor der Rasterkorrektur. Links/rechts unabhängig zoomen/verschieben; tatsächliche PNG-Maße und X-/Y-Faktor prüfen. Aktive Schutzmasken sperren das ganze Resampling ausdrücklich. Vorschau bleibt temporär im RAM; Verwerfen schreibt nichts. **Ergebnis übernehmen** speichert einen separaten ungeprüften Kandidaten mit tatsächlichen neuen Maßen; Details, Identität und Alpha können sich ändern. Erst anschließend ausdrücklich prüfen/freigeben. |
+| Pixelraster bereinigen | **Pixel Snap öffnen** nutzt Sprite Fusions Original-WASM: Automatik oder manuelle Rastergröße, Farbanzahl und optional eigene Hex-Palette wählen, Motiv/Silhouette prüfen, **Pixel bereinigen**. Das Original quantisiert vor der Rasterkorrektur. Links/rechts unabhängig zoomen/verschieben; tatsächliche PNG-Maße und X-/Y-Faktor prüfen. Der zusätzliche Rasterhinweis stammt von Laceframe, nicht aus einem Diagnoseexport der Original-Engine. RGBA-/Alphaänderungszahl und Differenzansicht gelten nur bei gleichen Bildmaßen; bei neuer Geometrie gibt es keine erfundene Registrierung. Aktive Schutzmasken sperren das ganze Resampling ausdrücklich. Vorschau bleibt temporär im RAM; Verwerfen schreibt nichts. **Ergebnis übernehmen** speichert einen separaten ungeprüften Kandidaten mit tatsächlichen neuen Maßen; Details, Identität und Alpha können sich ändern. Erst anschließend ausdrücklich prüfen/freigeben. |
 | Farben gezielt ändern | Direkt anschließend **Color Correction öffnen**. **Auswahl nach Farbe** nutzt vorhandene Pipette, Toleranz, mehrere additive/subtraktive Seeds, zusammenhängend/global und Pinselkorrektur; eigene Schutzregionen auswählen. Quell-/Zielfarbe und Stärke wählen, Vorschau berechnen. L*-Abstufungen, zusätzliche Schatten, Alpha und nicht ausgewählte Pixel bleiben erhalten; Clipping manuell prüfen. Für Expressions sind gespeicherte Masterpaletten als Zielfarbreferenz auswählbar. Übernehmen erzeugt einen separaten Farbkandidaten, keine automatische Freigabe. |
 | Farbdrift prüfen | **Farbkonsistenz prüfen**: Masterregionen über sichtbare Palette, Farbklick/Toleranz und mehrere Seeds aufbauen, Pinsel korrigiert. **Region speichern**, dann Masterpalette als neue Revision speichern. Kandidatenregion separat zuordnen und Pose prüfen. |
 | Masterfarben annähern | Regionale Master-/Kandidatenpalette vergleichen, **Masterpalette gezielt übertragen** oder eigene Farbgruppe wählen, Stärke/Radius und Schutzpixel prüfen. Keine Vollquantisierung; dunkle Zusatzschatten behalten standardmäßig ihre Helligkeit. L*-Versatz nur ausdrücklich wählen. Separaten Farbkandidaten speichern. |
@@ -93,3 +100,5 @@ Projektwechsel und Verwerfen geänderter Bildentwürfe verlangen Bestätigung. K
 Motion/Animation, Spritesheets, Game-Engine-Export und optionale lokale Mimik-/Modellanalyse bleiben getrennte spätere Phasen; siehe [ROADMAP](ROADMAP.md).
 
 Empfohlene Pixelart-Reihenfolge: Generieren/Importieren → Freistellen → Motiv prüfen → optional Pixel Snap → Vorschau prüfen/übernehmen → Color Correction → ausdrücklich als Master oder Expression freigeben. Vorherige Qualitätsversionen bleiben im Versionswähler wiederherstellbar; ein neuer Bearbeitungsschritt verlangt keine vorgezogene Masteraktivierung. Pixel Snap kann nicht jede uneinheitliche Pixelart zuverlässig reparieren; teiltransparente Kanten werden bewusst nicht verändert.
+
+Abgelehnte unreferenzierte Kandidaten werden aus der verwalteten Bildablage entfernt, ihre Historie bleibt sichtbar. Historisch benötigte Ableitungen bleiben erhalten; ungeprüfte Kandidaten überleben zur Wiederaufnahme den Neustart. Freigegebene Master/Expressions und Originalreferenzen werden niemals automatisch gelöscht. Ein erneut gewünschtes Bild benötigt einen neuen Versuch. Unangewendete Pixel-Snap-Vorschau verwerfen schreibt keine Datei.

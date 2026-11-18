@@ -24,6 +24,7 @@ Die bisherigen `classify:changes`, `check:fast` und `check:targeted` entfallen; 
 | Workflow | Einzelnes Skript unter `scripts/` |
 | --- | --- |
 | `creator` | `creator-smoke.cjs` |
+| `languages` | `localization-smoke.cjs` (DE/EN, Spracheinstellungen, Studio-Kontext) |
 | `expressions` | `expression-designer-smoke.cjs` |
 | `color` | `color-consistency-smoke.cjs` |
 | `cutout` | `smart-cutout-smoke.cjs` |
@@ -35,7 +36,7 @@ Die bisherigen `classify:changes`, `check:fast` und `check:targeted` entfallen; 
 | `packs` | `packs-smoke.cjs` |
 | `native` | `native-smoke.cjs` (deterministischer App-Server) |
 
-Beispiel: `npm run check:smoke -- creator`. Weitere Workflows bei Bedarf einzeln aufrufen. Alle elf vorhandenen GUI-Skripte und alle fachlichen Unit-/Integrationstests bleiben erhalten; ausschließlich Tests der entfernten Routing-/Gate-Policy werden durch Tests der neuen Profile, CLI, CI-Verzweigung, Fehlerweitergabe und sicheren Build-Wiederverwendung ersetzt. `npm run test:desktop` und `npm run test:desktop:native` bleiben als vollständige Suites verfügbar. Dev-Smoke: separate Instanz mit `npm run start -- -- --remote-debugging-port=9232`, dann `npm run test:dev`.
+Beispiel: `npm run check:smoke -- creator`. Weitere Workflows bei Bedarf einzeln aufrufen. Die bisherigen GUI-Skripte und der neue Sprach-Smoke und alle fachlichen Unit-/Integrationstests bleiben erhalten; ausschließlich Tests der entfernten Routing-/Gate-Policy werden durch Tests der neuen Profile, CLI, CI-Verzweigung, Fehlerweitergabe und sicheren Build-Wiederverwendung ersetzt. `npm run test:desktop` und `npm run test:desktop:native` bleiben als vollständige Suites verfügbar. Dev-Smoke: separate Instanz mit `npm run start -- -- --remote-debugging-port=9232`, dann `npm run test:dev`.
 
 `npm ci` mit Lockfile; Desktop-Smokes benötigen Linux x64 mit grafischer Sitzung oder Xvfb und Electron-Systembibliotheken. Bestehende Skripte starten `out/Laceframe-linux-x64/laceframe`. `out/.quality-build.json` prüft Runtime-/Buildinputs, Paket-/Lockdaten einschließlich installiertem Lockfile, Plattform/Architektur/Node-Version und SHA-256 von Binary/app.asar. Docs, Tests, CI, Testskripte und `.vscode` sind keine Runtimeinputs. Forge-/Vite-Konfiguration, Quellcode und Abhängigkeiten bleiben enthalten. Fehlende, veränderte oder symlinkbasierte Artefakte werden nicht wiederverwendet; keine Wiederverwendung fremder PR-Builds. Änderungen an installierten Abhängigkeiten außerhalb des Lockfiles sind nicht unterstützt.
 
@@ -84,3 +85,27 @@ Der einzelne angepasste Pixel-Snap-Desktop-Smoke bestand; Screenshots tatsächli
 Nach einer passenden Paketierung führt `node scripts/splash-smoke.cjs` ausschließlich den neuen Start-/Projektablauf aus: tatsächliche mindestens zehn Sekunden, monotone RAF-Anzeige, verzögerte/fehlgeschlagene lokale Initialisierung mit Retry, keine projektlose Sidebar, Originalgrafik unter Produktionsprotokoll, sichere Preload-Grenze, Doppelklick, Dialogabbruch, ungültiges Projekt, Erstellen/Schließen/Wiederöffnen und Neustart, Close-Warnung mit Verwerfen/Behalten sowie erhaltenen Stilentwurf nach abgebrochener Dateiauswahl. Native Dateiauswahl sowie gezielte Initialisierungsverzögerung/-fehler sind Fixtures; Projektservice und Persistenz bleiben echt. Screenshots bei 960×720 und 1440×900 unter ignoriertem `artifacts/splash/` ansehen. `npm run test:dev` prüft zusätzlich tatsächliches Vite-Asset und Reload in einem normalen Sandbox-Start auf Debugport 9232. Bestehende GUI-Skripte verwenden den echten neuen Einstieg über `smoke-ui.cjs`; ihre fachlichen Assertions bleiben erhalten.
 
 Lokale Splash-Abnahme auf Linux, 18.11.2026: 35 Lifecycle-/Projektservice-Tests und zwei gezielt ausgewählte Controllerfälle bestanden (33 andere Controllerfälle bewusst nicht ausgeführt); Typecheck, gezielter Lint, ein Build, fokussierter Splash-Smoke, Dev-Smoke mit OS-Sandbox und Whitespaceprüfung bestanden. Boot-/Auswahlbilder tatsächlich angesehen, Originalasset unverändert. Der erste Smoke endete an einem mehrdeutigen Test-Statusselektor (Prozent-`output` besitzt ebenfalls Statusrolle); präzisiert und korrigierter Lauf bestanden. Keine vollständige Desktop-/Native-Regression oder CI, keine privaten Projekte und keine Live-Generierung. Windows-/macOS-Paketierung bleibt unvalidiert.
+
+## Lokalisierung, Fokus und Freigabe gezielt prüfen
+
+`npx vitest run tests/localization.test.ts` prüft alle DE/EN-JSON-Dateien, Katalogstruktur, fehlende/veraltete Schlüssel, Platzhalter, JSX-Texte, englischen Fallback, unveränderte Prompts und Benutzerwerte sowie Sprachpersistenz/Systemsprache/ungültige und verlinkte Einstellungen. Keine manuelle Schlüssel-Ausnahmeliste für veraltete Einträge; neue technische JSX-Symbole müssen bewusst begründet werden. Feste Zustandskennungen werden erst bei Darstellung übersetzt.
+
+`npx vitest run tests/pixel-review.test.ts tests/master-rebuild.test.ts tests/generation.test.ts tests/asset-quality.test.ts tests/asset-retention.test.ts` prüft echte RGBA-/Alphaänderungen, undefinierte Registrierung nach Geometrieänderung, Rasterbestätigung neuer Master, erhaltene historische Master, sichere Kandidatenbereinigung mit Provenienz/Abhängigkeiten, ID-Kollisionen und Neustart. Die Pixel-/Master-/Export-Assertions bleiben erhalten.
+
+`node scripts/localization-smoke.cjs` beziehungsweise `npm run check:smoke -- languages`: echte paketierte React-/Preload-/Main-Kette, OS-Auswahl, beide Navigationssprachen, Raster-Freigabesperre, Expression-Einstieg mit freigegebenem Master, tatsächliche Expertenfelder, Sprachwechsel ohne Entwurfsverlust, ungültige Sprache per IPC und Neustart. Manifeste und Master bleiben unverändert; ausschließlich synthetische Bilder. `node scripts/pixel-snap-smoke.cjs` prüft zusätzlich Wheel ohne Fokus, Aktivierung per Klick, Übertragung zwischen Kameras und Deaktivierung außerhalb sowie die echte WASM-/Übernahme-/Freigabe-/Exportkette. Keine automatische Generierung. Alte Desktop-Selektoren wurden an übersetzte Beschriftungen angepasst; die vollständigen Desktop-/Native-Suites sind in diesem Paket nicht erneut ausgeführt.
+
+Aktuelle lokale UX-/Sprachvalidierung (Linux):
+
+| Tatsächlich ausgeführt | Ergebnis |
+| --- | --- |
+| `npm run typecheck` | Bestanden |
+| `npm run lint` | Bestanden, keine Warnungen; generierter Rust-Targetordner ist kein lintbarer Quellcode |
+| `npm test -- --maxWorkers=1` | 435 Tests in 28 Dateien bestanden |
+| Anschließende gezielte Retentions-/Generation-/Master-/Qualitätsprüfung | 78 Tests in vier Dateien bestanden, einschließlich einer danach ergänzten ID-Kollisionsprüfung |
+| Abschließende Locale-/Studio-/Testprofil-Prüfung nach ergänzten Fallbacktexten | 39 Tests in drei Dateien bestanden |
+| `npm run build` | Linux-x64-Paket bestanden, Offline-WASM und Sprachdateien enthalten |
+| `node scripts/pixel-snap-smoke.cjs` | Bestanden, echte Original-Engine und Fokus-/Pixel-/Exportprüfungen |
+| `node scripts/localization-smoke.cjs` | Bestanden; nach abschließenden Textkorrekturen am aktuellen Paket erneut bestanden |
+| `git diff --check` | Bestanden |
+
+Der ursprüngliche unbeschränkte `npm test`-Lauf endete mit 432 Erfolgen und zwei Fehlern: erwarteter alter Navigationsbegriff in einer Assertion und 5-s-Testtimeout bei parallelem 1-MP-Test. Texterwartung präzise aktualisiert, keine Pixel-/Zeitassertion abgeschwächt; sequenzieller Gesamtlauf oben bestand. Spätere Änderungen wurden gezielt geprüft, kein weiterer pauschaler Gesamtlauf. 960×720- und 1440×900-Sprachbilder tatsächlich angesehen; kein horizontaler Seitenüberlauf. Keine CI, vollständige Desktop-/Native-Suite, Live-ImageGen, neue private Portraitprüfung oder Windows/macOS-Abnahme. Alle späteren UI-Zustände und Sprachkombinationen sind nicht einzeln visuell abgenommen.

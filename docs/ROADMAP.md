@@ -18,6 +18,11 @@ Implementierung, fachlicher Abschluss und Integration nach main sind unterschied
 
 ## Aktueller Stand
 
+Auf develop zusätzlich implementiert: Original-Sprite-Fusion-WASM (separate Engine-/UI-Commits), fokusgesteuerte Canvas-Bedienung, funktionierender Expression-Einstieg, verbindliche manuelle Rasterprüfung neuer Master, DE/EN-Sprachwahl und sichere Bereinigung unreferenzierter abgelehnter Kandidaten. Expertenansicht verwendet vorhandene Promptmodi, Schutzmasken, historische Herkunft und Diagnosen; kein eigener neuer Bildalgorithmus. Keine Main-Integration oder neue Produktphase.
+
+Offene Grenzen dieses UX-Pakets: neue Geometrie hat keine ungeprüfte Pixelregistrierung; Original-Engine exportiert keine Raster-Confidence. Ungeprüfte Kandidaten bleiben für Neustart im Projekt, referenzierte verworfene Bytes werden konservativ erhalten. Noch keine rein flüchtige Ablage aller ungeprüften Kandidaten. Keine allgemeine visuelle Abnahme jeder Sprach-/Editor-Kombination, keine Windows-/macOS-Abnahme und keine Live-Generierung.
+
+
 | Status | Funktion | Nachweis im Repository / gemergte PRs |
 | --- | --- | --- |
 | IMPLEMENTIERT auf develop | Splash-/Projektmanager: mindestens zehn Sekunden Offline-Boot, Öffnen/Erstellen, sicherer Close und direkte Rückkehr zur Auswahl | `app-lifecycle.ts`, `SplashScreen`, gezielte Lifecycle-/Projektservice-Tests und `splash-smoke.cjs`; keine Main-Integration/Alpha-Freigabe |
