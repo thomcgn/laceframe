@@ -109,6 +109,7 @@ const { createHash } = require("node:crypto");
         "openChatGPT",
         "openProject",
         "pixelEditSource",
+        "preferences",
         "preview",
         "providers",
         "qualityReport",
@@ -116,6 +117,7 @@ const { createHash } = require("node:crypto");
         "relightRecipe",
         "relightSource",
         "revealMaster",
+        "setLanguage",
         "smartCutoutRecipe",
         "stageImage",
         "startGeneration",
@@ -242,10 +244,10 @@ const { createHash } = require("node:crypto");
       expect(result.ok).toBe(true);
     }
     await setDialog(project);
-    await expect(page.getByRole("button", {name: /^Projekt öffnen(?: …)?$/})).toBeVisible();
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await expect(
+      page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await nav(page, "Expressions");
     await text(page, "Eigene Familie hinzufügen", { exact: true }).click();
     await field(page, "Neue Familie", { exact: true }).fill("Erleichtert");
@@ -327,7 +329,7 @@ const { createHash } = require("node:crypto");
     await studioStep(page, "Erzeugen");
     await expect(image(page, "Create · Masterreferenz")).toBeVisible();
     await studioStep(page, "Auswählen");
-    await expect(field(page, "Create Anbieter", { exact: true })).toBeVisible();
+    await expect(field(page, "Studio Anbieter", { exact: true })).toBeVisible();
     await studioStep(page, "Erzeugen");
     await expect(image(page, "Create · Ergebnisvorschau")).toHaveCount(0);
     await expect(
@@ -361,11 +363,11 @@ const { createHash } = require("node:crypto");
       ["manual-import", false],
     ]);
     await studioStep(page, "Auswählen");
-    await field(page, "Create Familie", { exact: true }).selectOption({
+    await field(page, "Studio Familie", { exact: true }).selectOption({
       label: "Amüsiert",
     });
     await studioStep(page, "Auswählen");
-    await field(page, "Create Variante", { exact: true }).selectOption({
+    await field(page, "Studio Variante", { exact: true }).selectOption({
       label: "half-smile / half-smile",
     });
     await studioExpert(page);
@@ -527,11 +529,11 @@ const { createHash } = require("node:crypto");
     );
     await nav(page, "Library");
     await expect(
-      field(page, "Library Asset", { exact: true }).locator("option"),
+      field(page, "Bibliothek Asset", { exact: true }).locator("option"),
     ).toHaveCount(4);
     await nav(page, "Studio");
     await studioStep(page, "Auswählen");
-    await field(page, "Create Familie", { exact: true }).selectOption({
+    await field(page, "Studio Familie", { exact: true }).selectOption({
       label: "Wütend",
     });
     await studioExpert(page);
@@ -545,7 +547,7 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Neue Vorlage übernehmen", exact: true })
       .click();
     await studioStep(page, "Auswählen");
-    await field(page, "Create Variante", { exact: true }).selectOption({
+    await field(page, "Studio Variante", { exact: true }).selectOption({
       label: "Anbrüllen / shouting",
     });
     await expect(prompt).toHaveValue(/VOCAL ACTION .*: shouting/);
@@ -598,7 +600,7 @@ const { createHash } = require("node:crypto");
       fullPage: true,
     });
     await page
-      .getByRole("button", { name: "In Library prüfen", exact: true })
+      .getByRole("button", { name: "In Bibliothek prüfen", exact: true })
       .click();
 
     await fs.mkdir("artifacts", { recursive: true });
@@ -632,16 +634,14 @@ const { createHash } = require("node:crypto");
     app = undefined;
     page = await launch();
     await setDialog(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       page.getByRole("heading", { name: "Ada Voss", exact: true }),
     ).toBeVisible();
     await expect(image(page, "Freigegebener Master V1")).toBeVisible();
     await nav(page, "Library");
     await expect(
-      field(page, "Library Asset", { exact: true }).locator("option"),
+      field(page, "Bibliothek Asset", { exact: true }).locator("option"),
     ).toHaveCount(6);
     await nav(page, "Expressions");
     await field(page, "Emotionsfamilie", { exact: true }).selectOption({
@@ -674,7 +674,7 @@ const { createHash } = require("node:crypto");
     ).toBe(true);
     await page.getByRole("button", { name: /Motion$/ }).click();
     await expect(
-      page.getByRole("heading", { name: "Motion · späterer Meilenstein." }),
+      page.getByRole("heading", { name: "Animation · späterer Meilenstein." }),
     ).toBeVisible();
     expect(rendererErrors).toEqual([]);
     console.log(

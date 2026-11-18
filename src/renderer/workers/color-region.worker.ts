@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales";
 import {
   replayRegionSelection,
   appendColorSeed,
@@ -41,7 +42,7 @@ worker.onmessage = (
     worker.postMessage({ weights, colors, selection });
   } catch (e) {
     worker.postMessage({
-      error: e instanceof Error ? e.message : "Farbauswahl fehlgeschlagen.",
+      error: e instanceof Error ? e.message : tr("editing.mcc84bd2f58"),
     });
   }
 };

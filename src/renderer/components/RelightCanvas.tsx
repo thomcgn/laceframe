@@ -1,3 +1,5 @@
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { PixelViewport } from "./PixelViewport";
 import { useEffect, useRef, useState } from "react";
 import type { RelightPixels } from "../../shared/relighting";
@@ -24,7 +26,7 @@ export function RelightCanvas({
     canvas.style.width = `${pixels.width}px`;
     canvas.style.height = `${pixels.height}px`;
     canvas.style.imageRendering = pixelArt ? "pixelated" : "auto";
-    canvas.setAttribute("aria-label", "Live Lichtvorschau");
+    canvas.setAttribute("aria-label", tr("editing.m4676b9a7af"));
     let gl: WebGLRenderingContext | null = null;
     let dispose = () => {};
     const cpu = () => {
@@ -32,9 +34,9 @@ export function RelightCanvas({
       c.width = pixels.width;
       c.height = pixels.height;
       c.style.cssText = canvas.style.cssText;
-      c.setAttribute("aria-label", "Live Lichtvorschau");
+      c.setAttribute("aria-label", tr("editing.m4676b9a7af"));
       const ctx = c.getContext("2d");
-      if (!ctx) throw new Error("Canvas nicht verfügbar.");
+      if (!ctx) throw new Error(tr("editing.m9ab0d49048"));
       ctx.putImageData(
         new ImageData(
           new Uint8ClampedArray(pixels.data),
@@ -45,7 +47,7 @@ export function RelightCanvas({
         0,
       );
       target.current?.replaceChildren(c);
-      setBackend("CPU Canvas2D · kanonische RGBA8-Pixel");
+      setBackend(tr("editing.m00ef7acc23"));
     };
     try {
       gl = forceCPU
@@ -63,14 +65,14 @@ export function RelightCanvas({
         pixels.width > gl.getParameter(gl.MAX_TEXTURE_SIZE) ||
         pixels.height > gl.getParameter(gl.MAX_TEXTURE_SIZE)
       )
-        throw new Error("GPU nicht verfügbar");
+        throw new Error(tr("editing.mc96ddda2ec"));
       const context = gl;
       const shader = (type: number, code: string) => {
         const s = context.createShader(type)!;
         context.shaderSource(s, code);
         context.compileShader(s);
         if (!context.getShaderParameter(s, context.COMPILE_STATUS))
-          throw new Error("GPU Shader");
+          throw new Error(tr("editing.m58094607a5"));
         return s;
       };
       const vs = shader(
@@ -86,7 +88,7 @@ export function RelightCanvas({
       gl.attachShader(program, fs);
       gl.linkProgram(program);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS))
-        throw new Error("GPU Programm");
+        throw new Error(tr("editing.m2567db0e31"));
       gl.useProgram(program);
       const buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -121,11 +123,12 @@ export function RelightCanvas({
       gl.disable(gl.BLEND);
       gl.disable(gl.DITHER);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      if (gl.getError() !== gl.NO_ERROR) throw new Error("GPU Darstellung");
+      if (gl.getError() !== gl.NO_ERROR)
+        throw new Error(tr("editing.m930f6f69fa"));
       const fallback = () => cpu();
       canvas.addEventListener("webglcontextlost", fallback);
       target.current?.replaceChildren(canvas);
-      setBackend("GPU WebGL · kanonische CPU-Pixel, Nearest-Textur");
+      setBackend(tr("editing.m60bc198f6e"));
       dispose = () => {
         canvas.removeEventListener("webglcontextlost", fallback);
         context.deleteTexture(texture);
@@ -146,8 +149,8 @@ export function RelightCanvas({
   }, [pixels, pixelArt, forceCPU]);
   return (
     <>
-      <small role="status" aria-label="Lichtdarstellung">
-        {backend}
+      <small role="status" aria-label={tr("editing.m823d58a56a")}>
+        {displayMessage(backend)}
       </small>
       <PixelViewport
         width={pixels.width}

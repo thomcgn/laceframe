@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { MAX_MASK_PIXELS } from "../../shared/masking";
 export type PreviewSource = {
   width: number;
@@ -19,7 +20,7 @@ export function cutoutFrame(
     source.data.length !== count * 4 ||
     retention.length !== count
   )
-    throw new Error("Bildquelle oder Pixelmaske hat ungültige Abmessungen.");
+    throw new Error(tr("editing.m75c28b55a0"));
   const data = new Uint8ClampedArray(source.data);
   for (let i = 0; i < count; i++) {
     const k = i * 4;

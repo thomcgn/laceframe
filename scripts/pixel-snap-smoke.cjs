@@ -86,7 +86,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     const master = (await manifest()).masters[0],
       masterBytes = await fs.readFile(path.join(dir, master.file));
     await nav(page, "Library");
-    await field(page, "Library Asset", { exact: true }).selectOption(master.id);
+    await field(page, "Bibliothek Asset", { exact: true }).selectOption(master.id);
     const openSnap = async () => {
       await page
         .getByRole("button", { name: "Pixel Snap öffnen", exact: true })
@@ -273,10 +273,10 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       createHash("sha256").update(PNG.sync.read(snapBytes).data).digest("hex"),
     );
     await page
-      .getByRole("button", { name: "Color Correction öffnen", exact: true })
+      .getByRole("button", { name: "Farbkorrektur öffnen", exact: true })
       .click();
     const color = page.getByRole("dialog", {
-      name: "Color Correction",
+      name: "Farbkorrektur",
       exact: true,
     });
     await color

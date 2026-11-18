@@ -68,7 +68,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       "Illustrated pixel contours\nkeep black leather jacket\nUse selfie identity\nNeutral expression\nCentered framing";
     await field(
       page,
-      "Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)",
+      "Darstellung-Regeln (ohne Charakter- oder Outfitmerkmale)",
       { exact: true },
     ).fill(original);
     await page
@@ -179,7 +179,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     await expect
       .poll(async () => (await manifest(first)).artDirections[0].revision)
       .toBe(3);
-    await page.getByLabel("Style Pack Inhaltsprüfung", { exact: true }).check();
+    await page.getByLabel("Stilpaket Inhaltsprüfung", { exact: true }).check();
     await chooser(exports);
     await page
       .locator('[aria-label="style Packs"]')
@@ -391,7 +391,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     const variant = (await manifest(second)).variants.find(
       (v) => v.familyId === imported.id,
     );
-    await expect(field(page, "Create Variante", { exact: true })).toHaveValue(
+    await expect(field(page, "Studio Variante", { exact: true })).toHaveValue(
       variant.id,
     );
     await studioExpert(page);
@@ -413,9 +413,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     await app.close();
     await launch();
     await chooser(second);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       page.getByRole("heading", { name: "Synthetic pack user", exact: true }),
     ).toBeVisible();

@@ -53,7 +53,7 @@ const { createHash } = require("node:crypto");
   };
   const getFramebuffer = async () =>
     page
-      .getByRole("dialog", { name: "Live Relighting", exact: true })
+      .getByRole("dialog", { name: "Live-Nachbeleuchtung", exact: true })
       .locator(".relight-canvas canvas")
       .evaluate((c) => {
         const gl = c.getContext("webgl");
@@ -163,11 +163,11 @@ const { createHash } = require("node:crypto");
     let quality = page.locator('[data-testid="asset-quality"]:visible').first();
     await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
     await quality
-      .getByRole("button", { name: "Live Relighting öffnen", exact: true })
+      .getByRole("button", { name: "Live-Nachbeleuchtung öffnen", exact: true })
       .click();
     await ready();
     let dialog = page.getByRole("dialog", {
-      name: "Live Relighting",
+      name: "Live-Nachbeleuchtung",
       exact: true,
     });
     const baseline = await fs.readFile(path.join(project, "laceframe.json"));
@@ -335,7 +335,9 @@ const { createHash } = require("node:crypto");
     ).toBeVisible();
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
-      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+      await expect(
+        quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+      ).toBeVisible();
     // Reopen saved light recipe, reset, create and edit a manual semantic region.
     await quality
       .getByRole("button", { name: "Lichtrevision bearbeiten", exact: true })
@@ -432,9 +434,7 @@ const { createHash } = require("node:crypto");
     await app.close();
     await launch();
     await chooser(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       page.getByAltText("Freigegebener Master V3", { exact: true }),
     ).toBeVisible();
@@ -442,12 +442,17 @@ const { createHash } = require("node:crypto");
       saved,
     );
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+    await expect(
+      quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+    ).toBeVisible();
     await quality
       .getByRole("button", { name: "Lichtrevision bearbeiten", exact: true })
       .click();
     await ready();
-    dialog = page.getByRole("dialog", { name: "Live Relighting", exact: true });
+    dialog = page.getByRole("dialog", {
+      name: "Live-Nachbeleuchtung",
+      exact: true,
+    });
     await dialog
       .getByRole("button", { name: "Verwerfen & schließen", exact: true })
       .click();
@@ -462,9 +467,13 @@ const { createHash } = require("node:crypto");
     await page
       .getByLabel("Library Assettyp", { exact: true })
       .selectOption("quality");
-    await page.getByLabel("Library Asset", { exact: true }).selectOption(q.id);
+    await page
+      .getByLabel("Bibliothek Asset", { exact: true })
+      .selectOption(q.id);
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+    await expect(
+      quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+    ).toBeVisible();
     await quality
       .getByRole("button", { name: "Lichtrevision bearbeiten", exact: true })
       .click();
@@ -546,7 +555,8 @@ const { createHash } = require("node:crypto");
             sourceSha256: r.value.sha256,
             identityConfirmed: true,
             silhouetteConfirmed: true,
-            activationConfirmed: true, rasterConfirmed: true,
+            activationConfirmed: true,
+            rasterConfirmed: true,
             notes: "Synthetic silhouette and identity review",
           },
         });
@@ -570,7 +580,8 @@ const { createHash } = require("node:crypto");
           id: cut.value.project.qualityAssets.at(-1).id,
           status: "approved",
           notes: "Large synthetic silhouette and alpha manually reviewed",
-          confirmStyleAndSilhouette: true, rasterConfirmed: true,
+          confirmStyleAndSilhouette: true,
+          rasterConfirmed: true,
         });
         if (!checked.ok) throw new Error(checked.error);
       },
@@ -580,20 +591,23 @@ const { createHash } = require("node:crypto");
     await app.close();
     await launch();
     await chooser(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       page.getByAltText("Freigegebener Master V2", { exact: true }),
     ).toBeVisible();
     const largeBefore = await fs.readFile(path.join(project, "laceframe.json"));
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+    await expect(
+      quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+    ).toBeVisible();
     await quality
-      .getByRole("button", { name: "Live Relighting öffnen", exact: true })
+      .getByRole("button", { name: "Live-Nachbeleuchtung öffnen", exact: true })
       .click();
     await ready();
-    dialog = page.getByRole("dialog", { name: "Live Relighting", exact: true });
+    dialog = page.getByRole("dialog", {
+      name: "Live-Nachbeleuchtung",
+      exact: true,
+    });
     await dialog.getByLabel("Intensität", { exact: true }).evaluate((input) => {
       for (let i = 0; i < 20; i++) {
         Object.getOwnPropertyDescriptor(

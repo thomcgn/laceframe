@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales";
 import {
   relightPixels,
   type RelightPixels,
@@ -36,7 +37,7 @@ worker.onmessage = async (
   } catch (e) {
     worker.postMessage({
       serial,
-      error: e instanceof Error ? e.message : "Lichtberechnung fehlgeschlagen.",
+      error: e instanceof Error ? e.message : tr("editing.m7741034dec"),
     });
   }
 };

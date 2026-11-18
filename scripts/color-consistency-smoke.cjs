@@ -273,9 +273,7 @@ const { nav } = require("./smoke-ui.cjs");
     await seedHistoricalMaster(project, bytes);
     await launch();
     await choose(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       page.getByAltText("Freigegebener Master V1", { exact: true }),
     ).toBeVisible();
@@ -307,15 +305,15 @@ const { nav } = require("./smoke-ui.cjs");
     await app.close();
     await launch();
     await choose(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await nav(page, "Library");
     await page
       .getByLabel("Library Assettyp", { exact: true })
       .selectOption("expression");
     let quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+    await expect(
+      quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+    ).toBeVisible();
     await quality
       .getByRole("button", { name: "Farbkonsistenz prüfen", exact: true })
       .click();
@@ -456,11 +454,13 @@ const { nav } = require("./smoke-ui.cjs");
       .poll(async () => (await read()).qualityAssets.at(-1).status)
       .toBe("approved");
     const reviewed = await read();
-    await expect(page.getByLabel("Library Asset", { exact: true })).toHaveValue(
-      reviewed.qualityAssets.at(-1).approvedExpressionId,
-    );
+    await expect(
+      page.getByLabel("Bibliothek Asset", { exact: true }),
+    ).toHaveValue(reviewed.qualityAssets.at(-1).approvedExpressionId);
     if (!(await quality.getAttribute("open")))
-      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+      await expect(
+        quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+      ).toBeVisible();
     await choose(exportsDir);
     await quality
       .getByRole("button", {
@@ -487,15 +487,15 @@ const { nav } = require("./smoke-ui.cjs");
     await app.close();
     await launch();
     await choose(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await nav(page, "Library");
     await page
       .getByLabel("Library Assettyp", { exact: true })
       .selectOption("expression");
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+    await expect(
+      quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+    ).toBeVisible();
     await quality
       .getByRole("button", { name: "Farbkonsistenz prüfen", exact: true })
       .click();
@@ -535,10 +535,14 @@ const { nav } = require("./smoke-ui.cjs");
     await page
       .getByLabel("Library Assettyp", { exact: true })
       .selectOption("quality");
-    await page.getByLabel("Library Asset", { exact: true }).selectOption(q.id);
+    await page
+      .getByLabel("Bibliothek Asset", { exact: true })
+      .selectOption(q.id);
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if (!(await quality.getAttribute("open")))
-      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+      await expect(
+        quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+      ).toBeVisible();
     await quality
       .getByRole("button", { name: "Farbkonsistenz prüfen", exact: true })
       .click();

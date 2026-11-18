@@ -142,6 +142,12 @@ const { createHash } = require("node:crypto");
           },
           { x: box.x + box.width * 0.7, y: box.y + box.height * 0.4 },
         );
+        await page.keyboard.down("Alt");
+        await page.mouse.click(
+          box.x + box.width * 0.7,
+          box.y + box.height * 0.4,
+        );
+        await page.keyboard.up("Alt");
         await page.mouse.wheel(0, -140);
         await expect
           .poll(() =>
@@ -298,7 +304,7 @@ const { createHash } = require("node:crypto");
         .toBe("approved");
       const asset = (await manifest()).assets[0];
       await page
-        .getByRole("button", { name: "In Library prüfen", exact: true })
+        .getByRole("button", { name: "In Bibliothek prüfen", exact: true })
         .click();
       const destination = path.join(root, "exports");
       await fs.mkdir(destination);
@@ -331,7 +337,7 @@ const { createHash } = require("node:crypto");
       await expect(
         page.getByAltText("Identität 1", { exact: true }),
       ).toBeVisible();
-      await field(page, "Creator Outfit", { exact: true }).fill(
+      await field(page, "Figurenerstellung Outfit", { exact: true }).fill(
         "Retained blue coat draft",
       );
       for (const [width, height] of [
@@ -356,9 +362,9 @@ const { createHash } = require("node:crypto");
         }
       }
       await studioStep(page, "Auswählen");
-      await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
-        "Retained blue coat draft",
-      );
+      await expect(
+        field(page, "Figurenerstellung Outfit", { exact: true }),
+      ).toHaveValue("Retained blue coat draft");
       expect((await manifest()).masterAttempts).toEqual([]);
       expect((await manifest()).characters[0].masterId).toBe(master.id);
     }

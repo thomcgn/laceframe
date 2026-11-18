@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales";
 import {
   correctColors,
   measureColors,
@@ -44,7 +45,7 @@ worker.onmessage = async (
     ]);
   } catch (e) {
     worker.postMessage({
-      error: e instanceof Error ? e.message : "Farbprüfung fehlgeschlagen.",
+      error: e instanceof Error ? e.message : tr("editing.m65a4d580a3"),
     });
   }
 };

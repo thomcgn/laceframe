@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import {
   createContext,
   useContext,
@@ -58,7 +59,10 @@ export function EditorWorkspace({
         hidden={childCount > 0}
         onKeyDown={(e) => e.stopPropagation()}
       >
-        <div className="editor-workspace-path" aria-label="Editorpfad">
+        <div
+          className="editor-workspace-path"
+          aria-label={tr("common.m6843d7adef")}
+        >
           {path}
         </div>
         {children}

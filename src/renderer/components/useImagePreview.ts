@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { useEffect, useState } from "react";
 export function usePreview(id?: string) {
   const [value, setValue] = useState({ src: "", error: "" });
@@ -17,7 +18,7 @@ export function usePreview(id?: string) {
           if (live)
             setValue({
               src: "",
-              error: "Vorschau konnte nicht geladen werden.",
+              error: tr("common.m589ab0d8fd"),
             });
         });
     return () => {

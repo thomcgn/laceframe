@@ -1,3 +1,8 @@
+import { i18n } from "../shared/locales";
+import { displayMessage } from "../shared/locales";
+import { useTranslation } from "react-i18next";
+import { LanguageSelector } from "./components/LanguageSelector";
+import { tr } from "../shared/locales/index";
 import { SplashScreen } from "./components/SplashScreen";
 import { useAppLifecycle } from "./useAppLifecycle";
 import { ExpressionDesigner } from "./views/ExpressionDesigner";
@@ -22,6 +27,7 @@ import type { Result } from "../shared/bridge";
 
 type View = Workspace;
 export function App() {
+  useTranslation();
   const { lifecycle, state: lifecycleState } = useAppLifecycle();
   const workLock = useRef(false);
   const [snapshot, setSnapshot] = useState<Snapshot>();
@@ -109,9 +115,7 @@ export function App() {
       }
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Vorgang fehlgeschlagen. Bitte erneut versuchen.",
+        error instanceof Error ? error.message : tr("common.m6aef3640ad"),
       );
     } finally {
       workLock.current = false;
@@ -178,20 +182,20 @@ export function App() {
   async function drop(files: FileList) {
     if (busy || staged) return;
     if (!character) {
-      setError("Zuerst Figur, Master und Variante auswählen.");
+      setError(tr("common.m5c6f7a7f7c"));
       return;
     }
     if (view === "Characters" && master) {
-      setError("Master ist gesperrt. Kandidaten im Studio importieren.");
+      setError(tr("common.m5ce6450c01"));
       return;
     }
     if (files.length !== 1) {
-      setError("Bitte genau ein PNG/WebP ablegen.");
+      setError(tr("common.m3bc88761b7"));
       return;
     }
     const file = files[0];
     if (file.size > MAX_IMAGE_BYTES) {
-      setError("Das Bild überschreitet 32 MiB.");
+      setError(tr("common.mfe6b5a54d0"));
       return;
     }
     await run(
@@ -233,9 +237,7 @@ export function App() {
         setStaged(undefined);
         setAssetId(value.project.assets.at(-1)?.id ?? "");
       },
-      staged.variantId
-        ? "Kandidat importiert. Manuelle Prüfung erforderlich."
-        : "Master V1 bestätigt und unveränderlich gesperrt.",
+      staged.variantId ? tr("common.m58f612e282") : tr("common.m6cc78a9310"),
     );
   }
   function addCharacter(e: FormEvent) {
@@ -306,9 +308,9 @@ export function App() {
     p && (
       <section className="character-bar">
         <label>
-          Aktive Figur
+          {tr("common.mf1f9565fea")}
           <select
-            aria-label="Aktive Figur"
+            aria-label={tr("common.mf1f9565fea")}
             value={character?.id ?? ""}
             onChange={(e) => {
               setAssetId("");
@@ -319,7 +321,7 @@ export function App() {
             }}
           >
             <option disabled value="">
-              Figur erstellen
+              {tr("common.me027a129fa")}
             </option>
             {p.characters.map((c) => (
               <option key={c.id} value={c.id}>
@@ -334,16 +336,16 @@ export function App() {
           hidden={view !== "Characters"}
         >
           <label>
-            Neue Figur
+            {tr("common.m56169128b5")}
             <input
               required
               maxLength={120}
-              placeholder="z. B. Ada Voss"
+              placeholder={tr("common.m35aa422377")}
               value={characterName}
               onChange={(e) => setCharacterName(e.target.value)}
             />
           </label>
-          <button type="submit">Figur erstellen</button>
+          <button type="submit">{tr("common.me027a129fa")}</button>
         </form>
       </section>
     );
@@ -372,11 +374,12 @@ export function App() {
         <div className="brand">
           <span className="brand-mark">L</span>
           <div>
-            LACEFRAME<small>Portrait studio</small>
+            {tr("common.m3e06abfa73")}
+            <small>{tr("common.mb12d43c08e")}</small>
           </div>
         </div>
-        <p className="eyebrow">WORKSPACE</p>
-        <nav aria-label="Hauptnavigation">
+        <p className="eyebrow">{tr("common.m5493ff8e93")}</p>
+        <nav aria-label={tr("common.me8fc666068")}>
           {(
             [
               "Characters",
@@ -396,10 +399,22 @@ export function App() {
               }}
             >
               <span className="nav-index">0{i + 1}</span>
-              {name}
+              {tr(
+                {
+                  Characters: "common.navCharacters",
+                  Studio: "common.navStudio",
+                  Expressions: "common.navExpressions",
+                  Library: "common.navLibrary",
+                  Motion: "common.navMotion",
+                  "Art Direction": "common.navArtDirection",
+                }[name],
+              )}
             </button>
           ))}
         </nav>
+        <div className="sidebar-bottom">
+          <LanguageSelector />
+        </div>
       </aside>
       <main
         inert={importing || switchingProject}
@@ -408,23 +423,21 @@ export function App() {
         <header>
           <div>
             <p className="eyebrow">
-              CHARACTER WORKSPACE / {view.toUpperCase()}
+              {tr("common.m76fc502bc2")}
+              {view.toUpperCase()}
             </p>
             <h1>{view}</h1>
           </div>
           <div className="project-info">
-            <strong>{p?.name ?? "Kein Projekt geöffnet"}</strong>
-            <small>
-              {snapshot?.directory ??
-                "Ein lokales Projekt beginnt mit einem leeren Ordner."}
-            </small>
+            <strong>{p?.name ?? tr("common.m5dce7f9897")}</strong>
+            <small>{snapshot?.directory ?? tr("common.mf6fa281fb9")}</small>
           </div>
         </header>
         <div role="status" aria-live="polite" className="notice">
           {switchingProject
-            ? "Projekt wird geprüft …"
+            ? tr("common.m19fb832ab5")
             : busy
-              ? "Verarbeite …"
+              ? tr("common.mc0d15896db")
               : message}
         </div>
         {(error || lifecycleState.error) && (
@@ -443,23 +456,21 @@ export function App() {
           className="workspace"
         >
           <section className="project-management">
-            <section className="project-bar" aria-label="Projektverwaltung">
+            <section
+              className="project-bar"
+              aria-label={tr("common.m0a4d993cf5")}
+            >
               <form
                 className="inline-form"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (
-                    createDirty &&
-                    !window.confirm(
-                      "Ungespeicherte Studio-, Expressions- und Stilentwürfe verwerfen und Projekt wechseln?",
-                    )
-                  )
+                  if (createDirty && !window.confirm(tr("common.m0ecd245a95")))
                     return;
                   void createProject(projectName);
                 }}
               >
                 <label>
-                  Projektname
+                  {tr("common.m29ff0bdf52")}
                   <input
                     required
                     maxLength={120}
@@ -467,27 +478,19 @@ export function App() {
                     onChange={(e) => setProjectName(e.target.value)}
                   />
                 </label>
-                <button type="submit">Projekt erstellen …</button>
+                <button type="submit">{tr("common.m3fa71a5641")}</button>
               </form>
               <button
                 onClick={() =>
-                  (!createDirty ||
-                    window.confirm(
-                      "Ungespeicherte Studio-, Expressions- und Stilentwürfe verwerfen und Projekt wechseln?",
-                    )) &&
+                  (!createDirty || window.confirm(tr("common.m0ecd245a95"))) &&
                   void openProject()
                 }
               >
-                Projekt öffnen …
+                {tr("common.mf4c90fbebf")}
               </button>
               <button
                 onClick={() => {
-                  if (
-                    createDirty &&
-                    !window.confirm(
-                      "Ungespeicherte Studio-, Expressions- und Stilentwürfe verwerfen und Projekt schließen?",
-                    )
-                  )
+                  if (createDirty && !window.confirm(tr("common.m2fa2d5c8a6")))
                     return;
                   void lifecycle.close(
                     () => window.laceframe.closeProject(),
@@ -495,7 +498,7 @@ export function App() {
                   );
                 }}
               >
-                Projekt schließen
+                {tr("common.m545931b88e")}
               </button>
             </section>
           </section>
@@ -506,9 +509,9 @@ export function App() {
               hidden={view !== "Studio"}
             >
               <label>
-                Figur
+                {tr("common.m446cb18289")}
                 <select
-                  aria-label="Studio Figur"
+                  aria-label={tr("common.mbd55ab933e")}
                   value={character?.id ?? ""}
                   onChange={(e) =>
                     void command({
@@ -518,12 +521,14 @@ export function App() {
                   }
                 >
                   <option disabled value="">
-                    Figur anlegen
+                    {tr("common.m797950bf59")}
                   </option>
                   {p.characters.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
-                      {c.masterId ? " · Master gesperrt" : " · Entwurf"}
+                      {c.masterId
+                        ? tr("common.md941d8fb01")
+                        : tr("common.m8d5242b1c0")}
                     </option>
                   ))}
                 </select>
@@ -531,13 +536,13 @@ export function App() {
               <div
                 className="studio-modes"
                 role="group"
-                aria-label="Studio Modus"
+                aria-label={tr("common.m79b5c36470")}
               >
                 <button
                   aria-pressed={studioMode === "master"}
                   onClick={() => setStudioMode("master")}
                 >
-                  Master erstellen
+                  {tr("common.m91efb055fb")}
                 </button>
                 <button
                   aria-pressed={studioMode === "expression"}
@@ -553,7 +558,7 @@ export function App() {
                       : setStudioMode("expression")
                   }
                 >
-                  Expression erstellen
+                  {tr("common.m1e9e71c620")}
                 </button>
               </div>
             </section>
@@ -711,7 +716,7 @@ export function App() {
               hidden={view !== "Art Direction"}
             >
               <button onClick={() => setView("Studio")}>
-                Zurück zum Studio
+                {tr("common.md42458a59e")}
               </button>
               <StyleLibrary
                 key={p.id}
@@ -729,26 +734,27 @@ export function App() {
             <>
               {view === "Library" && renderCharacterBar()}
               {view === "Characters" && (
-                <section className="panel characters-workspace">
+                <section className={"panel characters-workspace"}>
                   <div className="section-head">
                     <div>
                       <p className="eyebrow">
                         {character?.profile === "portrait-artistic"
-                          ? "PORTRAIT ARTISTIC"
+                          ? tr("common.m1d12ae2efa")
                           : (character?.profile ?? "PORTRAIT ARTISTIC")}
                       </p>
-                      <h2>{character?.name ?? "Erste Figur erstellen"}</h2>
+                      <h2>{character?.name ?? tr("common.mc1fb3c1be3")}</h2>
                     </div>
                     {master && (
                       <span className="badge approved">
-                        Master V{master.version} · gesperrt
+                        {tr("common.m29f9eecd72")}
+                        {master.version} {tr("common.m24df89e2f7")}
                       </span>
                     )}
                   </div>
                   {master && (
                     <PortraitPreview
                       image={master}
-                      caption={`Freigegebener Master V${master.version}`}
+                      caption={tr("common.m48c8e74ff9", { v0: master.version })}
                     />
                   )}
                   {renderCharacterBar()}
@@ -760,7 +766,7 @@ export function App() {
                       setView("Studio");
                     }}
                   >
-                    Neuen Charakter erstellen
+                    {tr("common.m73239f6690")}
                   </button>
                   {character && (
                     <form
@@ -777,7 +783,7 @@ export function App() {
                       }}
                     >
                       <label>
-                        Figurenname
+                        {tr("common.mf5f7f4d089")}
                         <input
                           name="name"
                           required
@@ -785,7 +791,7 @@ export function App() {
                           defaultValue={character.name}
                         />
                       </label>
-                      <button type="submit">Namen speichern</button>
+                      <button type="submit">{tr("common.m002febf9f3")}</button>
                     </form>
                   )}
                   {character && (
@@ -800,7 +806,7 @@ export function App() {
                               })
                             }
                           >
-                            Master im Studio erstellen
+                            {tr("common.m7cf71051e2")}
                           </button>
                         </>
                       )}
@@ -814,7 +820,7 @@ export function App() {
                           })
                         }
                       >
-                        Expressions im Studio erstellen
+                        {tr("common.m87656e8c50")}
                       </button>
                       {master && (
                         <button
@@ -827,14 +833,14 @@ export function App() {
                             })
                           }
                         >
-                          Master neu aufbauen
+                          {tr("common.m87759f9b8c")}
                         </button>
                       )}
                       {master && (
                         <button
                           onClick={() => openLibrary(character.id, master.id)}
                         >
-                          Master in Library prüfen
+                          {tr("common.mebb7f4a9c3")}
                         </button>
                       )}
                     </div>
@@ -842,7 +848,7 @@ export function App() {
                   {character && (
                     <section className="character-identities">
                       <h3>
-                        Identitätsquellen ·{" "}
+                        {tr("common.me51165d8da")}{" "}
                         {
                           p.identityAssets.filter(
                             (a) => a.characterId === character.id,
@@ -855,7 +861,11 @@ export function App() {
                           <div key={a.id}>
                             <ImagePreview
                               id={a.id}
-                              caption={`Identitätsquelle${a.removedAt ? " · archiviert" : " · aktiv"}`}
+                              caption={tr("common.ma69b143965", {
+                                v0: a.removedAt
+                                  ? tr("common.mb076d37ae9")
+                                  : tr("common.mc97385059e"),
+                              })}
                               zoom="fit"
                             />
                             <small>
@@ -867,11 +877,17 @@ export function App() {
                   )}
                   {master ? (
                     <>
-                      <p>Aktueller Master V{master.version}</p>
                       <p>
-                        {master.width} × {master.height} px ·{" "}
-                        {master.format.toUpperCase()} · bestätigt{" "}
-                        {new Date(master.approvedAt).toLocaleString("de-DE")}
+                        {tr("common.m7b5a81f16c")}
+                        {master.version}
+                      </p>
+                      <p>
+                        {master.width} × {master.height}{" "}
+                        {tr("common.me27419e200")} {master.format.toUpperCase()}{" "}
+                        {tr("common.m4df22c2054")}{" "}
+                        {new Date(master.approvedAt).toLocaleString(
+                          i18n.language,
+                        )}
                       </p>
                       <MasterHistory
                         project={p!}
@@ -885,28 +901,20 @@ export function App() {
                           })
                         }
                       />
-                      <p className="muted">
-                        Die Originaldatei bleibt unverändert. Jede neue
-                        Ausdrucksdatei verweist auf diesen Master.
-                      </p>
+                      <p className="muted">{tr("common.m0b3fa6d2a9")}</p>
                     </>
                   ) : (
                     <div className="drop-zone">
-                      <h3>Dein freigegebenes Masterportrait</h3>
-                      <p>
-                        Ein PNG/WebP hier ablegen oder lokal auswählen.
-                        Anschließend prüfen und bestätigen.
-                      </p>
+                      <h3>{tr("common.me758618855")}</h3>
+                      <p>{tr("common.maff80c3244")}</p>
                       <button
                         className="primary"
                         disabled={!character}
                         onClick={choose}
                       >
-                        Masterportrait auswählen …
+                        {tr("common.m61f68c13f7")}
                       </button>
-                      <small>
-                        Bis 32 MiB · keine Skalierung · keine Uploads
-                      </small>
+                      <small>{tr("common.m64e437de0d")}</small>
                     </div>
                   )}
                 </section>
@@ -925,16 +933,11 @@ export function App() {
               </div>
               {view === "Motion" && (
                 <section className="welcome">
-                  <p className="eyebrow">ALS NÄCHSTES</p>
-                  <h2>Motion · späterer Meilenstein.</h2>
+                  <p className="eyebrow">{tr("common.m60692e287f")}</p>
+                  <h2>{tr("common.meb31b2f771")}</h2>
+                  <p>{tr("common.mf6b43b0bc5")}</p>
                   <p>
-                    Nach Style Intelligence geplant: manuell geladene Blink- und
-                    Mundframes, Timeline mit individueller Dauer, Play/Pause und
-                    JSON- sowie PNG-Export. Die freigegebenen Ausdrücke bilden
-                    die Grundlage.
-                  </p>
-                  <p>
-                    Aktuell freigegeben:{" "}
+                    {tr("common.m9ebde299de")}{" "}
                     {
                       p.assets.filter(
                         (a) =>
@@ -949,10 +952,7 @@ export function App() {
           }
         </fieldset>
         <footer>
-          LACEFRAME{" "}
-          <span>
-            Lokale Dateien · manuelle Freigabe · unveränderlicher Master
-          </span>
+          {tr("common.m3e06abfa73")} <span>{tr("common.m16ae3a1616")}</span>
         </footer>
       </main>
       {staged && (
@@ -963,51 +963,51 @@ export function App() {
             aria-modal="true"
             aria-labelledby="import-title"
           >
-            <p className="eyebrow">IMPORT PRÜFEN</p>
+            <p className="eyebrow">{tr("common.ma0517ece3e")}</p>
             {error && (
               <div role="alert" className="error">
-                {error}
+                {displayMessage(error)}
               </div>
             )}
             <h2 id="import-title">
               {staged.variantId
-                ? "Als Kandidat importieren"
-                : "Als Master V1 bestätigen & sperren"}
+                ? tr("common.m18d3b9b2f2")
+                : tr("common.m64b535dba9")}
             </h2>
             <p>
               {staged.image.name} · {staged.image.width} × {staged.image.height}{" "}
-              px · {staged.image.format.toUpperCase()}
+              {tr("common.me27419e200")}
+              {staged.image.format.toUpperCase()}
             </p>
             <div className="checker staged">
-              <img alt="Importvorschau" src={staged.image.preview} />
+              <img alt={tr("common.m37a53c653a")} src={staged.image.preview} />
             </div>
             <p className="mono">SHA-256 {staged.image.sha256}</p>
             <p>
               {staged.variantId
-                ? "Das Bild wird als ungeprüfter Kandidat mit dem exakten Master verknüpft."
-                : "Bestätige, dass dieses Portrait als Master freigegeben ist. Master V1 bleibt unverändert; Verbesserungen werden als neue Version freigegeben. Die Quelldatei wird unverändert kopiert."}
+                ? tr("common.m1109931ff9")
+                : tr("common.mf37951ce81")}
             </p>
             {!staged.variantId && (
               <>
                 <p role="status">
                   {staged.image.quality?.status === "transparent"
-                    ? "Transparenz vorhanden – manuelle Prüfung erforderlich"
-                    : "Kein geeigneter transparenter Master: Hintergrund freistellen oder im Character Creator neu generieren. Freigabe gesperrt."}
+                    ? tr("common.m219f49bcc9")
+                    : tr("common.m5d059ae79d")}
                 </p>
                 <label>
                   <input
-                    aria-label="Import Master Sichtprüfung"
+                    aria-label={tr("common.mb258a641cf")}
                     type="checkbox"
                     checked={importReviewed}
                     onChange={(e) => setImportReviewed(e.target.checked)}
                   />
-                  Identität, Raster bei 1:1 und Vergrößerung, Silhouette und
-                  Alpha-Kanten geprüft; diesen Master ausdrücklich aktivieren
+                  {tr("common.m79dce020cc")}
                 </label>
                 <label>
-                  Prüfnotiz
+                  {tr("common.mbcb1613882")}
                   <textarea
-                    aria-label="Import Master Prüfnotiz"
+                    aria-label={tr("common.mac862c0a68")}
                     value={importNotes}
                     maxLength={8000}
                     onChange={(e) => setImportNotes(e.target.value)}
@@ -1016,9 +1016,7 @@ export function App() {
               </>
             )}
             {staged.variantId && staged.image.format !== "png" && (
-              <p className="warning">
-                Für Kandidaten sind ausschließlich PNG-Dateien erlaubt.
-              </p>
+              <p className="warning">{tr("common.m31294358c2")}</p>
             )}
             <div className="button-row">
               <button
@@ -1030,7 +1028,7 @@ export function App() {
                   )
                 }
               >
-                Abbrechen
+                {tr("common.mf7ff1178af")}
               </button>
               <button
                 className="primary"
@@ -1045,8 +1043,8 @@ export function App() {
                 onClick={confirmImport}
               >
                 {staged.variantId
-                  ? "Kandidat importieren"
-                  : "Freigegebenen Master sperren"}
+                  ? tr("common.mab4361410b")
+                  : tr("common.m93c761fea2")}
               </button>
             </div>
           </section>

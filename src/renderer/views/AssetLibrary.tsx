@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { MasterApproval } from "../components/MasterApproval";
 import { useState } from "react";
 import type { Snapshot, Command } from "../../shared/domain";
@@ -71,60 +72,60 @@ export function AssetLibrary({
     !asset.composite &&
     p.attempts.find((a) => a.id === asset.attemptId)?.mask;
   return (
-    <section className="library-workspace panel" aria-label="Assetbibliothek">
+    <section
+      className="library-workspace panel"
+      aria-label={tr("common.m95570f9f48")}
+    >
       <div className="section-head">
         <div>
-          <h2>Library · Assets prüfen</h2>
-          <p>
-            Master, Kandidaten, Expressions und Qualitätsversionen · Originale
-            und historische Verknüpfungen bleiben erhalten.
-          </p>
+          <h2>{tr("common.m899ab0b2e0")}</h2>
+          <p>{tr("common.m0b0408dd1c")}</p>
         </div>
       </div>
       <div className="library-filters">
         <label>
-          Assettyp
+          {tr("common.mdeef0d243a")}
           <select
-            aria-label="Library Assettyp"
+            aria-label={tr("common.mb2ef94c0e1")}
             value={kind}
             onChange={(e) => {
               setKind(e.target.value);
               onSelect("");
             }}
           >
-            <option value="all">Alle Assets</option>
-            <option value="master">Masterversionen</option>
-            <option value="master-candidate">Masterkandidaten</option>
-            <option value="expression">Expressions</option>
-            <option value="quality">Qualitätsvarianten</option>
+            <option value="all">{tr("common.m7b2e9cf755")}</option>
+            <option value="master">{tr("common.m569be0cd87")}</option>
+            <option value="master-candidate">{tr("common.m2767f4e27f")}</option>
+            <option value="expression">{tr("common.navExpressions")}</option>
+            <option value="quality">{tr("common.mbd544430a2")}</option>
           </select>
         </label>
         <label>
-          Prüfstatus
+          {tr("common.m663c728563")}
           <select
-            aria-label="Library Prüfstatus"
+            aria-label={tr("common.m8738145cb5")}
             value={state}
             onChange={(e) => {
               setState(e.target.value);
               onSelect("");
             }}
           >
-            <option value="all">Alle</option>
-            <option value="candidate">Ungeprüft</option>
-            <option value="approved">Freigegeben</option>
-            <option value="rejected">Abgelehnt</option>
+            <option value="all">{tr("common.m3801a35c51")}</option>
+            <option value="candidate">{tr("common.m3116c262dc")}</option>
+            <option value="approved">{tr("common.med04045dd2")}</option>
+            <option value="rejected">{tr("common.ma9148e8654")}</option>
           </select>
         </label>
         <label>
-          Asset
+          {tr("common.m80d298c9f2")}
           <select
-            aria-label="Library Asset"
+            aria-label={tr("common.mcab7562d8b")}
             value={asset?.id ?? ""}
             onChange={(e) => onSelect(e.target.value)}
           >
             {selected && !filtered.some((a) => a.id === selected.id) && (
               <option value={selected.id}>
-                {selected.label} · gezielt geöffnet
+                {selected.label} {tr("common.m5454d38eca")}
               </option>
             )}
             {filtered.map((a) => (
@@ -136,10 +137,7 @@ export function AssetLibrary({
         </label>
       </div>
       {!asset ? (
-        <p>
-          Noch keine passenden Assets. Im Studio einen Master erstellen oder
-          einen bestehenden Master unter Characters importieren.
-        </p>
+        <p>{tr("common.m23ae854c14")}</p>
       ) : (
         <>
           <div className="section-head">
@@ -148,20 +146,20 @@ export function AssetLibrary({
             </h3>
             <span className={`badge ${asset.state}`}>
               {asset.state === "candidate"
-                ? "Kandidat · ungeprüft"
+                ? tr("common.m2576d1e471")
                 : asset.state === "approved"
-                  ? "Freigegeben"
-                  : "Abgelehnt"}
+                  ? tr("common.med04045dd2")
+                  : tr("common.ma9148e8654")}
             </span>
           </div>
           {asset.kind === "expression" && (
             <p>
-              Expression von Master V
+              {tr("common.mc2da79f0be")}
               {p.masters.find((m) => m.id === asset.masterId)?.version} ·{" "}
               {p.characters.find((c) => c.id === asset.characterId)
                 ?.masterId === asset.masterId
-                ? "aktueller Master"
-                : "historischer Master – nicht automatisch auf die neue Version übertragen"}
+                ? tr("common.mefc99db433")
+                : tr("common.m271219966a")}
             </p>
           )}
           <MasterCandidateCompare
@@ -169,7 +167,7 @@ export function AssetLibrary({
             candidate={asset}
             beforeLabel={
               asset.kind === "master-candidate"
-                ? "Identität"
+                ? tr("common.m09841f4a4e")
                 : asset.kind === "expression"
                   ? "Master"
                   : "Quelle / Master"
@@ -189,7 +187,7 @@ export function AssetLibrary({
                   })
                 }
               >
-                Im Studio prüfen und bearbeiten
+                {tr("common.m8e07cd0617")}
               </button>
             )}
             {masterId && (
@@ -202,7 +200,7 @@ export function AssetLibrary({
                   })
                 }
               >
-                Mit demselben Master weitere Expression erstellen
+                {tr("common.m52aa9dd335")}
               </button>
             )}
             {asset.state === "candidate" &&
@@ -214,7 +212,7 @@ export function AssetLibrary({
                       key={asset.id}
                       source={asset}
                       disabled={disabled}
-                      label="Als Master freigeben"
+                      label={tr("common.m41f58bc50e")}
                       onApprove={(review) =>
                         command(
                           {
@@ -223,7 +221,7 @@ export function AssetLibrary({
                             status: "approved",
                             review,
                           },
-                          "Master freigegeben.",
+                          tr("common.m5f5821a731"),
                         )
                       }
                       onCutout={() => setCutoutRequested((v) => v + 1)}
@@ -244,11 +242,11 @@ export function AssetLibrary({
                       onClick={() =>
                         command(
                           { type: "review", id: asset.id, status: "approved" },
-                          "Expression freigegeben.",
+                          tr("common.m71ba34a309"),
                         )
                       }
                     >
-                      Asset freigeben
+                      {tr("common.m90941205e5")}
                     </button>
                   )}
                   <button
@@ -263,21 +261,16 @@ export function AssetLibrary({
                           id: asset.id,
                           status: "rejected",
                         },
-                        "Kandidat abgelehnt.",
+                        tr("common.m0df5d0edfa"),
                       )
                     }
                   >
-                    Asset ablehnen
+                    {tr("common.m56af92162b")}
                   </button>
                 </>
               )}
           </div>
-          {hardRaw && (
-            <p className="warning">
-              Hard-Lock-Rohkandidat: zuerst im Studio registrieren und
-              compositen. Die Freigabe bleibt gesperrt.
-            </p>
-          )}
+          {hardRaw && <p className="warning">{tr("common.mac108e62b9")}</p>}
           <AssetQuality
             key={asset.id}
             source={asset}
@@ -289,19 +282,18 @@ export function AssetLibrary({
           />
           {attempt && (
             <details>
-              <summary>
-                Historischer Prompt & Provenienz · schreibgeschützt
-              </summary>
+              <summary>{tr("common.mbc6ab538d4")}</summary>
               <pre
                 className="prompt-base"
-                aria-label="Library Historischer Prompt"
+                aria-label={tr("common.mee48c68600")}
               >
                 {attempt.promptRevision.prompt}
               </pre>
               <small>
-                Versuch {attempt.id} · Stilrevision R
-                {attempt.artDirectionRevision ?? "—"}. Einstellungen im Studio
-                verändern diesen Snapshot nicht.
+                {tr("common.mb52614c76a")}
+                {attempt.id} {tr("common.mdec8f41a7b")}
+                {attempt.artDirectionRevision ?? "—"}
+                {tr("common.mce7c399eab")}
               </small>
             </details>
           )}

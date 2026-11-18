@@ -1,3 +1,7 @@
+import { uiLabel } from "../../shared/locales";
+import { i18n } from "../../shared/locales";
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { PortraitPreview } from "../components/PortraitPreview";
 import { StudioSteps, useStudioSteps } from "../components/StudioSteps";
 import { ImagePreview } from "../components/ImagePreview";
@@ -164,9 +168,7 @@ export function CreateView({
       promptMode === "expert" &&
       composer.edited &&
       mode !== "expert" &&
-      !window.confirm(
-        "Eigenen Expert Override verwerfen und zur strukturierten Vorlage wechseln?",
-      )
+      !window.confirm(tr("studio.mb840957a3f"))
     )
       return;
     setPromptMode(mode);
@@ -225,10 +227,7 @@ export function CreateView({
         }
       })
       .catch(() => {
-        if (live)
-          setProviderError(
-            "Anbieter konnten nicht geladen werden. Workspace erneut öffnen.",
-          );
+        if (live) setProviderError(tr("studio.m749fa1b7e2"));
       });
     return () => {
       live = false;
@@ -239,7 +238,7 @@ export function CreateView({
   >(latest?.providerId ?? "manual-import");
   const [codex, setCodex] = useState<CodexStatus>({
     state: "unavailable",
-    message: "Codex wird geprüft …",
+    message: tr("studio.m893ba1edb5"),
   });
   const provider = providers.find((p) => p.id === providerId);
   function checkCodex() {
@@ -293,10 +292,7 @@ export function CreateView({
           } else setProviderError(r.error);
         })
         .catch(() => {
-          if (live)
-            setProviderError(
-              "Status konnte nicht gelesen werden. Generierung über Abbrechen beenden.",
-            );
+          if (live) setProviderError(tr("studio.m4c9304fd9c"));
         })
         .finally(() => {
           pending = false;
@@ -411,25 +407,22 @@ export function CreateView({
   const [dragging, setDragging] = useState(false);
   const status = asset
     ? {
-        candidate: "Entwurf · ungeprüft",
-        approved: "Freigegeben",
-        rejected: "Abgelehnt",
+        candidate: tr("studio.m69efc98d11"),
+        approved: tr("studio.med04045dd2"),
+        rejected: tr("studio.ma9148e8654"),
       }[asset.status]
     : active
       ? active.providerId === "codex-native"
-        ? "Kein bestätigtes Codex-Ergebnis"
-        : "Bildimport ausstehend"
-      : "Noch kein Ergebnis · nicht generiert";
+        ? tr("studio.m41aa115ca1")
+        : tr("studio.m41282c9a1f")
+      : tr("studio.m120e61f2ce");
   async function unwrap<T>(promise: Promise<Result<T>>): Promise<T> {
     const result = await promise;
     if (!result.ok) throw new Error(result.error);
     return result.value;
   }
   async function prepare(forceNew = false) {
-    if (!draft || !valid)
-      throw new Error(
-        "Freigegebenen Master und Variante wählen; Prompt-Konflikt auflösen.",
-      );
+    if (!draft || !valid) throw new Error(tr("studio.m9355927c98"));
     if (!forceNew && active && matches && !asset) return active;
     const saved = await unwrap(
       window.laceframe.command({ type: "prepareAttempt", draft }),
@@ -455,23 +448,21 @@ export function CreateView({
       },
       () => {},
       openBrowser === undefined
-        ? "Prompt-Revision gespeichert."
+        ? tr("studio.m81f3499d3c")
         : openBrowser
-          ? "Prompt kopiert. Masterbild im Browser manuell als Referenz beifügen."
-          : "Prompt kopiert.",
+          ? tr("studio.m1c02a51d7e")
+          : tr("studio.maa2c623451"),
     );
   }
   function importImage(file?: File, forceNew = false) {
     void perform(
       async () => {
         if (!valid || providerId !== "manual-import")
-          throw new Error(
-            "Master und Variante wählen und eigenen Prompt bestätigen.",
-          );
+          throw new Error(tr("studio.me1db3836df"));
         let image: StagedImage | null;
         if (file) {
           if (file.size > MAX_IMAGE_BYTES)
-            throw new Error("Das Bild überschreitet 32 MiB.");
+            throw new Error(tr("studio.mfe6b5a54d0"));
           image = await unwrap(
             window.laceframe.stageImage(
               new Uint8Array(await file.arrayBuffer()),
@@ -504,12 +495,7 @@ export function CreateView({
     );
   }
   function discardReview() {
-    return (
-      !qualityDirty ||
-      window.confirm(
-        "Ungespeicherte Qualitäts-Prüfnotizen verwerfen und Bild wechseln?",
-      )
-    );
+    return !qualityDirty || window.confirm(tr("studio.m0692974797"));
   }
   function requestImport(file?: File) {
     if (!discardReview()) return;
@@ -518,8 +504,7 @@ export function CreateView({
       void perform(
         async () => ({
           ok: false,
-          error:
-            "Für einen manuellen Ergebnisimport den Anbieter „Manueller Import“ wählen.",
+          error: tr("studio.m22be420cda"),
         }),
         () => {},
       );
@@ -577,19 +562,21 @@ export function CreateView({
   const requirements: Requirement[] = [];
   if (busy && !running)
     requirements.push({
-      message: "Eine andere Aktion oder Generierung läuft.",
+      message: tr("studio.mb632c4ceb4"),
     });
   if (!character)
-    requirements.push({ message: "Figur fehlt.", target: "studio-context" });
+    requirements.push({
+      message: tr("studio.m0b88139e9c"),
+      target: "studio-context",
+    });
   if (!master)
     requirements.push({
-      message:
-        "Kein freigegebener Master. Master im Studio erstellen oder unter Characters importieren.",
+      message: tr("studio.m20a47d623a"),
     });
-  if (!variant) requirements.push({ message: "Emotionsvariante fehlt." });
+  if (!variant) requirements.push({ message: tr("studio.med0f136abc") });
   if (editMode === "soft")
     requirements.push({
-      message: "Soft Lock wird vom verfügbaren Provider nicht unterstützt.",
+      message: tr("studio.m61360f4ce8"),
     });
   if (
     editMode === "hard" &&
@@ -599,13 +586,12 @@ export function CreateView({
       hardFormat === false)
   )
     requirements.push({
-      message:
-        "Ungeeignetes Format für Hard Pixel Lock: PNG RGBA8, nicht animiert, maximal 16 MP erforderlich.",
+      message: tr("studio.m2f6e95b714"),
     });
   if (editMode === "hard" && hardFormat === undefined)
-    requirements.push({ message: "Hard-Pixel-Lock-Format wird geprüft." });
+    requirements.push({ message: tr("studio.m3d8ee134f6") });
   if (editMode === "hard" && !selectedMask)
-    requirements.push({ message: "Gespeicherte Maskenrevision fehlt." });
+    requirements.push({ message: tr("studio.m3ea765c32b") });
   if (providerId === "codex-native" && !codex.available && !running)
     requirements.push({ message: codex.message });
   if (
@@ -614,27 +600,25 @@ export function CreateView({
     !codex.multipleReferences
   )
     requirements.push({
-      message:
-        "Mehrfachreferenzen nicht bestätigt. Stil ohne Referenzbilder oder eigenen Masterstil wählen.",
+      message: tr("studio.m1cf899c764"),
     });
   if (!running)
     requirements.push(...promptRequirements(promptMode, composer, base));
   if (!valid && !running && !requirements.length)
     requirements.push({
-      message:
-        "Einstellungen oder Prompt überschreiten die erlaubten Grenzen. Eingaben im Prompt Builder prüfen.",
+      message: tr("studio.mad802ee11a"),
       target: "prompt-builder",
     });
   const slot = document.getElementById("create-action-slot");
   const codexLabels = {
-    "not-installed": "Codex nicht installiert",
-    "not-authenticated": "Nicht angemeldet",
-    unavailable: "ImageGen nicht verfügbar",
-    ready: "Codex bereit",
-    running: "Generierung läuft",
-    completed: "Generierung abgeschlossen",
-    failed: "Generierung fehlgeschlagen",
-    cancelled: "Generierung abgebrochen",
+    "not-installed": tr("studio.m36a2abb0cf"),
+    "not-authenticated": tr("studio.m3af1e1869e"),
+    unavailable: tr("studio.m360d989d41"),
+    ready: tr("studio.mcc2de517fa"),
+    running: tr("studio.m8ab68d5e03"),
+    completed: tr("studio.m52a4a21b42"),
+    failed: tr("studio.mf47b8595ef"),
+    cancelled: tr("studio.m7b75eff51a"),
   };
   return (
     <div
@@ -652,21 +636,21 @@ export function CreateView({
         createPortal(
           <div className="create-action-bar">
             <div className="job-status">
-              <p role="status" aria-label="Codex Status">
+              <p role="status" aria-label={tr("studio.m1546cae602")}>
                 <strong>
                   {providerId === "codex-native" || running
                     ? codexLabels[codex.state]
-                    : "Manueller Ergebnisimport"}
+                    : tr("studio.ma3733afa7e")}
                 </strong>
                 <span>
                   {providerId === "codex-native" || running
-                    ? codex.message
-                    : "PNG/WebP ablegen oder importieren · Prompt und Master bleiben zugeordnet."}
+                    ? displayMessage(codex.message)
+                    : tr("studio.mc81944c168")}
                 </span>
               </p>
               {timing && (
                 <output
-                  aria-label="Generierungszeit"
+                  aria-label={tr("studio.m5580293557")}
                   className="generation-time"
                 >
                   {executionLabel(timing, running)}
@@ -684,9 +668,7 @@ export function CreateView({
                 />
               )}
               {providerId === "codex-native" && (
-                <small>
-                  Master + Prompt an Codex · nutzt dein Codex-Kontingent.
-                </small>
+                <small>{tr("studio.mf585c61394")}</small>
               )}
             </div>
             <div className="button-row">
@@ -696,7 +678,7 @@ export function CreateView({
                   disabled={busy || !valid || running}
                   onClick={generate}
                 >
-                  Mit Masterreferenz generieren
+                  {tr("studio.mfd1b7e32ff")}
                 </button>
               )}
               {running && (
@@ -717,7 +699,7 @@ export function CreateView({
                     )
                   }
                 >
-                  Generierung abbrechen
+                  {tr("studio.m611dcba198")}
                 </button>
               )}
               {providerId === "manual-import" && (
@@ -726,7 +708,7 @@ export function CreateView({
                   disabled={busy || !valid || running}
                   onClick={() => requestImport()}
                 >
-                  {asset ? "Ergebnis ersetzen …" : "Ergebnis importieren …"}
+                  {asset ? tr("studio.m3d13f2eb9b") : tr("studio.m3dc71ce5b9")}
                 </button>
               )}
             </div>
@@ -738,48 +720,52 @@ export function CreateView({
         <PromptConflict state={composer} onChange={setComposer} />
       )}
       <p className="studio-context-summary">
-        Arbeitsauswahl: {character?.name ?? "Keine Figur"} · Master V
+        {tr("studio.m83fe1716b7")}
+        {character?.name ?? tr("common.m1c268b3dcc")} {tr("studio.mcac8e58b3a")}
         {master?.version ?? "—"} · {family?.label} / {variant?.label} ·{" "}
         {artDirection?.name ?? "Eigener Masterstil"}
       </p>
       {providerError && (
         <p role="alert" className="error">
-          {providerError}
+          {displayMessage(providerError)}
         </p>
       )}
       {!character && (
         <div className="prompt-conflict">
-          <p>Figur anlegen und ihren freigegebenen Master importieren.</p>
-          <button onClick={onCharacters}>Zu Characters</button>
+          <p>{tr("studio.me073caaec1")}</p>
+          <button onClick={onCharacters}>{tr("studio.m6bdf20436b")}</button>
         </div>
       )}
       {(step === "Auswählen" || step === "Erzeugen") && (
-        <section className="studio-reference" aria-label="Masterreferenz">
+        <section
+          className="studio-reference"
+          aria-label={tr("studio.m558170f96d")}
+        >
           <PortraitPreview
             image={master}
-            caption={`${character?.name ?? "Figur"} · Master V${master?.version ?? "—"}`}
+            caption={tr("studio.mff170e17a8", {
+              v0: character?.name ?? "Figur",
+              v1: master?.version ?? "—",
+            })}
           />
-          <p>
-            Identität schützen · Haare, Outfit und Accessoires bleiben am Master
-            gebunden.
-          </p>
+          <p>{tr("studio.m0e0d3e4ce4")}</p>
           {step === "Auswählen" && (
             <button
               className="primary"
               disabled={!master || !variant}
               onClick={() => flow.setStep("Erzeugen")}
             >
-              Weiter zu Erzeugen
+              {tr("studio.m82c05b2ccc")}
             </button>
           )}
           {step === "Erzeugen" && (
             <p className="generation-brief">
               {family?.label} · {variant?.label} ·{" "}
               {action === "silent"
-                ? "Still"
+                ? tr("studio.m70bcb5a44e")
                 : action === "speaking"
-                  ? "Sprechend"
-                  : "Rufend"}{" "}
+                  ? tr("studio.mf541c979a4")
+                  : tr("studio.m1b5e7851ce")}{" "}
               · {artDirection?.name ?? "Eigener Masterstil"}
             </p>
           )}
@@ -793,9 +779,9 @@ export function CreateView({
             {!contextControlled && (
               <>
                 <label>
-                  Figur
+                  {tr("studio.m446cb18289")}
                   <select
-                    aria-label="Create Figur"
+                    aria-label={tr("studio.me7d205da98")}
                     value={character?.id ?? ""}
                     onChange={(e) => {
                       if (
@@ -803,19 +789,17 @@ export function CreateView({
                         formSignature !==
                           (savedSignature.current ??
                             initialSignature.current) &&
-                        !window.confirm(
-                          "Ungespeicherten Prompt verwerfen und Figur wechseln?",
-                        )
+                        !window.confirm(tr("studio.m810a4771f8"))
                       )
                         return;
                       command(
                         { type: "selectCharacter", id: e.target.value },
-                        "Figur ausgewählt.",
+                        tr("studio.mb0e86ee40c"),
                       );
                     }}
                   >
                     <option value="" disabled>
-                      Figur wählen
+                      {tr("studio.m7d5bc64536")}
                     </option>
                     {p.characters.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -827,26 +811,27 @@ export function CreateView({
               </>
             )}
             <label>
-              Master
+              {tr("studio.ma2bb34780a")}
               <select
-                aria-label="Create Masterversion"
+                aria-label={tr("studio.m7e86a3db5e")}
                 value={master?.id ?? ""}
                 onChange={(e) => editOptions(() => setMasterId(e.target.value))}
               >
                 <option disabled value="">
-                  Master wählen
+                  {tr("studio.m885eeebb59")}
                 </option>
                 {masters.map((m) => (
                   <option key={m.id} value={m.id}>
-                    V{m.version} · {m.width} × {m.height} · gesperrt
+                    V{m.version} · {m.width} × {m.height}{" "}
+                    {tr("studio.m24df89e2f7")}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              Emotion
+              {tr("studio.maca7d726ea")}
               <select
-                aria-label="Create Familie"
+                aria-label={tr("studio.mf2f90550b0")}
                 value={family?.id ?? ""}
                 onChange={(e) =>
                   editOptions(() => {
@@ -871,9 +856,9 @@ export function CreateView({
               </select>
             </label>
             <label>
-              Variante
+              {tr("studio.ma0f6dc6453")}
               <select
-                aria-label="Create Variante"
+                aria-label={tr("studio.m15b5d968b0")}
                 value={variant?.id ?? ""}
                 onChange={(e) =>
                   editOptions(() => {
@@ -887,7 +872,7 @@ export function CreateView({
                 }
               >
                 <option disabled value="">
-                  Variante wählen
+                  {tr("studio.m91257de3d1")}
                 </option>
                 {variants.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -897,9 +882,9 @@ export function CreateView({
               </select>
             </label>
             <label>
-              Anbieter
+              {tr("studio.m9080a78b3e")}
               <select
-                aria-label="Create Anbieter"
+                aria-label={tr("studio.m4e2abea6d3")}
                 value={providerId}
                 onChange={(e) => {
                   if (!discardReview()) return;
@@ -909,34 +894,36 @@ export function CreateView({
                   setActiveId("");
                 }}
               >
-                <option value="manual-import">Manueller Import</option>
-                <option value="codex-native">Codex · ImageGen</option>
+                <option value="manual-import">
+                  {tr("studio.mfcfadfe115")}
+                </option>
+                <option value="codex-native">{tr("studio.ma40ff9970c")}</option>
               </select>
             </label>
           </div>
           <section
             className="studio-expression-summary"
-            aria-label="Expression Zusammenfassung"
+            aria-label={tr("studio.me733fe4857")}
           >
             <div className="inspector-options">
               <label>
-                Stimmaktion
+                {tr("studio.m1381815ac3")}
                 <select
-                  aria-label="Create Stimmaktion"
+                  aria-label={tr("studio.m2d1e4feaad")}
                   value={action}
                   onChange={(e) =>
                     editOptions(() => setAction(e.target.value as VocalAction))
                   }
                 >
-                  <option value="silent">Still</option>
-                  <option value="speaking">Sprechend</option>
-                  <option value="shouting">Rufend</option>
+                  <option value="silent">{tr("studio.m70bcb5a44e")}</option>
+                  <option value="speaking">{tr("studio.mf541c979a4")}</option>
+                  <option value="shouting">{tr("studio.m1b5e7851ce")}</option>
                 </select>
               </label>
               <label>
-                Intensität · optional
+                {tr("studio.m0f7c5a2037")}
                 <input
-                  aria-label="Create Intensität"
+                  aria-label={tr("studio.m34e8e23dbc")}
                   type="number"
                   min="0"
                   max="1"
@@ -972,16 +959,16 @@ export function CreateView({
                   });
               }}
             >
-              Expression bearbeiten
+              {tr("studio.m5fc7b738c6")}
             </button>
           </section>
           <section className="studio-style-choice">
-            <h3>Stil verwenden</h3>
+            <h3>{tr("studio.m7bf114c17f")}</h3>
             {character && (
               <label>
-                Darstellungsstil dieser Figur
+                {tr("studio.ma75a473438")}
                 <select
-                  aria-label="Charakter Stilzuordnung"
+                  aria-label={tr("studio.md0a8680b38")}
                   value={
                     character.styleSelection?.mode === "master"
                       ? "master"
@@ -1004,14 +991,12 @@ export function CreateView({
                                   profileId: e.target.value.slice(8),
                                 },
                       },
-                      "Stilzuordnung gespeichert.",
+                      tr("studio.m23e6766fb4"),
                     )
                   }
                 >
-                  <option value="project">Projektstandard</option>
-                  <option value="master">
-                    Eigener Masterstil · keine Stilreferenzen
-                  </option>
+                  <option value="project">{tr("studio.m469a6fdfe5")}</option>
+                  <option value="master">{tr("studio.m512fe94ce9")}</option>
                   {p.artDirections.map((a) => (
                     <option key={a.id} value={`profile:${a.id}`}>
                       {a.name}
@@ -1021,7 +1006,7 @@ export function CreateView({
               </label>
             )}
             <button onClick={() => onArtDirection(artDirection?.id)}>
-              Art Direction bearbeiten
+              {tr("studio.mef0771e059")}
             </button>
           </section>
         </div>
@@ -1030,13 +1015,13 @@ export function CreateView({
         <div>
           <section className="reference-inputs">
             <h3>
-              Tatsächlich verwendete Bildreferenzen ·{" "}
+              {tr("studio.m255a2b902d")}{" "}
               {master ? 1 + styleReferences.length : 0}
             </h3>
             {master && (
               <ImagePreview
                 id={master.id}
-                caption="Bild 1 · Identity Master"
+                caption={tr("studio.mb8abe202c2")}
                 zoom="fit"
               />
             )}
@@ -1044,7 +1029,7 @@ export function CreateView({
               <ImagePreview
                 key={r.id}
                 id={r.id}
-                caption={`Bild ${i + 2} · Stilreferenz, keine Identität`}
+                caption={tr("studio.m240ca8af0d", { v0: i + 2 })}
                 zoom="fit"
               />
             ))}
@@ -1056,9 +1041,9 @@ export function CreateView({
           {master && (
             <div className="mask-controls">
               <label>
-                Bearbeitungsmodus
+                {tr("studio.m3a5aea5577")}
                 <select
-                  aria-label="Bearbeitungsmodus"
+                  aria-label={tr("studio.m3a5aea5577")}
                   value={editMode}
                   onChange={(e) =>
                     editOptions(() =>
@@ -1066,43 +1051,38 @@ export function CreateView({
                     )
                   }
                 >
-                  <option value="none">Ohne Maske</option>
-                  <option value="soft">Soft Lock · nicht verfügbar</option>
-                  <option value="hard">Originalpixel erhalten · lokal</option>
+                  <option value="none">{tr("studio.m9e1390b77e")}</option>
+                  <option value="soft">{tr("studio.m238d825372")}</option>
+                  <option value="hard">{tr("studio.mfa35d233df")}</option>
                 </select>
               </label>
               {editMode === "soft" && (
-                <p className="warning">
-                  Keine dokumentierte Inpainting-Maskeneingabe im unterstützten
-                  Codex-Protokoll. Soft Lock nicht verfügbar; kein Auftrag wird
-                  gesendet.
-                </p>
+                <p className="warning">{tr("studio.mab49edc33a")}</p>
               )}
               {editMode === "hard" && (
                 <>
                   {(master.format !== "png" ||
                     master.width * master.height > MAX_MASK_PIXELS) && (
-                    <p className="warning">
-                      Hard Lock für diesen Master nicht verfügbar: benötigt PNG
-                      bis 8 Bit pro Kanal und 16 Megapixel. Ohne Maske
-                      weiterarbeiten; das Original wird nicht konvertiert.
-                    </p>
+                    <p className="warning">{tr("studio.m5535e50055")}</p>
                   )}
                   <label>
-                    Maskenrevision
+                    {tr("studio.m1deed24dff")}
                     <select
-                      aria-label="Maskenrevision"
+                      aria-label={tr("studio.m1deed24dff")}
                       value={mask?.id ?? ""}
                       onChange={(e) =>
                         editOptions(() => setMaskId(e.target.value))
                       }
                     >
-                      <option value="">Maske wählen</option>
+                      <option value="">{tr("studio.m422bf07c9f")}</option>
                       {masks.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name}
                           {expert
-                            ? ` · R${m.revision} · ${m.sha256.slice(0, 8)}`
+                            ? tr("studio.m5eb66b0ca5", {
+                                v0: m.revision,
+                                v1: m.sha256.slice(0, 8),
+                              })
                             : ""}
                         </option>
                       ))}
@@ -1112,7 +1092,7 @@ export function CreateView({
                     disabled={master.width * master.height > MAX_MASK_PIXELS}
                     onClick={() => setMaskEditor(true)}
                   >
-                    {mask ? "Maske bearbeiten" : "Maske erstellen"}
+                    {mask ? tr("studio.m88608d698b") : tr("studio.m45cca50395")}
                   </button>
                   {mask && (
                     <button
@@ -1121,15 +1101,10 @@ export function CreateView({
                         setMaskEditor(true);
                       }}
                     >
-                      Neue Maske
+                      {tr("studio.m9ae0c5e261")}
                     </button>
                   )}
-                  <small>
-                    KI liefert Rohbild ohne Inpainting-Maske. Hard Lock
-                    berechnet danach Originalpixel lokal; identische Abmessungen
-                    und bestätigte Registrierung erforderlich. PNG bis 8 Bit /
-                    16 MP.
-                  </small>
+                  <small>{tr("studio.m1633b219d2")}</small>
                 </>
               )}
             </div>
@@ -1176,7 +1151,7 @@ export function CreateView({
             void perform(
               async () => ({
                 ok: false,
-                error: "Bitte genau ein PNG/WebP ablegen.",
+                error: tr("studio.m3bc88761b7"),
               }),
               () => {},
             );
@@ -1187,25 +1162,25 @@ export function CreateView({
       >
         {step !== "Auswählen" && (
           <div className="comparison-heading">
-            <h2>Master / Entwurf</h2>
+            <h2>{tr("studio.mbfdaacb06d")}</h2>
             <span className={`badge ${asset?.status ?? ""}`}>{status}</span>
           </div>
         )}
         {step !== "Auswählen" && active?.mask && (
           <div className="mask-controls">
             <label>
-              Ergebnisansicht
+              {tr("studio.m191cd5aee7")}
               <select
-                aria-label="Rohkandidat oder Composite"
+                aria-label={tr("studio.m60d63fc023")}
                 value={candidateKind}
                 onChange={(e) => {
                   if (discardReview()) setCandidateKind(e.target.value);
                 }}
               >
-                <option value="raw">Rohkandidat</option>
+                <option value="raw">{tr("studio.m0c63256404")}</option>
                 <option value="composite">
-                  Geschütztes Ergebnis
-                  {!composite ? " · noch nicht erstellt" : ""}
+                  {tr("studio.mb4a13ecc6b")}
+                  {!composite ? tr("studio.mc1af5912d8") : ""}
                 </option>
               </select>
             </label>
@@ -1215,31 +1190,32 @@ export function CreateView({
                 checked={maskOverlay}
                 onChange={(e) => setMaskOverlay(e.target.checked)}
               />
-              Gespeicherte Maskenüberlagerung
+              {tr("studio.mdbd9b468f8")}
             </label>
             <small>
-              Maskensnapshot: {activeMask?.name} · R{active.mask.revision} ·{" "}
-              {active.mask.sha256.slice(0, 12)} ·{" "}
+              {tr("studio.m4add58eae4")}
+              {activeMask?.name} {tr("studio.mda8ec3e284")}
+              {active.mask.revision} · {active.mask.sha256.slice(0, 12)} ·{" "}
               {composite && asset?.composite
-                ? `Geschütztes Ergebnis · ${asset.status === "approved" ? "freigegeben" : asset.status === "rejected" ? "abgelehnt" : "ungeprüft"}`
-                : "KI-Rohbild · kein Pixel Lock"}
+                ? tr("studio.m032bd26ed6", {
+                    v0:
+                      asset.status === "approved"
+                        ? "freigegeben"
+                        : asset.status === "rejected"
+                          ? "abgelehnt"
+                          : tr("studio.m08112f78b5"),
+                  })
+                : tr("studio.m2037febecf")}
             </small>
             {raw && !composite && (
               <>
                 {raw.width !== reviewMaster?.width ||
                 raw.height !== reviewMaster?.height ? (
-                  <p className="warning">
-                    Hard Lock blockiert: unterschiedliche Abmessungen. Keine
-                    automatische Skalierung oder Registrierung.
-                  </p>
+                  <p className="warning">{tr("studio.m4195067109")}</p>
                 ) : (
                   <button
                     onClick={() => {
-                      if (
-                        window.confirm(
-                          "Identische Maße beweisen keine Ausrichtung. Stimmen Ursprung (0,0), Ausschnitt und Gesichtslage überein? Nur bei bestätigter Registrierung das geschützte Ergebnis erstellen.",
-                        )
-                      ) {
+                      if (window.confirm(tr("studio.m7fc576c1d9"))) {
                         void perform(
                           () =>
                             window.laceframe.command({
@@ -1251,12 +1227,12 @@ export function CreateView({
                             onSnapshot(value);
                             setCandidateKind("composite");
                           },
-                          "Geschütztes Ergebnis erstellt. Manuelle Prüfung erforderlich.",
+                          tr("studio.md0fb1752e8"),
                         );
                       }
                     }}
                   >
-                    Registrierung bestätigen & geschütztes Ergebnis erstellen
+                    {tr("studio.m74fa28324d")}
                   </button>
                 )}
               </>
@@ -1271,10 +1247,7 @@ export function CreateView({
           />
         )}
         {step === "Erzeugen" && asset && (
-          <PortraitPreview
-            image={asset}
-            caption="Neuer Expressionentwurf · ungeprüft"
-          />
+          <PortraitPreview image={asset} caption={tr("studio.m8d74fdadb0")} />
         )}
         {asset && (
           <AssetQuality
@@ -1289,68 +1262,67 @@ export function CreateView({
           />
         )}
         {!master && (
-          <button onClick={onCharacters}>
-            Freigegebenen Master importieren
-          </button>
+          <button onClick={onCharacters}>{tr("studio.m0d3a2a644e")}</button>
         )}
         {!asset && step !== "Auswählen" && (
-          <p className="drop-hint">
-            PNG/WebP hier ablegen · bis 32 MiB · oder mit Masterreferenz
-            generieren
-          </p>
+          <p className="drop-hint">{tr("studio.m5259a4d93a")}</p>
         )}
         {asset && step !== "Auswählen" && !matches && (
-          <p className="warning">
-            Dieses Bild gehört zur gespeicherten Revision. Promptänderungen
-            verändern seine Herkunft nicht.
-          </p>
+          <p className="warning">{tr("studio.m73f844aa11")}</p>
         )}
         {replace && (
           <div className="prompt-conflict" role="alert">
-            <strong>Ergebnis ersetzen?</strong>
-            <p>
-              Ein neuer Versuch wird angelegt. Das bisherige Bild und seine
-              Prompt-Revision bleiben im Verlauf erhalten.
-            </p>
+            <strong>{tr("studio.md18a382e47")}</strong>
+            <p>{tr("studio.m9a132df560")}</p>
             <div className="button-row">
-              <button onClick={() => setReplace(null)}>Abbrechen</button>
+              <button onClick={() => setReplace(null)}>
+                {tr("studio.mf7ff1178af")}
+              </button>
               <button
                 className="primary"
                 disabled={!valid || providerId !== "manual-import"}
                 onClick={() => importImage(replace.file, true)}
               >
-                Ersetzen bestätigen
+                {tr("studio.m97f0edbd18")}
               </button>
             </div>
           </div>
         )}
         {asset && step === "Freigeben" && (
-          <p aria-label="Gespeicherte Bildherkunft">
-            Entwurf vom {new Date(asset.createdAt).toLocaleString("de-DE")} ·
-            Referenz: Master V{reviewMaster?.version ?? "—"} · {asset.width} ×{" "}
-            {asset.height} ·{" "}
+          <p aria-label={tr("studio.m2596db64f0")}>
+            {tr("studio.m71b6fc373b")}
+            {new Date(asset.createdAt).toLocaleString(i18n.language)}{" "}
+            {tr("studio.m17cf0be840")}
+            {reviewMaster?.version ?? "—"} · {asset.width} × {asset.height} ·{" "}
             {active?.providerId === "codex-native"
-              ? "Codex"
-              : "Manueller Import"}
+              ? tr("studio.m616efbe968")
+              : tr("studio.mfcfadfe115")}
             .
             {active && (
               <>
                 {" "}
-                Gespeicherter Versuch {attempts.indexOf(active) + 1};
-                Generierungsanweisung vom{" "}
+                {tr("studio.m057c916388")}
+                {attempts.indexOf(active) + 1}
+                {tr("studio.ma9782a71f1")}{" "}
                 {new Date(active.promptRevision.createdAt).toLocaleString(
-                  "de-DE",
+                  i18n.language,
                 )}
                 .
                 {active.artDirectionRevision && (
-                  <> Stilrevision R{active.artDirectionRevision}.</>
+                  <>
+                    {" "}
+                    {tr("studio.mb07cf1ca78")}
+                    {active.artDirectionRevision}.
+                  </>
                 )}
               </>
             )}
             {expert && (
               <>
                 {" "}
-                Bild-ID {asset.id} · SHA-256 {asset.sha256}
+                {tr("studio.m6a85cca034")}
+                {asset.id} {tr("studio.md7e1f4d17c")}
+                {asset.sha256}
               </>
             )}
           </p>
@@ -1359,13 +1331,13 @@ export function CreateView({
           <Evidence
             compact={!expert}
             id={asset.id}
-            label="Expressionentwurf vor Freigabe"
+            label={tr("studio.m8f5677e70d")}
           />
         )}
         {asset && step === "Freigeben" && (
           <div className="comparison-review button-row">
             <button onClick={() => onInspect(asset.id)}>
-              In Library prüfen
+              {tr("studio.m72b8b4ea0e")}
             </button>
             {asset.status === "candidate" && (
               <>
@@ -1374,11 +1346,11 @@ export function CreateView({
                   onClick={() =>
                     command(
                       { type: "review", id: asset.id, status: "rejected" },
-                      "Entwurf verworfen. Verlauf und Original bleiben erhalten.",
+                      tr("studio.mef1679f41b"),
                     )
                   }
                 >
-                  Entwurf verwerfen
+                  {tr("studio.ma8dffbb642")}
                 </button>
                 <button
                   className="primary"
@@ -1386,11 +1358,11 @@ export function CreateView({
                   onClick={() =>
                     command(
                       { type: "review", id: asset.id, status: "approved" },
-                      "Als Expression freigegeben.",
+                      tr("studio.mb1cb8f0dc4"),
                     )
                   }
                 >
-                  Als Expression freigeben
+                  {tr("studio.m898247d198")}
                 </button>
               </>
             )}
@@ -1402,52 +1374,53 @@ export function CreateView({
           {step === "Erzeugen" && (
             <section className="panel prompt-drawer">
               <h3>
-                Prompt Builder{composer.edited ? " · eigene Bearbeitung" : ""}
+                {tr("studio.mb5129ac6ab")}
+                {composer.edited ? tr("studio.m15ef7e8cd2") : ""}
                 {composer.pendingBase !== undefined
-                  ? " · Auswahländerung bestätigen"
+                  ? tr("studio.med732f583d")
                   : ""}
               </h3>
               <PromptComposer
                 sources={[
                   {
-                    layer: "System",
-                    source:
-                      "Canvas, Alpha, unveränderlicher Master, sichere Herkunft und manuelle Freigabe (Main/Provider).",
+                    layer: tr("common.m6725e7bbcd"),
+                    source: tr("studio.m0206897881"),
                   },
                   {
-                    layer: "Style",
+                    layer: tr("common.m7e744141b4"),
                     source: artDirection
                       ? `${artDirection.name} · R${artDirection.revision}`
-                      : "Eigener Masterstil",
+                      : tr("studio.m8fe2cb824b"),
                   },
                   {
-                    layer: "Character Identity",
+                    layer: tr("common.m2770dce311"),
                     source: master
                       ? `${character?.name} · Master V${master.version} · ${master.id}`
-                      : "Kein Master",
+                      : tr("studio.md109bd6be5"),
                   },
                   {
                     layer: "Outfit",
-                    source:
-                      "Unverändert aus dem ausgewählten Identity-Master; kein Outfittransfer aus Style Packs.",
+                    source: tr("studio.m5f220c7d7b"),
                   },
                   {
-                    layer: "Expression Performance",
+                    layer: tr("common.m1279850d20"),
                     source: personalPerformance
-                      ? "Persönliche Performance dieser Figur"
-                      : `Globale Vorlage: ${family?.label} / ${variant?.label}`,
+                      ? tr("studio.m16a9eaa59d")
+                      : tr("studio.mdcb265d778", {
+                          v0: family?.label,
+                          v1: variant?.label,
+                        }),
                   },
                   {
-                    layer: "Composition",
-                    source:
-                      "Registrierter Master-Canvas und gespeicherte Stil-/Kompositionsregeln; kein automatischer Zuschnitt.",
+                    layer: tr("common.m47fca483c8"),
+                    source: tr("studio.m998f222286"),
                   },
                   {
-                    layer: "Creative Supplements",
+                    layer: tr("common.m1c9b1f80be"),
                     source:
                       promptMode === "expert"
-                        ? "Expliziter Expert Override; technische Regeln bleiben erhalten."
-                        : instructions || "Keine Ergänzung",
+                        ? tr("studio.m8e9913b620")
+                        : instructions || tr("common.m375cda06a9"),
                   },
                 ]}
                 state={composer}
@@ -1462,86 +1435,96 @@ export function CreateView({
                   disabled={!valid || Boolean(matches)}
                   onClick={() => savePrompt()}
                 >
-                  Generierungsanweisung speichern
+                  {tr("studio.md917903a08")}
                 </button>
                 <button disabled={!valid} onClick={() => savePrompt(false)}>
-                  Prompt kopieren
+                  {tr("studio.m754b01ae0b")}
                 </button>
                 <button disabled={!valid} onClick={() => savePrompt(true)}>
-                  Prompt kopieren & ChatGPT öffnen
+                  {tr("studio.m7f4442bd68")}
                 </button>
               </div>
-              <p className="muted">
-                Browser-Weg: Prompt und tatsächliches Masterbild selbst
-                beifügen. Native Codex-Generierung übermittelt beides erst nach
-                dem Generieren-Klick und nutzt dein Codex-Kontingent.
-              </p>
+              <p className="muted">{tr("studio.m7de202ffa2")}</p>
             </section>
           )}
           <section className="panel create-inspector">
-            <h3>Technische Details · Herkunft</h3>
+            <h3>{tr("studio.m37e6e23a04")}</h3>
             {active?.mask && (
               <p className="mono">
-                Maske {active.mask.id} · Revision {active.mask.revision} ·
-                SHA-256 {active.mask.sha256}
+                {tr("studio.m93c744e1d1")}
+                {active.mask.id} {tr("studio.m8d8560f759")}
+                {active.mask.revision} {tr("studio.md7e1f4d17c")}
+                {active.mask.sha256}
               </p>
             )}
             {asset?.composite && (
               <p className="mono">
-                Composite V{asset.composite.version} · {asset.composite.rule} ·
-                Rohbild {asset.composite.rawId} / {asset.composite.rawSha256} ·
-                Registrierung manuell bestätigt
+                {tr("studio.m170de8737f")}
+                {asset.composite.version} · {asset.composite.rule}{" "}
+                {tr("studio.m9867e912a5")}
+                {asset.composite.rawId} / {asset.composite.rawSha256}{" "}
+                {tr("studio.m294c023309")}
               </p>
             )}
             <p className="mono">
-              Master-ID: {master?.id ?? "—"}
+              {tr("studio.m3b36e5c465")}
+              {master?.id ?? "—"}
               <br />
-              SHA-256: {master?.sha256 ?? "—"}
+              {tr("studio.mcd45438289")}
+              {master?.sha256 ?? "—"}
               <br />
-              Anbieter: {providerId} · Masken: nicht unterstützt
+              {tr("studio.m1299a5644a")}
+              {providerId} {tr("studio.maab38ff58c")}
             </p>
             <div className="button-row">
-              <button onClick={checkCodex}>Codex-Verfügbarkeit prüfen</button>
+              <button onClick={checkCodex}>{tr("studio.m42511032ba")}</button>
               {master && (
                 <button
                   onClick={() =>
                     void perform(
                       () => window.laceframe.revealMaster(master.id),
                       () => {},
-                      "Referenz im Dateimanager angezeigt. Das Bild manuell im Browser beifügen.",
+                      tr("studio.m52d4bf5584"),
                     )
                   }
                 >
-                  Referenz im Ordner zeigen
+                  {tr("studio.mf2efb57b4e")}
                 </button>
               )}
             </div>
             {timing && (
               <p className="mono">
-                Start: {timing.startedAt}
+                {tr("studio.m84cc09ea4c")}
+                {timing.startedAt}
                 <br />
-                Ende: {timing.endedAt ?? "nicht gesichert"}
+                {tr("studio.m0e49b1200d")}
+                {timing.endedAt ?? tr("common.m121ae51aad")}
                 <br />
-                Dauer: {timing.durationMs} ms · {timing.status}
+                {tr("studio.m51a14ed031")}
+                {timing.durationMs} {tr("studio.m7203edc226")}
+                {uiLabel(timing.status)}
               </p>
             )}
           </section>
           <section className="panel attempt-history">
-            <h3>Versuchsverlauf · {attempts.length}</h3>
-            {!attempts.length && <p>Noch kein Versuch gespeichert.</p>}
+            <h3>
+              {tr("studio.mea008abc03")}
+              {attempts.length}
+            </h3>
+            {!attempts.length && <p>{tr("studio.m00601c8559")}</p>}
             {active && (
               <div className="historical-attempt">
-                <h3>Historischer Versuch · unveränderlich</h3>
+                <h3>{tr("studio.m0f0a43645c")}</h3>
                 <p>
-                  Die Auswahl ändert deinen Arbeitsentwurf nicht. Stilrevision R
-                  {active.artDirectionRevision ?? "—"} · Master-ID{" "}
-                  {active.masterId}
+                  {tr("studio.m460c2b5f03")}
+                  {active.artDirectionRevision ?? "—"}{" "}
+                  {tr("studio.m00e4353bcd")} {active.masterId}
                 </p>
                 <section>
-                  <h3>Historischen Prompt ansehen</h3>
+                  <h3>{tr("studio.m3fcb72d18c")}</h3>
                   <pre
                     className="prompt-base"
-                    aria-label="Historischer Expression-Prompt"
+                    aria-label={tr("studio.med66a658fe")}
                   >
                     {active.promptRevision.prompt}
                   </pre>
@@ -1553,15 +1536,13 @@ export function CreateView({
                         formSignature !==
                           (savedSignature.current ??
                             initialSignature.current)) &&
-                      !window.confirm(
-                        "Arbeitsentwurf einschließlich ungespeicherter Prüfnotizen durch diese gespeicherte Revision ersetzen?",
-                      )
+                      !window.confirm(tr("studio.m7b6e26275d"))
                     )
                       return;
                     adoptAttempt(active.id);
                   }}
                 >
-                  Als neuen Entwurf übernehmen
+                  {tr("studio.m266b3be8de")}
                 </button>
               </div>
             )}
@@ -1581,18 +1562,24 @@ export function CreateView({
                   <span className={`badge ${image?.status ?? ""}`}>
                     {image
                       ? {
-                          candidate: "Kandidat",
-                          approved: "Freigegeben",
-                          rejected: "Abgelehnt",
+                          candidate: tr("studio.m3c49ac4c54"),
+                          approved: tr("studio.med04045dd2"),
+                          rejected: tr("studio.ma9148e8654"),
                         }[image.status]
                       : a.providerId === "codex-native"
-                        ? "Kein bestätigtes Bild"
-                        : "Bildimport ausstehend"}
+                        ? tr("studio.m7cb86c2920")
+                        : tr("studio.m41282c9a1f")}
                   </span>
                   <small>
-                    {new Date(a.createdAt).toLocaleString("de-DE")} · {a.action}
+                    {new Date(a.createdAt).toLocaleString(i18n.language)} ·{" "}
+                    {uiLabel(a.action)}
                     {a.execution
-                      ? ` · ${executionLabel(a.execution, running && codex.attemptId === a.id)}`
+                      ? tr("studio.m2fa20b26a4", {
+                          v0: executionLabel(
+                            a.execution,
+                            running && codex.attemptId === a.id,
+                          ),
+                        })
                       : ""}
                   </small>
                 </button>

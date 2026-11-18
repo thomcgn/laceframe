@@ -1,3 +1,5 @@
+import { tr } from "../shared/locales";
+import { displayMessage } from "../shared/locales";
 import type { Result } from "../shared/bridge";
 import type { Snapshot } from "../shared/domain";
 export type AppPhase =
@@ -17,21 +19,21 @@ export type LifecycleState = {
 };
 export const BOOT_DURATION = 10_000;
 const labels: [number, string][] = [
-  [0, "Wecke die Pixel auf …"],
-  [12, "Sortiere Pixel nach Farbe …"],
-  [25, "Entwirre Haarsträhnen …"],
-  [38, "Suche verlorene Semikolons …"],
-  [50, "Koche Kaffee … ☕"],
-  [62, "Überrede die GPU zur Mitarbeit …"],
-  [74, "Bügle Antialiasing glatt …"],
-  [84, "Zähle transparente Pixel …"],
-  [92, "Überprüfe die letzte Kaffeetasse …"],
-  [100, "Alles an seinem Platz. Fast."],
+  [0, tr("common.mdaf9a4bf94")],
+  [12, tr("common.m2f497529c7")],
+  [25, tr("common.mc8a90f3e07")],
+  [38, tr("common.m8e3616695f")],
+  [50, tr("common.m0510ebeb88")],
+  [62, tr("common.m5d1cfa53cf")],
+  [74, tr("common.m392052d66d")],
+  [84, tr("common.m5e192e14e7")],
+  [92, tr("common.m1a322b023f")],
+  [100, tr("common.mcb47975856")],
 ];
 export function bootLabel(state: LifecycleState) {
   return state.waiting
-    ? "Noch einen Moment, die Pixel stellen sich quer …"
-    : labels.filter(([p]) => state.progress >= p).at(-1)![1];
+    ? tr("common.md5ca29e3ab")
+    : displayMessage(labels.filter(([p]) => state.progress >= p).at(-1)![1]);
 }
 /** Phase only, never a second project store. Synchronous single-flight gates survive React re-renders. */
 export class AppLifecycle {
@@ -80,9 +82,7 @@ export class AppLifecycle {
             phase: "error",
             errorKind: "boot",
             error:
-              error instanceof Error
-                ? error.message
-                : "Start fehlgeschlagen. Bitte erneut versuchen.",
+              error instanceof Error ? error.message : tr("common.m6cc4a797b0"),
             waiting: false,
           });
         },
@@ -146,10 +146,7 @@ export class AppLifecycle {
       this.update({
         phase: previous === "workspace" ? "workspace" : "error",
         errorKind: "project",
-        error:
-          e instanceof Error
-            ? e.message
-            : "Projekt konnte nicht geladen werden.",
+        error: e instanceof Error ? e.message : tr("common.mf688eb6d84"),
       });
     } finally {
       this.operating = false;
@@ -168,10 +165,7 @@ export class AppLifecycle {
       this.update({
         phase: "workspace",
         errorKind: "project",
-        error:
-          e instanceof Error
-            ? e.message
-            : "Projekt konnte nicht geschlossen werden.",
+        error: e instanceof Error ? e.message : tr("common.m20492e7898"),
       });
     } finally {
       this.operating = false;

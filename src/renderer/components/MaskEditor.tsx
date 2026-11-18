@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { EditorWorkspace } from "./EditorWorkspace";
 import { cutoutFrame } from "./cutout-preview";
@@ -111,9 +112,7 @@ export function MaskEditor({
       points: polygon.points,
     });
     if (!parsed.success) {
-      setError(
-        "Polygon benötigt 3–128 eindeutige Ecken ohne flache Ecken oder Selbstüberschneidung.",
-      );
+      setError(tr("editing.mc5f7517518"));
       return;
     }
     editPolygon({ ...polygon, closed: true });
@@ -147,7 +146,9 @@ export function MaskEditor({
     [saving, setSaving] = useState(false),
     [dirty, setDirty] = useState(false);
   const [name, setName] = useState(
-      mask?.name ?? initialName ?? (cutout ? "Freistellung" : "Gesicht"),
+      mask?.name ??
+        initialName ??
+        (cutout ? "Freistellung" : tr("common.m9e0bf93e1a")),
     ),
     [tool, setTool] = useState(automatic ? "pick" : "paint");
   const [diameter, setDiameter] = useState(24),
@@ -371,7 +372,7 @@ export function MaskEditor({
           img.naturalWidth !== master.width ||
           img.naturalHeight !== master.height
         )
-          throw new Error("Falsche Bildgröße.");
+          throw new Error(tr("editing.m759c699781"));
         const c = document.createElement("canvas");
         c.width = master.width;
         c.height = master.height;
@@ -390,7 +391,7 @@ export function MaskEditor({
           img.naturalWidth !== master.width ||
           img.naturalHeight !== master.height
         )
-          throw new Error("Falsche Maskengröße.");
+          throw new Error(tr("editing.m7bf8afb4b4"));
         const c = document.createElement("canvas");
         c.width = master.width;
         c.height = master.height;
@@ -408,9 +409,7 @@ export function MaskEditor({
     })().catch((e) => {
       if (live)
         setSourceError(
-          e instanceof Error
-            ? e.message
-            : "Original konnte nicht geladen werden.",
+          e instanceof Error ? e.message : tr("editing.ma4c83dff0c"),
         );
     });
     const element = viewport.current!;
@@ -456,11 +455,7 @@ export function MaskEditor({
       );
     } catch (e) {
       setPainted(false);
-      setPaintError(
-        e instanceof Error
-          ? e.message
-          : "Vorschau konnte nicht gezeichnet werden.",
-      );
+      setPaintError(e instanceof Error ? e.message : tr("editing.m9c78b3cf6a"));
     }
   };
   useEffect(() => {
@@ -532,7 +527,10 @@ export function MaskEditor({
   }
   finishRef.current = finish;
   return (
-    <EditorWorkspace title="Pixel bearbeiten" className="precision-backdrop">
+    <EditorWorkspace
+      title={tr("editing.mc24995c6c3")}
+      className="precision-backdrop"
+    >
       <section
         ref={dialog}
         className={`modal mask-editor precision-editor ${automatic ? "smart-mask-editor" : ""}`}
@@ -607,21 +605,21 @@ export function MaskEditor({
         aria-modal="true"
         aria-label={
           contextLabel?.title ??
-          (cutout ? "Freistellungsmaske" : "Bearbeitungsmaske")
+          (cutout ? tr("editing.mc2b3dac5f8") : tr("editing.macf9d2f8a2"))
         }
       >
         <h2>
           {contextLabel?.title ??
             (cutout
-              ? "Hintergrund freistellen"
-              : "Maske · Master V" + master.version)}
+              ? tr("editing.m46746f197e")
+              : tr("editing.md1e9772fdb") + master.version)}
         </h2>
         <p className="editor-description">
           {contextLabel?.description ??
             (cutout
-              ? "Original bleibt unverändert. Hintergrund manuell wählen; Schutz gewinnt. Keine automatische Silhouettenerkennung."
-              : "Weiß erlaubt · Schwarz schützt · Grau überblendet. Keine KI-Inpainting-Garantie.")}{" "}
-          {master.width} × {master.height} native Bildpixel.
+              ? tr("editing.m9f175304b7")
+              : tr("editing.m09f975d26d"))}{" "}
+          {master.width} × {master.height} {tr("editing.me46004ecb1")}
         </p>
         {(error || sourceError || paintError) && (
           <p role="alert" className="error">
@@ -645,7 +643,7 @@ export function MaskEditor({
               } else setLoadRevision((v) => v + 1);
             }}
           >
-            Erneut versuchen
+            {tr("editing.m948643cb59")}
           </button>
         )}
         {automatic && (smart.error || smart.loadError) && (
@@ -663,44 +661,43 @@ export function MaskEditor({
           className="editor-workspace"
           disabled={!ready || saving || (automatic && !smart.image)}
         >
-          <aside className="editor-sidebar" aria-label="Werkzeugeinstellungen">
+          <aside
+            className="editor-sidebar"
+            aria-label={tr("editing.mc62add472a")}
+          >
             <h3>{editorTools.find((t) => t.id === tool)?.name}</h3>
             <p className="tool-help">
               {tool.startsWith("protect")
-                ? "Diese Pixel bleiben erhalten, auch wenn sie dieselbe Farbe wie der Hintergrund haben."
+                ? tr("editing.m4226f9cdc7")
                 : tool.startsWith("force")
-                  ? "Diese Pixel werden ausdrücklich transparent. Figur schützen hat Vorrang."
+                  ? tr("editing.m0dbb2844bd")
                   : tool === "paint"
                     ? cutout
-                      ? "Pixel erhalten: Pinsel stellt die ursprüngliche Deckkraft bis zum Maskenwert wieder her."
-                      : "Pinsel erlaubt Änderungen innerhalb der Maske."
+                      ? tr("editing.m0002330323")
+                      : tr("editing.m0d2e262c81")
                     : tool === "erase"
                       ? cutout
-                        ? "Radierer reduziert die Deckkraft innerhalb des sichtbaren Pinselrings."
-                        : "Radierer schützt Pixel vor Änderungen."
+                        ? tr("editing.md4cbd106cc")
+                        : tr("editing.m7f07ea450c")
                       : tool === "pan"
-                        ? "Ziehen verschiebt ausschließlich die Ansicht."
+                        ? tr("editing.ma51ee50487")
                         : tool === "polygon"
-                          ? "Eine manuelle Region schützt die Figur, entfernt Hintergrund oder begrenzt die automatische Auswahl."
-                          : "Im Original auf eine sichtbare Hintergrundfarbe klicken. Die Auswahl verwendet diese Farben."}
+                          ? tr("editing.m25324458ec")
+                          : tr("editing.mf8e4e12b56")}
             </p>
             {automatic && (
               <div className="smart-cutout-controls">
                 {tool === "polygon" && (
                   <div className="polygon-controls">
-                    <p>
-                      Linksklick: Ecke · Enter/Doppelklick: schließen ·
-                      Backspace: letzte Ecke · Escape: verwerfen. Alt+Ziehen
-                      verschiebt.
-                    </p>
-                    <p role="status" aria-label="Polygonstatus">
-                      {polygon.points.length} / 128 Ecken ·{" "}
+                    <p>{tr("editing.md0ca940fca")}</p>
+                    <p role="status" aria-label={tr("editing.m2115452e2a")}>
+                      {polygon.points.length} {tr("common.mdb944f50f9")}{" "}
                       {polygon.closed ? "geschlossen" : "offen"}
                     </p>
                     <label>
-                      Polygonoperation
+                      {tr("editing.m2e66a6a768")}
                       <select
-                        aria-label="Polygonoperation"
+                        aria-label={tr("editing.m2e66a6a768")}
                         value={polygonOperation}
                         onChange={(e) =>
                           setPolygonOperation(
@@ -709,13 +706,13 @@ export function MaskEditor({
                         }
                       >
                         <option value="limit">
-                          Auswahl begrenzen – Automatik nur außerhalb
+                          {tr("editing.m15fcea76cb")}
                         </option>
                         <option value="protect">
-                          Figur schützen – innen erhalten
+                          {tr("editing.m0f192a1339")}
                         </option>
                         <option value="force">
-                          Hintergrund entfernen – innen erzwingen
+                          {tr("editing.m375c329e9d")}
                         </option>
                       </select>
                     </label>
@@ -723,7 +720,7 @@ export function MaskEditor({
                       disabled={polygon.closed || polygon.points.length < 3}
                       onClick={closePolygon}
                     >
-                      Polygon schließen
+                      {tr("editing.m941824a482")}
                     </button>
                     <button
                       disabled={
@@ -752,13 +749,13 @@ export function MaskEditor({
                         setShowProtected(true);
                       }}
                     >
-                      Polygon anwenden
+                      {tr("editing.m1a54bd6cee")}
                     </button>
                     <button
                       disabled={!polygon.points.length}
                       onClick={discardPolygon}
                     >
-                      Auswahl verwerfen
+                      {tr("editing.m8c5fb043c1")}
                     </button>
                   </div>
                 )}
@@ -766,22 +763,19 @@ export function MaskEditor({
                   !!smart.history.present.settings.polygons?.length && (
                     <section className="applied-polygons">
                       <h4>
-                        Angewendete Polygone (
+                        {tr("editing.ma86c640b95")}
                         {smart.history.present.settings.polygons.length}/32)
                       </h4>
-                      <p>
-                        Polygonmasken ergänzen Pinselmasken. Schutz gewinnt. Zum
-                        Korrigieren Polygon entfernen oder rückgängig machen.
-                      </p>
+                      <p>{tr("editing.m66499ed85b")}</p>
                       {smart.history.present.settings.polygons.map((op, i) => (
                         <div key={i}>
                           {i + 1}:{" "}
                           {op.operation === "limit"
-                            ? "Automatik nur außerhalb"
+                            ? tr("editing.m9324e9b3cd")
                             : op.operation === "protect"
-                              ? "Figur schützen"
-                              : "Hintergrund entfernen"}{" "}
-                          · {op.points.length} Ecken
+                              ? tr("editing.m641a8b7525")
+                              : tr("editing.m8c4b169e0b")}{" "}
+                          · {op.points.length} {tr("editing.meb43e9f3bb")}
                           <button
                             onClick={() =>
                               smart.update({
@@ -796,7 +790,8 @@ export function MaskEditor({
                               })
                             }
                           >
-                            Polygon {i + 1} entfernen
+                            {tr("editing.m0ef705dd99")}
+                            {i + 1} {tr("editing.mc64e600651")}
                           </button>
                         </div>
                       ))}
@@ -808,9 +803,10 @@ export function MaskEditor({
                   hidden={!["pick", "auto"].includes(tool)}
                 >
                   <label>
-                    Farbtoleranz {smart.history.present.settings.tolerance}
+                    {tr("editing.m554b6b4de2")}
+                    {smart.history.present.settings.tolerance}
                     <input
-                      aria-label="Farbtoleranz"
+                      aria-label={tr("editing.m554b6b4de2")}
                       type="range"
                       min={0}
                       max={100}
@@ -841,18 +837,17 @@ export function MaskEditor({
                         })
                       }
                     />
-                    Zusammenhängende Auswahl
+                    {tr("editing.m3fb949a5eb")}
                   </label>
                   {!smart.history.present.settings.connected && (
-                    <p className="warning">
-                      Globale Farbauswahl aktiv: ähnliche Farben in Kleidung und
-                      Haaren zuerst schützen.
-                    </p>
+                    <p className="warning">{tr("editing.mf69c437179")}</p>
                   )}
                   <label>
-                    Kantenweichheit {smart.history.present.settings.softness} px
+                    {tr("editing.mecbb5dfd36")}
+                    {smart.history.present.settings.softness}{" "}
+                    {tr("editing.m6ee2cc105a")}
                     <input
-                      aria-label="Kantenweichheit"
+                      aria-label={tr("editing.mecbb5dfd36")}
                       type="range"
                       min={0}
                       max={8}
@@ -872,7 +867,7 @@ export function MaskEditor({
                     disabled={smart.running || !smart.image}
                     onClick={smart.resume}
                   >
-                    Hintergrundauswahl aktualisieren
+                    {tr("editing.m0f6b69b015")}
                   </button>{" "}
                 </div>
                 {["pick", "auto"].includes(tool) && (
@@ -880,23 +875,24 @@ export function MaskEditor({
                     {smart.history.present.settings.seeds.at(-1) && (
                       <div
                         className="cutout-seed"
-                        aria-label="Aufgenommene Farbe"
+                        aria-label={tr("editing.mf559a5e704")}
                       >
                         <i
                           style={{
                             background: `rgb(${smart.history.present.settings.seeds.at(-1)!.rgba.slice(0, 3).join(",")})`,
                           }}
                         />
-                        Original (
+                        {tr("editing.md835bf1b24")}
                         {smart.history.present.settings.seeds.at(-1)!.x},{" "}
-                        {smart.history.present.settings.seeds.at(-1)!.y}) · RGBA{" "}
+                        {smart.history.present.settings.seeds.at(-1)!.y}
+                        {tr("editing.m40c9c1a120")}{" "}
                         {smart.history.present.settings.seeds
                           .at(-1)!
                           .rgba.join(", ")}
                       </div>
                     )}
-                    <section aria-label="Ausgewählte Hintergrundfarben">
-                      <h4>Ausgewählte Hintergrundfarben</h4>
+                    <section aria-label={tr("editing.m1dcc7a96cf")}>
+                      <h4>{tr("editing.m1dcc7a96cf")}</h4>
                       {smart.history.present.settings.seeds.map((seed, i) => (
                         <div className="cutout-seed" key={i}>
                           <i
@@ -904,8 +900,9 @@ export function MaskEditor({
                               background: `rgba(${seed.rgba[0]},${seed.rgba[1]},${seed.rgba[2]},${seed.rgba[3] / 255})`,
                             }}
                           />
-                          Hintergrundfarbe {i + 1} · ({seed.x}, {seed.y}) · RGBA{" "}
-                          {seed.rgba.join(", ")}
+                          {tr("editing.mac31c0c1c7")}
+                          {i + 1} · ({seed.x}, {seed.y}
+                          {tr("editing.m40c9c1a120")} {seed.rgba.join(", ")}
                           <button
                             onClick={() =>
                               smart.update({
@@ -920,7 +917,8 @@ export function MaskEditor({
                               })
                             }
                           >
-                            Hintergrundfarbe {i + 1} entfernen
+                            {tr("editing.mac31c0c1c7")}
+                            {i + 1} {tr("editing.mc64e600651")}
                           </button>
                         </div>
                       ))}
@@ -930,23 +928,18 @@ export function MaskEditor({
               </div>
             )}
             {automatic && polygon.points.length > 0 && (
-              <p role="status">
-                Ungespeichertes Polygon: zum Anwenden oder Verwerfen
-                Polygon/Lasso wählen. Speichern erst danach möglich.
-              </p>
+              <p role="status">{tr("editing.mf3ee2e4a05")}</p>
             )}
             {cutout && !automatic && (
-              <p className="warning">
-                Über 4 MP: vorhandene manuelle Freistellung bleibt verfügbar;
-                automatische Auswahl ohne Skalierung begrenzt.
-              </p>
+              <p className="warning">{tr("editing.mc631ce26ea")}</p>
             )}
             <div className="mask-toolbar">
               <div hidden={!brushTools.has(tool)} className="brush-settings">
                 <label>
-                  Pinsel {diameter} px
+                  {tr("editing.m7a33cf442e")}
+                  {diameter} {tr("editing.m6ee2cc105a")}
                   <input
-                    aria-label="Pinselgröße"
+                    aria-label={tr("editing.m3c2a0aef71")}
                     type="range"
                     min={1}
                     max={Math.max(
@@ -958,9 +951,10 @@ export function MaskEditor({
                   />
                 </label>
                 <label hidden={!["paint"].includes(tool)}>
-                  Pixel erhalten · {strength}/255
+                  {tr("editing.m02fbc19ead")}
+                  {strength}/255
                   <input
-                    aria-label="Maskenwert"
+                    aria-label={tr("editing.m935facf93b")}
                     type="range"
                     min={1}
                     max={255}
@@ -971,11 +965,11 @@ export function MaskEditor({
               </div>
             </div>
             <details className="editor-advanced">
-              <summary>Erweitert</summary>{" "}
+              <summary>{tr("editing.m25e56ee28c")}</summary>{" "}
               <label>
-                Name
+                {tr("editing.mdcd1d5223f")}
                 <input
-                  aria-label="Maskenname"
+                  aria-label={tr("editing.md2a8e3aa01")}
                   readOnly={contextLabel?.readOnlyName}
                   value={name}
                   maxLength={120}
@@ -988,16 +982,13 @@ export function MaskEditor({
               {automatic && ["pick", "auto"].includes(tool) && (
                 <>
                   {" "}
-                  <p>
-                    ΔE76: euklidischer Abstand in CIE L*a*b* (sRGB, D65).
-                    Vergleich mit den Originalfarben aller Seeds. Kein
-                    semantisches Haar-/Kleidungsmodell.
-                  </p>
+                  <p>{tr("editing.m3ea4f370ce")}</p>
                   <label>
-                    Auswahl erweitern/verkleinern{" "}
-                    {smart.history.present.settings.expand} px
+                    {tr("editing.m4ab7f93d0c")}{" "}
+                    {smart.history.present.settings.expand}{" "}
+                    {tr("editing.m6ee2cc105a")}
                     <input
-                      aria-label="Auswahl erweitern"
+                      aria-label={tr("editing.md9c5d6b96e")}
                       type="range"
                       min={-3}
                       max={3}
@@ -1044,19 +1035,19 @@ export function MaskEditor({
                       );
                 }}
               >
-                Maske zurücksetzen
+                {tr("editing.m451cbb0d2f")}
               </button>
             </details>
             <small>
-              Alt/Leertaste+Ziehen: Pan · Rad: Zoom · Umschalt+Rad: Pan ·
-              Strg+Z: Undo. {editorTools.find((t) => t.id === tool)?.name}
+              {tr("editing.m2759c36ff5")}
+              {editorTools.find((t) => t.id === tool)?.name}
             </small>
           </aside>
           <div className="editor-image-area">
             {cutout ? (
               <div
                 className="editor-display"
-                aria-label="Darstellung · verändert keine Bildpixel"
+                aria-label={tr("editing.mf1dd73c822")}
               >
                 <label>
                   <input
@@ -1064,7 +1055,7 @@ export function MaskEditor({
                     checked={showProtected}
                     onChange={(e) => setShowProtected(e.target.checked)}
                   />
-                  Schutzbereich anzeigen
+                  {tr("editing.m6bb8d06abf")}
                 </label>
                 <label>
                   <input
@@ -1072,7 +1063,7 @@ export function MaskEditor({
                     checked={showForced}
                     onChange={(e) => setShowForced(e.target.checked)}
                   />
-                  Entfernten Bereich anzeigen
+                  {tr("editing.m7bf46f1127")}
                 </label>
                 <label>
                   <input
@@ -1080,30 +1071,32 @@ export function MaskEditor({
                     checked={showSelection}
                     onChange={(e) => setShowSelection(e.target.checked)}
                   />
-                  Auswahl anzeigen
+                  {tr("editing.m28b3f6225d")}
                 </label>
                 <label>
-                  Bildansicht
+                  {tr("editing.mdc6710c419")}
                   <select
-                    aria-label="Freistellung Bildansicht"
+                    aria-label={tr("editing.m3121894d49")}
                     value={view}
                     onChange={(e) => setView(e.target.value)}
                   >
-                    <option value="result">Ergebnis</option>
-                    <option value="original">Original</option>
-                    <option value="alpha">Alpha</option>
+                    <option value="result">{tr("editing.mcd8e22cf74")}</option>
+                    <option value="original">
+                      {tr("editing.m88d759ea02")}
+                    </option>
+                    <option value="alpha">{tr("editing.mb1a96dd646")}</option>
                   </select>
                 </label>
                 <label>
-                  Prüfhintergrund
+                  {tr("editing.mc4c1257fa2")}
                   <select
-                    aria-label="Freistellung Prüfhintergrund"
+                    aria-label={tr("editing.m51a08de9a6")}
                     value={backdrop}
                     onChange={(e) => setBackdrop(e.target.value)}
                   >
-                    <option value="checker">Schachbrett</option>
-                    <option value="light">Hell</option>
-                    <option value="dark">Dunkel</option>
+                    <option value="checker">{tr("editing.m678c83f245")}</option>
+                    <option value="light">{tr("editing.m8d586f8b60")}</option>
+                    <option value="dark">{tr("editing.m368b231be4")}</option>
                   </select>
                 </label>
                 <label>
@@ -1112,7 +1105,7 @@ export function MaskEditor({
                     checked={overlay}
                     onChange={(e) => setOverlay(e.target.checked)}
                   />
-                  Maskenüberlagerung
+                  {tr("editing.m5fac9ed775")}
                 </label>
               </div>
             ) : (
@@ -1124,7 +1117,7 @@ export function MaskEditor({
                     checked={overlay}
                     onChange={(e) => setOverlay(e.target.checked)}
                   />
-                  Maskenüberlagerung
+                  {tr("editing.m5fac9ed775")}
                 </label>
               </div>
             )}
@@ -1132,7 +1125,7 @@ export function MaskEditor({
               ref={viewport}
               className={`mask-viewport ${backdrop === "checker" ? "checker" : "cutout-" + backdrop}`}
               tabIndex={0}
-              aria-label="Maskenzeichenfläche"
+              aria-label={tr("editing.m9b2713981d")}
               style={{
                 cursor:
                   tool === "pan" ||
@@ -1220,7 +1213,7 @@ export function MaskEditor({
                   )
                     return;
                   if (polygon.points.length >= MAX_POLYGON_POINTS) {
-                    setError("Maximal 128 Polygonecken.");
+                    setError(tr("editing.m0a63edd8a2"));
                     return;
                   }
                   const last = polygon.points.at(-1);
@@ -1258,11 +1251,11 @@ export function MaskEditor({
                     ),
                   ) as [number, number, number, number];
                   if (!rgba[3]) {
-                    setError("Pipette: einen sichtbaren Originalpixel wählen.");
+                    setError(tr("editing.m57912e24e5"));
                     return;
                   }
                   if (smart.history.present.settings.seeds.length >= 32) {
-                    setError("Maximal 32 ausgewählte Hintergrundfarben.");
+                    setError(tr("editing.m73b386d147"));
                     return;
                   }
                   setError("");
@@ -1371,7 +1364,7 @@ export function MaskEditor({
                 {src && !cutout && (
                   <img
                     draggable={false}
-                    alt="Masken-Master"
+                    alt={tr("editing.m8edd174636")}
                     src={src}
                     width={master.width}
                     height={master.height}
@@ -1383,7 +1376,7 @@ export function MaskEditor({
                     width={master.width}
                     height={master.height}
                     viewBox={`0 0 ${master.width} ${master.height}`}
-                    aria-label="Polygonvorschau"
+                    aria-label={tr("editing.mc0213cc6ac")}
                   >
                     {(smart.history.present.settings.polygons ?? []).map(
                       (op, i) => (
@@ -1463,13 +1456,13 @@ export function MaskEditor({
                 <i />
               </div>
             </div>
-            <div className="editor-zoom" aria-label="Zoomsteuerung">
-              <output aria-label="Aktuelle Zoomstufe">
+            <div className="editor-zoom" aria-label={tr("editing.m8d44dbfd97")}>
+              <output aria-label={tr("editing.m074d1cf977")}>
                 {Math.round(scale * 100)} %
               </output>
               <input
-                aria-label="Maskenzoom"
-                title="Zoom in CSS-Pixeln"
+                aria-label={tr("editing.mf1143d7bf0")}
+                title={tr("editing.m3c0f9040b0")}
                 type="range"
                 min={-6}
                 max={Math.max(4, Math.log2(fit))}
@@ -1479,36 +1472,46 @@ export function MaskEditor({
               />
               <button
                 onClick={() => zoomAt(1)}
-                title={`1 Bildpixel = 1 CSS-Pixel · Gerätefaktor ${window.devicePixelRatio}`}
+                title={tr("editing.m42bebf5ce0", {
+                  v0: window.devicePixelRatio,
+                })}
               >
                 100 %
               </button>
-              <button onClick={fitImage}>Einpassen</button>
-              <small>CSS · {window.devicePixelRatio}× DPR</small>
+              <button onClick={fitImage}>{tr("editing.m6697a0f7da")}</button>
+              <small>
+                {tr("editing.m5b84612148")}
+                {window.devicePixelRatio}
+                {tr("editing.m2a8016f6f1")}
+              </small>
             </div>
           </div>
         </fieldset>
         {cutout && (
-          <p role="status" aria-label="Freistellung Berechnung">
+          <p role="status" aria-label={tr("editing.mb573d33f89")}>
             {sourceError || smart.loadError
-              ? "Ladefehler · Quelle/Vorschau nicht verfügbar"
+              ? tr("editing.m7f466c91f9")
               : paintError || (automatic && smart.error)
-                ? "Berechnungsfehler · keine speicherbare Vorschau"
+                ? tr("editing.m7e9e97b014")
                 : !ready
-                  ? "Original wird geladen …"
+                  ? tr("editing.m3926ea81f2")
                   : !painted
-                    ? "Original geladen · Darstellung wird vorbereitet …"
+                    ? tr("editing.m1bf175aa50")
                     : !automatic
-                      ? "Vorschau bereit · Original geladen"
+                      ? tr("editing.m9e52190c1d")
                       : smart.cancelled
-                        ? "Auswahl abgebrochen. Neu berechnen, bevor gespeichert werden kann."
+                        ? tr("editing.m5e6aaeb484")
                         : smart.running
-                          ? "Auswahl wird berechnet …"
+                          ? tr("editing.m09e347923c")
                           : smart.result &&
                               smart.ready &&
                               paintedResult === smart.result
-                            ? `Vorschau bereit · ${Math.round(smart.result.durationMs)} ms · ${smart.result.removed} reduzierte Maskenpixel · ${smart.result.conflicts} Konflikte (Schutz gewinnt)`
-                            : "Original geladen · Vorschau wird gezeichnet …"}
+                            ? tr("editing.mb5d7f49387", {
+                                v0: Math.round(smart.result.durationMs),
+                                v1: smart.result.removed,
+                                v2: smart.result.conflicts,
+                              })
+                            : tr("editing.mf5330fde46")}
           </p>
         )}
         <div className="button-row">
@@ -1524,7 +1527,7 @@ export function MaskEditor({
             }
             onClick={undo}
           >
-            Rückgängig
+            {tr("editing.mdd7bd2f68c")}
           </button>
           <button
             disabled={
@@ -1537,12 +1540,12 @@ export function MaskEditor({
             }
             onClick={redo}
           >
-            Wiederholen
+            {tr("editing.me0ef009b54")}
           </button>
           {automatic && smart.running && (
             <>
               <button disabled={!smart.running} onClick={smart.cancel}>
-                Auswahl abbrechen
+                {tr("editing.ma5be5d1ff8")}
               </button>
             </>
           )}
@@ -1551,12 +1554,12 @@ export function MaskEditor({
             onClick={() => {
               if (
                 (!dirty && !smart.dirty && !polygon.points.length) ||
-                window.confirm("Ungespeicherte Maskenänderungen verwerfen?")
+                window.confirm(tr("editing.m11435fb093"))
               )
                 onClose();
             }}
           >
-            Editor schließen
+            {tr("editing.maf42e7cf28")}
           </button>
           <button
             className="primary"
@@ -1591,9 +1594,7 @@ export function MaskEditor({
             }}
           >
             {contextLabel?.saveLabel ??
-              (cutout
-                ? "Freigestellten Kandidaten speichern"
-                : "Maskenrevision speichern")}
+              (cutout ? tr("editing.m9b8dd6aa96") : tr("editing.m99b165f30e"))}
           </button>
         </div>
       </section>

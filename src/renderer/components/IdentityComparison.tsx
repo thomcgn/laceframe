@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -35,7 +36,7 @@ function useBounds(src: string, image?: Image) {
         img.naturalWidth !== image.width ||
         img.naturalHeight !== image.height
       )
-        throw new Error("Dimensions");
+        throw new Error(tr("common.m914182d5e2"));
       const canvas = document.createElement("canvas");
       canvas.width = image.width;
       canvas.height = image.height;
@@ -156,22 +157,29 @@ function PortraitPane({
   const zoom = (value: number) =>
     setView(zoomAt(region, size, view, Math.min(1600, Math.max(0.1, value))));
   return (
-    <section className="identity-pane" aria-label={`${label} Bildansicht`}>
+    <section
+      className="identity-pane"
+      aria-label={tr("common.me8cb9be98c", { v0: label })}
+    >
       <header>
         <strong>{label}</strong>
-        <small>{image ? `${image.width} × ${image.height} Pixel` : "—"}</small>
+        <small>
+          {image
+            ? tr("common.m6eb4ba75c4", { v0: image.width, v1: image.height })
+            : "—"}
+        </small>
       </header>
       <div className="identity-zoom-controls">
         <button
-          aria-label={`${label} verkleinern`}
+          aria-label={tr("common.mebbbcc8a03", { v0: label })}
           onClick={() => zoom(transform.scale * 80)}
         >
           −
         </button>
         <label>
-          Zoom{" "}
+          {tr("common.m509c517ede")}{" "}
           <input
-            aria-label={`${label} Zoom`}
+            aria-label={tr("common.mf900b098c0", { v0: label })}
             type="range"
             min="0.1"
             max="1600"
@@ -180,34 +188,36 @@ function PortraitPane({
             onChange={(e) => zoom(Number(e.target.value))}
           />
         </label>
-        <output aria-label={`${label} Zoomfaktor`}>
+        <output aria-label={tr("common.mbcfe10a13c", { v0: label })}>
           {(transform.scale * 100).toFixed(1)}%
         </output>
         <button
-          aria-label={`${label} vergrößern`}
+          aria-label={tr("common.m5735540b91", { v0: label })}
           onClick={() => zoom(transform.scale * 125)}
         >
           +
         </button>
-        <button onClick={() => setView(INITIAL)}>Einpassen</button>
+        <button onClick={() => setView(INITIAL)}>
+          {tr("common.m6697a0f7da")}
+        </button>
         {[100, 200, 400].map((n) => (
           <button key={n} onClick={() => zoom(n)}>
             {n}%
           </button>
         ))}
         <button
-          aria-label={`${label} Hand-Werkzeug`}
+          aria-label={tr("common.m3a35814899", { v0: label })}
           aria-pressed={hand}
           onClick={() => setHand((v) => !v)}
         >
-          Hand
+          {tr("common.mfa18c06733")}
         </button>
       </div>
       <div
         ref={viewport}
         className={`identity-viewport checker compare-backdrop-${backdrop}`}
         tabIndex={0}
-        aria-label={`${label} verschieben und zoomen`}
+        aria-label={tr("common.m7bd3b653ef", { v0: label })}
         data-scale={transform.scale}
         data-region={JSON.stringify(region)}
         style={{ cursor: hand || temporary ? "grab" : "default" }}
@@ -280,7 +290,9 @@ function PortraitPane({
       >
         <span className="identity-image-label" aria-hidden="true">
           {label}
-          {image ? ` · ${image.width} × ${image.height}` : ""}
+          {image
+            ? tr("common.m9779c163df", { v0: image.width, v1: image.height })
+            : ""}
         </span>
         {src && image ? (
           <img
@@ -294,7 +306,7 @@ function PortraitPane({
             }}
           />
         ) : (
-          <p>Kein Bild verfügbar.</p>
+          <p>{tr("common.me0a3494450")}</p>
         )}
       </div>
     </section>
@@ -357,7 +369,7 @@ export function IdentityComparison({
   return (
     <section
       className="master-compare identity-compare"
-      aria-label="Identität und Masterkandidat vergleichen"
+      aria-label={tr("common.m9dda430c40")}
     >
       <div className="compare-toolbar">
         <label>
@@ -366,7 +378,7 @@ export function IdentityComparison({
             checked={sync}
             onChange={(e) => setSync(e.target.checked)}
           />
-          Zoom/Pan synchronisieren
+          {tr("common.mf5f4a540f5")}
         </label>
         <label>
           <input
@@ -377,28 +389,28 @@ export function IdentityComparison({
               setViews((v) => [v[0], INITIAL]);
             }}
           />
-          Sichtbare Figur einpassen
+          {tr("common.m20e358b3f3")}
         </label>
         <label>
-          Prüfhintergrund{" "}
+          {tr("common.mc4c1257fa2")}{" "}
           <select
-            aria-label="Vergleich Prüfhintergrund"
+            aria-label={tr("common.m27e0d29b05")}
             value={backdrop}
             onChange={(e) => setBackdrop(e.target.value)}
           >
-            <option value="checker">Schachbrett</option>
-            <option value="light">Hell</option>
-            <option value="dark">Dunkel</option>
+            <option value="checker">{tr("common.m678c83f245")}</option>
+            <option value="light">{tr("common.m8d586f8b60")}</option>
+            <option value="dark">{tr("common.m368b231be4")}</option>
           </select>
         </label>
         <button onClick={() => setViews([INITIAL, INITIAL])}>
-          Ansicht zurücksetzen
+          {tr("common.m11df30f282")}
         </button>
       </div>
       <div className="identity-panes">
         <PortraitPane
-          label="Identitätsreferenz"
-          alt={`${prefix} · Identitätsreferenz`}
+          label={tr("common.m443d3d4a05")}
+          alt={tr("common.m71a983ded5", { v0: prefix })}
           image={master}
           src={before.src}
           region={regions[0]}
@@ -408,8 +420,8 @@ export function IdentityComparison({
           backdrop={backdrop}
         />
         <PortraitPane
-          label="Masterkandidat"
-          alt={`${prefix} · Ergebnisvorschau`}
+          label={tr("common.m2648237274")}
+          alt={tr("common.m2053c5c8d1", { v0: prefix })}
           image={candidate}
           src={after.src}
           region={regions[1]}
@@ -421,37 +433,36 @@ export function IdentityComparison({
       </div>
       <div className="compare-caption">
         <span>
-          Angefordert:{" "}
-          {requested ? `${requested.width} × ${requested.height} Pixel` : "—"}
+          {tr("common.m66dc3848b4")}{" "}
+          {requested
+            ? tr("common.m6eb4ba75c4", {
+                v0: requested.width,
+                v1: requested.height,
+              })
+            : "—"}
         </span>
-        <small>
-          Unterschiedliche Auflösungen sind für den Identitätsvergleich kein
-          Problem. Die Originaldateien bleiben unverändert.
-        </small>
+        <small>{tr("common.m4792f07873")}</small>
       </div>
       {autoFit && (
         <p className="identity-fit-note" role="status">
           {!bounds
-            ? "Sichtbaren Bereich prüfen …"
+            ? tr("common.m8d5c792f28")
             : bounds.status === "bounded"
-              ? `Alpha-Bereich eingepasst · ${bounds.ignored} Pixel in sehr kleinen, getrennten Alpha-Inseln ignoriert (nur Ansicht).`
+              ? tr("common.mf6811bc243", { v0: bounds.ignored })
               : bounds.status === "empty"
-                ? "Vollständig transparent · gesamte Leinwand angezeigt."
+                ? tr("common.m82d515e447")
                 : bounds.status === "opaque"
-                  ? "Deckendes Bild · gesamte Leinwand eingepasst."
+                  ? tr("common.m5b29000842")
                   : bounds.status === "sparse"
-                    ? "Keine zusammenhängende Silhouette · gesamte Leinwand angezeigt."
-                    : "Auto-Fit nicht verfügbar (max. 16 MP) · gesamte Leinwand angezeigt."}{" "}
-          Keine semantische Figurenerkennung.
+                    ? tr("common.md056eda369")
+                    : tr("common.m39cdbb3955")}{" "}
+          {tr("common.m51fbcf0cab")}
         </p>
       )}
       {(before.error || after.error) && (
         <p role="alert">{before.error || after.error}</p>
       )}
-      <p className="comparison-review-note">
-        Ähnliches Aussehen bestätigt keine freigegebene Identität. Hand ziehen,
-        Alt/Leertaste oder Pfeiltasten zum Schwenken; Mausrad zoomt am Cursor.
-      </p>
+      <p className="comparison-review-note">{tr("common.mbcf2a8296c")}</p>
     </section>
   );
 }

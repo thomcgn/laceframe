@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { IdentityComparison } from "./IdentityComparison";
 import { usePreview } from "./useImagePreview";
@@ -125,59 +126,57 @@ function PixelComparison({
       className="master-compare"
       aria-label={
         beforeLabel === "Master"
-          ? "Master und Kandidat vergleichen"
-          : "Identität und Masterkandidat vergleichen"
+          ? tr("characters.m136157e0a8")
+          : tr("characters.m9dda430c40")
       }
     >
       <div className="compare-toolbar">
         <span className="compare-legend">
           <b>{beforeLabel}</b>
           <span>↔</span>
-          <b>Entwurf</b>
+          <b>{tr("characters.m2ba46e35bd")}</b>
         </span>
         <label>
-          Prüfhintergrund
+          {tr("characters.mc4c1257fa2")}
           <select
-            aria-label="Vergleich Prüfhintergrund"
+            aria-label={tr("characters.m27e0d29b05")}
             value={backdrop}
             onChange={(e) => setBackdrop(e.target.value)}
           >
-            <option value="checker">Schachbrett</option>
-            <option value="light">Hell</option>
-            <option value="dark">Dunkel</option>
+            <option value="checker">{tr("characters.m678c83f245")}</option>
+            <option value="light">{tr("characters.m8d586f8b60")}</option>
+            <option value="dark">{tr("characters.m368b231be4")}</option>
           </select>
         </label>
         <label>
-          Ansicht
+          {tr("characters.ma6d6105cf9")}
           <select
-            aria-label="Vergleichsmodus"
+            aria-label={tr("characters.m3c13547603")}
             value={mode}
             onChange={(e) => setMode(e.target.value)}
           >
-            <option value="slider">Before / After</option>
-            <option value="overlay">Overlay</option>
+            <option value="slider">{tr("characters.m419a9bb270")}</option>
+            <option value="overlay">{tr("characters.m2af93aeb43")}</option>
           </select>
         </label>
         <label>
-          Registrierung
+          {tr("characters.m566fe2d04f")}
           <select
-            aria-label="Vergleichsregistrierung"
+            aria-label={tr("characters.m18a93642d3")}
             value={normalized ? "visual" : "native"}
             onChange={(e) => {
               setNormalized(e.target.value === "visual");
               setPan({ x: 0, y: 0 });
             }}
           >
-            <option value="native">Native Pixel · Ursprung 0,0</option>
-            <option value="visual">
-              Visuell normalisiert · keine Pixelgarantie
-            </option>
+            <option value="native">{tr("characters.m6407575e7d")}</option>
+            <option value="visual">{tr("characters.ma18af81a13")}</option>
           </select>
         </label>
         <label>
-          Zoom
+          {tr("characters.m509c517ede")}
           <select
-            aria-label="Create Zoom"
+            aria-label={tr("characters.m420c1c6a37")}
             value={zoom}
             onChange={(e) => {
               if (!enhanced)
@@ -190,7 +189,7 @@ function PixelComparison({
               } else pixelZoom(Number(e.target.value));
             }}
           >
-            <option value="fit">Einpassen</option>
+            <option value="fit">{tr("characters.m6697a0f7da")}</option>
             {[25, 50, 100, 200, 400].map((n) => (
               <option key={n} value={n}>
                 {n}%
@@ -201,13 +200,13 @@ function PixelComparison({
         {enhanced && (
           <>
             <button
-              aria-label="Pixelvergleich verkleinern"
+              aria-label={tr("characters.m4cb44e52b0")}
               onClick={() => pixelZoom(view.scale * 80)}
             >
               −
             </button>
             <input
-              aria-label="Pixelvergleich Zoom"
+              aria-label={tr("characters.m456b30f4d4")}
               type="range"
               min="0.1"
               max="1600"
@@ -217,21 +216,22 @@ function PixelComparison({
             />
             <output>{(view.scale * 100).toFixed(1)}%</output>
             <button
-              aria-label="Pixelvergleich vergrößern"
+              aria-label={tr("characters.m9881f2b0e4")}
               onClick={() => pixelZoom(view.scale * 125)}
             >
               +
             </button>
             <button aria-pressed={hand} onClick={() => setHand((v) => !v)}>
-              Hand-Werkzeug
+              {tr("characters.m2db6483b13")}
             </button>
           </>
         )}
         {mode === "overlay" && (
           <label>
-            Deckkraft {opacity}%
+            {tr("characters.m2e24fa3750")}
+            {opacity}%
             <input
-              aria-label="Overlay-Deckkraft"
+              aria-label={tr("characters.m4cf74ccef2")}
               type="range"
               min={0}
               max={100}
@@ -248,14 +248,14 @@ function PixelComparison({
             setOpacity(50);
           }}
         >
-          Ansicht zurücksetzen
+          {tr("characters.m11df30f282")}
         </button>
       </div>
       <div
         className={`compare-viewport checker compare-backdrop-${backdrop}`}
         ref={viewport}
         tabIndex={0}
-        aria-label="Vergleichsfläche · ziehen zum Verschieben, Pfeiltasten zum Schwenken"
+        aria-label={tr("characters.m9c9e36906f")}
         onPointerDown={(e) => {
           if (
             e.button !== 0 ||
@@ -329,7 +329,13 @@ function PixelComparison({
             {before.src && master && (
               <img
                 draggable={false}
-                alt={`${previewPrefix} · ${beforeLabel === "Master" ? "Masterreferenz" : "Identitätsreferenz"}`}
+                alt={tr("characters.m78735b8fba", {
+                  v0: previewPrefix,
+                  v1:
+                    beforeLabel === "Master"
+                      ? tr("characters.m558170f96d")
+                      : tr("characters.m443d3d4a05"),
+                })}
                 src={before.src}
                 width={master.width}
                 height={master.height}
@@ -349,7 +355,7 @@ function PixelComparison({
               {after.src && candidate && (
                 <img
                   draggable={false}
-                  alt={`${previewPrefix} · Ergebnisvorschau`}
+                  alt={tr("characters.m2053c5c8d1", { v0: previewPrefix })}
                   src={after.src}
                   width={normalized && master ? master.width : candidate.width}
                   height={
@@ -363,7 +369,7 @@ function PixelComparison({
           {maskPreview.src && mask && (
             <div className="compare-layer mask-preview-overlay">
               <img
-                alt="Gespeicherte Maske"
+                alt={tr("characters.m6666f38033")}
                 src={maskPreview.src}
                 width={mask.width}
                 height={mask.height}
@@ -374,7 +380,7 @@ function PixelComparison({
             <div
               className="compare-divider"
               role="slider"
-              aria-label="Before/After-Vergleich"
+              aria-label={tr("characters.m54bcbf0a8b")}
               aria-orientation="horizontal"
               aria-valuemin={0}
               aria-valuemax={100}
@@ -429,8 +435,8 @@ function PixelComparison({
         {(!master || !candidate) && (
           <p className="compare-empty">
             {!master
-              ? "Freigegebenen Master auswählen."
-              : "Noch kein Entwurf · PNG/WebP ablegen oder generieren."}
+              ? tr("characters.m00d0787d91")
+              : tr("characters.m234c7f1355")}
           </p>
         )}
       </div>
@@ -441,35 +447,37 @@ function PixelComparison({
       )}
       <div className="compare-caption">
         <span>
-          {beforeLabel} {master ? `${master.width} × ${master.height}` : "—"}
+          {beforeLabel}{" "}
+          {master
+            ? tr("characters.mc1c0cb73d2", {
+                v0: master.width,
+                v1: master.height,
+              })
+            : "—"}
         </span>
         <span>
-          Entwurf {candidate ? `${candidate.width} × ${candidate.height}` : "—"}
+          {tr("characters.m2ba46e35bd")}
+          {candidate
+            ? tr("characters.mc1c0cb73d2", {
+                v0: candidate.width,
+                v1: candidate.height,
+              })
+            : "—"}
         </span>
-        <small>
-          Gemeinsamer Ursprung (0, 0) · Zoom und Pan synchron · Ziehen oder
-          Pfeiltasten
-        </small>
+        <small>{tr("characters.m07ce3a412d")}</small>
       </div>
-      {normalized && (
-        <p className="warning">
-          Nur visuelle Normalisierung auf Mastergröße. Darstellung kann verzerrt
-          sein; keine Änderung der Dateien, keine Pixelregistrierung und keine
-          Freigabe für Hard Lock.
-        </p>
-      )}
+      {normalized && <p className="warning">{tr("characters.m31fe18be72")}</p>}
       {comparisonCanvas(master ?? { width: 1, height: 1 }, candidate)
         .mismatch && (
         <p className="warning">
-          Abweichende Abmessungen: Master {master?.width} × {master?.height},
-          Ergebnis {candidate?.width} × {candidate?.height}. Keine automatische
-          Skalierung. Fehlende Bildbereiche bleiben sichtbar leer.
+          {tr("characters.m02ad8d6dcc")}
+          {master?.width} × {master?.height}
+          {tr("characters.m2cec7b1c31")}
+          {candidate?.width} × {candidate?.height}
+          {tr("common.m9b9eed9b0b")}
         </p>
       )}
-      <p className="comparison-review-note">
-        Der Vergleich zeigt Bildunterschiede. Ähnliches Aussehen bestätigt keine
-        freigegebene Identität.
-      </p>
+      <p className="comparison-review-note">{tr("characters.m00210795c2")}</p>
     </section>
   );
 }
@@ -485,14 +493,14 @@ export function MasterCandidateCompare(
   return (
     <div className="identity-comparison-switch">
       <label>
-        Vergleich{" "}
+        {tr("characters.m79a63c24b8")}{" "}
         <select
-          aria-label="Identitätsvergleich oder Pixelvergleich"
+          aria-label={tr("characters.m2a11e82f91")}
           value={kind}
           onChange={(e) => setKind(e.target.value)}
         >
-          <option value="identity">Identitätsvergleich</option>
-          <option value="pixel">Pixelvergleich · erweitert</option>
+          <option value="identity">{tr("characters.m23b49e793e")}</option>
+          <option value="pixel">{tr("characters.m2fb030b172")}</option>
         </select>
       </label>
       {kind === "identity" ? (

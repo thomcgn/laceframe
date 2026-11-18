@@ -1,3 +1,6 @@
+import { uiLabel } from "../../shared/locales";
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { useState } from "react";
 import type { Snapshot } from "../../shared/domain";
 import type { PackKind, PackPreview } from "../../shared/packs";
@@ -28,27 +31,24 @@ export function PackTools({
   const [scopeReviewed, setScopeReviewed] = useState(false);
   const [notice, setNotice] = useState("");
   return (
-    <section className="pack-tools" aria-label={`${kind} Packs`}>
+    <section
+      className="pack-tools"
+      aria-label={tr("styles.m586d3b2d24", { v0: kind })}
+    >
       <h3>
-        {kind === "style" ? "Style Pack" : "Expression Pack"} · JSON-Austausch
+        {kind === "style" ? tr("styles.m44c81a180e") : tr("styles.mbf50a1b55d")}{" "}
+        {tr("styles.me46fed87f5")}
       </h3>
-      <p>
-        Nur gespeicherte globale Regeln. Keine Bilder, lokalen Pfade, Figuren,
-        Outfits oder persönlichen Expression Performances. Freitexte vor dem
-        Teilen selbst auf personenbezogene Angaben prüfen.
-      </p>
+      <p>{tr("styles.m11b6586c7c")}</p>
       {kind === "style" && (
         <label>
           <input
             type="checkbox"
-            aria-label="Style Pack Inhaltsprüfung"
+            aria-label={tr("styles.m00192afca2")}
             checked={scopeReviewed}
             onChange={(e) => setScopeReviewed(e.target.checked)}
           />
-          Gespeicherte Stilregeln geprüft: ausschließlich Rendering und
-          Komposition; keine persönlichen Identitäts-, Outfit- oder
-          Emotionsanweisungen. Linterhinweise prüfen, bei Bedarf
-          Migrationsassistent verwenden.
+          {tr("styles.m65568e4272")}
         </label>
       )}
       {kind === "expressions" && (
@@ -58,7 +58,7 @@ export function PackTools({
             checked={all}
             onChange={(e) => setAll(e.target.checked)}
           />
-          Alle Familien exportieren (sonst ausgewählte Familie)
+          {tr("styles.mbce98856ab")}
         </label>
       )}
       <div className="button-row">
@@ -86,12 +86,12 @@ export function PackTools({
                     : {}),
                 }),
               (r) => {
-                if (r) setNotice(`Exportiert: ${r.name}`);
+                if (r) setNotice(tr("styles.m9e457d2970", { v0: r.name }));
               },
             )
           }
         >
-          JSON-Pack exportieren …
+          {tr("styles.mc5b23ea5b4")}
         </button>
         <button
           disabled={disabled}
@@ -115,30 +115,30 @@ export function PackTools({
             )
           }
         >
-          JSON-Pack importieren …
+          {tr("styles.m2ca1420576")}
         </button>
       </div>
-      {notice && <p role="status">{notice}</p>}
+      {notice && <p role="status">{displayMessage(notice)}</p>}
       {preview && (
-        <section aria-label="Pack Importvorschau">
-          <h4>Importvorschau · {preview.pack.format} · Schema 1</h4>
-          <p>
-            Keine automatische Überschreibung. „Aktualisieren“ ist nur bei
-            eindeutiger stabiler ID möglich. Bei Expressions bleiben
-            ausgelassene Varianten und persönliche Overrides erhalten.
-          </p>
+        <section aria-label={tr("styles.maf40cc1713")}>
+          <h4>
+            {tr("styles.m8504f7f8dc")}
+            {preview.pack.format} {tr("styles.m9d16607529")}
+          </h4>
+          <p>{tr("styles.mbb431e7cd6")}</p>
           {preview.rows.map((row) => (
             <article key={row.key}>
               <strong>
                 {row.label} ·{" "}
-                {choices[row.key] === "skip" ? "übersprungen · " : ""}
-                {row.status}
+                {choices[row.key] === "skip" ? tr("styles.m74b24cbcfc") : ""}
+                {uiLabel(row.status)}
               </strong>
-              <p>{row.reason}</p>
+              <p>{displayMessage(row.reason)}</p>
               <label>
-                Importentscheidung {row.label}
+                {tr("styles.m61a61ea61d")}
+                {row.label}
                 <select
-                  aria-label={`Importentscheidung ${row.label}`}
+                  aria-label={tr("styles.m1a11f1eabe", { v0: row.label })}
                   value={choices[row.key]}
                   disabled={disabled}
                   onChange={(e) =>
@@ -148,20 +148,20 @@ export function PackTools({
                     })
                   }
                 >
-                  <option value="skip">Überspringen</option>
-                  <option value="new">Als neu importieren</option>
+                  <option value="skip">{tr("styles.m8e463fdd54")}</option>
+                  <option value="new">{tr("styles.mfff9b2f3c5")}</option>
                   <option
                     value="update"
                     disabled={!row.targetId || row.status === "Konflikt"}
                   >
-                    Ausdrücklich aktualisieren
+                    {tr("styles.m65d329d23b")}
                   </option>
                 </select>
               </label>
             </article>
           ))}
           <details>
-            <summary>Vollständige Pack-Regeln und Herkunft prüfen</summary>
+            <summary>{tr("styles.md5410ed454")}</summary>
             <pre>{JSON.stringify(preview.pack, null, 2)}</pre>
           </details>
           <button
@@ -183,15 +183,15 @@ export function PackTools({
                 (s) => {
                   onSnapshot(s);
                   setPreview(undefined);
-                  setNotice("Gewählte Pack-Regeln importiert.");
+                  setNotice(tr("styles.m7d9d7f56f2"));
                 },
               )
             }
           >
-            Geprüften Import übernehmen
+            {tr("styles.m5e0a71e791")}
           </button>
           <button disabled={disabled} onClick={() => setPreview(undefined)}>
-            Pack-Import abbrechen
+            {tr("styles.meb72a3a518")}
           </button>
         </section>
       )}

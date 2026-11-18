@@ -1,3 +1,5 @@
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { PixelViewport } from "./PixelViewport";
 import { EditorWorkspace } from "./EditorWorkspace";
 import type { RegionSelection } from "../../shared/color-region";
@@ -24,10 +26,12 @@ type Region = {
   selection?: RegionSelection;
 };
 const roles = {
-  hair: "Haare / Bart",
-  skin: "Haut",
-  clothes: "Kleidung",
-  custom: "Eigene Region",
+  hair: tr("common.mc5011ce211"),
+  skin: tr("common.m8cba739d1f"),
+  clothes: tr("common.me6bb4b3e53"),
+  get custom() {
+    return tr("editing.mbd9ad835b8");
+  },
 };
 type Pixels = ColorPixels & { sha256: string };
 function PixelCanvas({
@@ -112,12 +116,9 @@ export function ColorConsistency({
   return (
     <div className="color-consistency-entry">
       <button disabled={disabled} onClick={() => setOpen(true)}>
-        Farbkonsistenz prüfen
+        {tr("editing.mc3161e97d1")}
       </button>
-      <small>
-        Vor Freigabe: Haare, Haut und Kleidung prüfen. Keine automatische
-        Identitätsfreigabe.
-      </small>
+      <small>{tr("editing.mad00feb6d0")}</small>
       {open && (
         <ColorEditor
           sourceId={savedCorrection?.sourceId ?? sourceId}
@@ -190,7 +191,7 @@ function ColorEditor({
     setError("");
   }
   const close = () => {
-    if (!busy && (!dirty.current || window.confirm("Farbentwurf verwerfen?")))
+    if (!busy && (!dirty.current || window.confirm(tr("editing.me67c869b98"))))
       onClose();
   };
   useEffect(() => {
@@ -285,10 +286,7 @@ function ColorEditor({
       if (e.data.error) setError(e.data.error);
       else setResult(e.data);
     };
-    w.onerror = () =>
-      setError(
-        "Farb-Worker ausgefallen. Editor neu öffnen; nichts gespeichert.",
-      );
+    w.onerror = () => setError(tr("editing.m2025f2b10c"));
     const timer = setTimeout(
       () => w.postMessage({ source, draft, palette }),
       100,
@@ -387,21 +385,19 @@ function ColorEditor({
   function pickTarget(hex: string, index: number) {
     const r = masterRegions.find((r) => r.id === selected);
     if (!r || r.weights[index] < 128) {
-      setError(
-        "Pipette: Farbe innerhalb der gewählten Masterregion auswählen.",
-      );
+      setError(tr("editing.m4381e99695"));
       return;
     }
     updateRule({ targetColor: hex });
   }
   const view = original ? source : (result?.result ?? source);
   return (
-    <EditorWorkspace title="Farbkonsistenz" className="">
+    <EditorWorkspace title={tr("editing.mf3d8ae97d7")} className="">
       <section
         className="color-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Farbkonsistenz"
+        aria-label={tr("editing.mf3d8ae97d7")}
         tabIndex={-1}
         ref={modal}
         onKeyDown={(e) => {
@@ -433,31 +429,27 @@ function ColorEditor({
         }}
       >
         <div className="section-head">
-          <h2>Farbkonsistenz · regionale Palette</h2>
+          <h2>{tr("editing.m8b68c48d9d")}</h2>
           <button disabled={busy} onClick={close}>
-            Schließen / verwerfen
+            {tr("editing.m8ac13dc20a")}
           </button>
         </div>
-        <p>
-          Manuelle Haar-, Haut- und Kleidungsregionen. Zusätzliche dunkle
-          Schatten sind zulässig. Keine Segmentierung, kein Stilscore und keine
-          automatische Freigabe.
-        </p>
+        <p>{tr("editing.m035d381599")}</p>
         {error && (
           <p role="alert" className="error">
-            {error}
+            {displayMessage(error)}
           </p>
         )}
         {!source || !masterPixels ? (
-          <p role="status">Originalpixel werden geprüft …</p>
+          <p role="status">{tr("editing.m63fa52bd29")}</p>
         ) : (
           <>
             <div className="color-layout">
               <fieldset disabled={busy} className="color-controls">
                 <label>
-                  Masterpalette
+                  {tr("editing.m29c14fdda5")}
                   <select
-                    aria-label="Masterpalette"
+                    aria-label={tr("editing.m29c14fdda5")}
                     value={paletteId}
                     onChange={(e) => {
                       setPaletteId(e.target.value);
@@ -472,18 +464,18 @@ function ColorEditor({
                       }
                     }}
                   >
-                    <option value="">Neue Palette anlegen</option>
+                    <option value="">{tr("editing.m0751727856")}</option>
                     {palettes.map((p) => (
                       <option key={p.id} value={p.id}>
-                        Master V{master.version} · Palette R{p.revision}
+                        {tr("editing.m29f9eecd72")}
+                        {master.version} {tr("editing.m02a4069e63")}
+                        {p.revision}
                       </option>
                     ))}
                   </select>
                 </label>
                 <details open={!paletteId}>
-                  <summary>
-                    Masterregionen manuell zuweisen / neue Palettenrevision
-                  </summary>
+                  <summary>{tr("editing.m4890121ed9")}</summary>
                   <div className="button-row">
                     {Object.entries(roles).map(([role, name]) => (
                       <button
@@ -502,7 +494,7 @@ function ColorEditor({
                           setMask({ kind: "master", id: r.id });
                         }}
                       >
-                        {name} zuweisen
+                        {displayMessage(name)} {tr("editing.m272f969fac")}
                       </button>
                     ))}
                   </div>
@@ -512,7 +504,8 @@ function ColorEditor({
                       <button
                         onClick={() => setMask({ kind: "master", id: r.id })}
                       >
-                        Mastermaske {r.name}
+                        {tr("editing.mb792e01b0c")}
+                        {r.name}
                       </button>
                       <button
                         onClick={() =>
@@ -521,7 +514,8 @@ function ColorEditor({
                           )
                         }
                       >
-                        Region {r.name} entfernen
+                        {tr("editing.md3a008ef13")}
+                        {r.name} {tr("editing.mc64e600651")}
                       </button>
                     </div>
                   ))}
@@ -529,19 +523,16 @@ function ColorEditor({
                     disabled={!masterRegions.length}
                     onClick={() => void savePalette()}
                   >
-                    Masterpalette als neue Revision speichern
+                    {tr("editing.m050ca0ee2f")}
                   </button>
-                  <small>
-                    Bestehende Paletten und Master werden nicht überschrieben.
-                    Änderungen erst nach Speichern wirksam.
-                  </small>
+                  <small>{tr("editing.mdc4ab7e072")}</small>
                 </details>
                 {draft && palette && (
                   <>
                     <label>
-                      Farbregion
+                      {tr("editing.m4281a9366b")}
                       <select
-                        aria-label="Farbregion"
+                        aria-label={tr("editing.m4281a9366b")}
                         value={selected}
                         onChange={(e) => setSelected(e.target.value)}
                       >
@@ -557,17 +548,13 @@ function ColorEditor({
                         setMask({ kind: "candidate", id: selected })
                       }
                     >
-                      Kandidatenregion zuordnen
+                      {tr("editing.m9cfb0cf5e3")}
                     </button>
                     {source.width === master.width &&
                       source.height === master.height && (
                         <button
                           onClick={() => {
-                            if (
-                              window.confirm(
-                                "Gleiche Maße beweisen keine gleiche Pose. Masterkoordinaten ausdrücklich kopieren und anschließend prüfen?",
-                              )
-                            ) {
+                            if (window.confirm(tr("editing.m0a93709166"))) {
                               updateRule({
                                 weights: new Uint8Array(
                                   masterRegions.find(
@@ -579,7 +566,7 @@ function ColorEditor({
                             }
                           }}
                         >
-                          Mastermaske ausdrücklich kopieren
+                          {tr("editing.m96775705ad")}
                         </button>
                       )}
                     <button
@@ -587,7 +574,7 @@ function ColorEditor({
                         setMask({ kind: "protected", id: "protected" })
                       }
                     >
-                      Geschützte Pixel bearbeiten
+                      {tr("editing.m8126ceaf14")}
                     </button>
                     <label>
                       <input
@@ -595,22 +582,21 @@ function ColorEditor({
                         checked={confirmed}
                         onChange={(e) => setConfirmed(e.target.checked)}
                       />
-                      Kandidatenregionen und Pose manuell geprüft
+                      {tr("editing.m50dae77160")}
                     </label>
                     <p className="warning">
                       {source.width !== master.width ||
                       source.height !== master.height
-                        ? "Andere Bilddimensionen: keine automatische Maskenübernahme. "
-                        : "Auch bei gleichen Maßen wird keine Registrierung angenommen. "}
-                      Kandidatenregionen separat markieren; Überschneidungen
-                      werden abgelehnt.
+                        ? tr("editing.ma0c4adf40d")
+                        : tr("editing.mce32596397")}
+                      {tr("editing.mbc1bfb3503")}
                     </p>
                     {region && (
                       <>
                         <label>
-                          Ausgangsfarbe (Pipette im Kandidaten)
+                          {tr("editing.m041572f0bb")}
                           <input
-                            aria-label="Ausgangsfarbe"
+                            aria-label={tr("editing.mf599a63445")}
                             type="color"
                             value={region.sourceColor}
                             onChange={(e) =>
@@ -618,16 +604,18 @@ function ColorEditor({
                             }
                           />
                         </label>
-                        <strong>Masterpalette · gewählte Region</strong>
+                        <strong>{tr("editing.md0bb3d5d2d")}</strong>
                         <div
                           className="button-row"
-                          aria-label="Verbindliche Referenzfarben"
+                          aria-label={tr("editing.m0e1409784c")}
                         >
                           {refRegion?.colors.map((c) => (
                             <button
                               key={c.hex}
-                              title={`${c.count} Masterpixel in Farbgruppe`}
-                              aria-label={`Referenzfarbe ${c.hex}`}
+                              title={tr("editing.m2dee0cb1b4", { v0: c.count })}
+                              aria-label={tr("editing.mb942d86ed9", {
+                                v0: c.hex,
+                              })}
                               onClick={() => updateRule({ targetColor: c.hex })}
                               style={{ borderBottom: `6px solid ${c.hex}` }}
                             >
@@ -635,18 +623,18 @@ function ColorEditor({
                             </button>
                           ))}
                         </div>
-                        <strong>
-                          Kandidatenpalette · Original der gewählten Region
-                        </strong>
+                        <strong>{tr("editing.md990825eff")}</strong>
                         <div
                           className="button-row"
-                          aria-label="Kandidatenpalette"
+                          aria-label={tr("editing.m111def24ea")}
                         >
                           {candidateColors.map((c) => (
                             <button
                               key={c.hex}
-                              aria-label={`Kandidatenfarbe ${c.hex}`}
-                              title={`${c.count} Pixel in Farbgruppe`}
+                              aria-label={tr("editing.m3246a402c4", {
+                                v0: c.hex,
+                              })}
+                              title={tr("editing.md10a207b2b", { v0: c.count })}
                               style={{ borderBottom: `6px solid ${c.hex}` }}
                               onClick={() => updateRule({ sourceColor: c.hex })}
                             >
@@ -669,27 +657,30 @@ function ColorEditor({
                               });
                           }}
                         >
-                          Masterpalette gezielt übertragen
+                          {tr("editing.m7c180433fd")}
                         </button>
                         {region.transferGroups && (
-                          <p aria-label="Palettenübertragung">
+                          <p aria-label={tr("editing.m3d9482b0b7")}>
                             {region.transferGroups
-                              .map((g) => `${g.sourceColor} → ${g.targetColor}`)
+                              .map((g) =>
+                                tr("editing.mef12155d54", {
+                                  v0: g.sourceColor,
+                                  v1: g.targetColor,
+                                }),
+                              )
                               .join(" · ")}{" "}
-                            · Gruppenversatz innerhalb der zugewiesenen Region;
-                            zusätzliche Schatten behalten ihre Helligkeit.
-                            Helligkeitskorrektur nur nach ausdrücklicher
-                            Auswahl.
+                            {tr("editing.mf2051f760a")}
                           </p>
                         )}
                         <p>
-                          Referenz: {region.targetColor} · per Masterpipette
-                          oder Palettenfarbe wählen.
+                          {tr("editing.m0eec0d878b")}
+                          {region.targetColor} {tr("editing.maef7d6e34c")}
                         </p>
                         <label>
-                          Korrekturstärke · {region.strength}
+                          {tr("editing.meec1d6d1f9")}
+                          {region.strength}
                           <input
-                            aria-label="Korrekturstärke"
+                            aria-label={tr("editing.m21aebe37d7")}
                             type="range"
                             min="0"
                             max="1"
@@ -701,9 +692,10 @@ function ColorEditor({
                           />
                         </label>
                         <label>
-                          Farbgruppenradius (ΔE a/b) · {region.tolerance}
+                          {tr("editing.m5567a3924f")}
+                          {region.tolerance}
                           <input
-                            aria-label="Farbgruppenradius"
+                            aria-label={tr("editing.m6a05a03272")}
                             type="range"
                             min="1"
                             max="50"
@@ -721,22 +713,19 @@ function ColorEditor({
                               updateRule({ correctLightness: e.target.checked })
                             }
                           />
-                          Helligkeitsversatz ausdrücklich mit korrigieren (z. B.
-                          aufgehellte Haare)
+                          {tr("editing.m0edbaaffb1")}
                         </label>
                       </>
                     )}
                     <details>
-                      <summary>
-                        Pipette über Pixelkoordinaten (Tastatur)
-                      </summary>
+                      <summary>{tr("editing.md1d04ee746")}</summary>
                       {(["x", "y"] as const).map((k) => (
                         <label key={k}>
                           {k}
                           <input
                             type="number"
                             min="0"
-                            aria-label={`Pipette ${k}`}
+                            aria-label={tr("editing.mecd1811f97", { v0: k })}
                             value={coordinates[k]}
                             onChange={(e) =>
                               setCoordinates((v) => ({
@@ -769,7 +758,7 @@ function ColorEditor({
                           }
                         }}
                       >
-                        Masterfarbe an Koordinate übernehmen
+                        {tr("editing.m31a8ccc5f8")}
                       </button>
                       <button
                         onClick={() => {
@@ -792,7 +781,7 @@ function ColorEditor({
                           }
                         }}
                       >
-                        Kandidatenfarbe an Koordinate übernehmen
+                        {tr("editing.m2149a00fb8")}
                       </button>
                     </details>
                   </>
@@ -802,24 +791,28 @@ function ColorEditor({
                 <div className="color-images">
                   <figure>
                     <figcaption>
-                      Freigegebener Master V{master.version} ·{" "}
-                      {masterPixels.width}×{masterPixels.height} · Pipette
+                      {tr("editing.m3e69d8e50b")}
+                      {master.version} · {masterPixels.width}×
+                      {masterPixels.height} {tr("editing.m39a70d7141")}
                     </figcaption>
                     <PixelCanvas
                       pixels={masterPixels}
-                      label="Master Farbpalette"
+                      label={tr("editing.m14c4ebb26e")}
                       onPick={pickTarget}
                     />
                   </figure>
                   <figure>
                     <figcaption>
-                      {original ? "Original" : "Korrekturvorschau"} ·{" "}
-                      {source.width}×{source.height} · Kandidatenpipette
+                      {original
+                        ? tr("editing.m88d759ea02")
+                        : tr("editing.ma2197a0eb5")}{" "}
+                      · {source.width}×{source.height}{" "}
+                      {tr("editing.m86a9a25014")}
                     </figcaption>
                     {view && (
                       <PixelCanvas
                         pixels={view}
-                        label="Farbvorschau"
+                        label={tr("editing.m3f5f11f7de")}
                         onPick={(_hex, i) =>
                           updateRule({
                             sourceColor: rgbHex(
@@ -833,12 +826,12 @@ function ColorEditor({
                       aria-pressed={original}
                       onClick={() => setOriginal((v) => !v)}
                     >
-                      Original / Korrektur vergleichen
+                      {tr("editing.mc586cfd973")}
                     </button>
                   </figure>
                 </div>
                 {result && palette && (
-                  <div role="status" aria-label="Farbmessungen">
+                  <div role="status" aria-label={tr("editing.ma0ac6fe662")}>
                     {result.measurements.map((m, i) => (
                       <p key={i} className={m?.before.warning ? "warning" : ""}>
                         {
@@ -848,20 +841,22 @@ function ColorEditor({
                         }
                         :{" "}
                         {m
-                          ? `${m.before.warning ? "Farbabweichung – manuell prüfen" : "Kein Schwellenwert überschritten"} · ${m.before.visible} sichtbare Pixel · ΔE76 a/b ${m.before.chromaticDeltaE76.toFixed(1)} → ${m.after.chromaticDeltaE76.toFixed(1)} · Aufhellung über Referenz + 8 L*: ${m.before.excessLightness.toFixed(1)} → ${m.after.excessLightness.toFixed(1)}`
-                          : "Kandidatenregion noch nicht zugeordnet"}
+                          ? tr("editing.m86bb075eef", {
+                              v0: m.before.warning
+                                ? tr("editing.m285f91e557")
+                                : tr("editing.m6536591359"),
+                              v1: m.before.visible,
+                              v2: m.before.chromaticDeltaE76.toFixed(1),
+                              v3: m.after.chromaticDeltaE76.toFixed(1),
+                              v4: m.before.excessLightness.toFixed(1),
+                              v5: m.after.excessLightness.toFixed(1),
+                            })
+                          : tr("editing.mbba7bd5c30")}
                       </p>
                     ))}
                   </div>
                 )}
-                <small>
-                  CIELAB D65: mittlere nächste a/b-Distanz (Warnung &gt;12),
-                  mittlere Aufhellung oberhalb hellster Referenz +8 L* (Warnung
-                  &gt;8). Dunklere Töne bleiben zulässig. Selektiver Lab-Versatz
-                  erhält Tonabstände; Gamut-Clipping/Rundung kann Details an
-                  Kanalgrenzen begrenzen. Visuell prüfen. Alpha und Schutzpixel
-                  bleiben exakt. Maximal 4 MP, keine Skalierung.
-                </small>
+                <small>{tr("editing.mcccc7cff70")}</small>
               </div>
             </div>
             <div className="button-row color-actions">
@@ -873,7 +868,7 @@ function ColorEditor({
                   setPast((v) => v.slice(0, -1));
                 }}
               >
-                Farbe rückgängig
+                {tr("editing.mbfec16c58e")}
               </button>
               <button
                 disabled={busy || !future.length}
@@ -883,7 +878,7 @@ function ColorEditor({
                   setFuture((v) => v.slice(1));
                 }}
               >
-                Farbe wiederholen
+                {tr("editing.me8860a35d6")}
               </button>
               <button
                 disabled={busy || !draft}
@@ -895,7 +890,7 @@ function ColorEditor({
                   })
                 }
               >
-                Farbe zurücksetzen
+                {tr("editing.me6e70d55b3")}
               </button>
               <button
                 disabled={
@@ -908,7 +903,7 @@ function ColorEditor({
                 }
                 onClick={() => void restore()}
               >
-                Gespeicherte Korrektur laden
+                {tr("editing.mdc33443ca1")}
               </button>
               <button
                 className="primary"
@@ -922,7 +917,7 @@ function ColorEditor({
                 }
                 onClick={() => void save()}
               >
-                Als separaten Farbkandidaten speichern
+                {tr("editing.m91dd15a432")}
               </button>
             </div>
           </>
@@ -993,10 +988,9 @@ function ColorEditor({
         {mask && mask.kind === "protected" && source && draft && (
           <MaskEditor
             contextLabel={{
-              title: "Farbschutzmaske",
-              description:
-                "Weiß oder Grau schützt den Originalpixel vollständig vor Farbkorrektur. Schwarz lässt Korrekturen zu.",
-              saveLabel: "In Farbentwurf übernehmen",
+              title: tr("editing.m78593ec494"),
+              description: tr("editing.mb7ad19d1c0"),
+              saveLabel: tr("editing.m6776e0bb5f"),
               readOnlyName: true,
             }}
             master={{
@@ -1004,7 +998,7 @@ function ColorEditor({
               width: source.width,
               height: source.height,
             }}
-            initialName="Geschützte Pixel (weiß schützt)"
+            initialName={tr("editing.m4511de9fbc")}
             initialWeights={draft.protectedWeights}
             onClose={() => setMask(undefined)}
             onSave={async (weights) => {

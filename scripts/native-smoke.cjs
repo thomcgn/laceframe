@@ -131,7 +131,7 @@ const path = require("node:path");
       .getByRole("button", { name: "Expression erstellen", exact: true })
       .click();
     await studioStep(page, "Auswählen");
-    await field(page, "Create Anbieter", { exact: true }).selectOption(
+    await field(page, "Studio Anbieter", { exact: true }).selectOption(
       "codex-native",
     );
     await studioStep(page, "Erzeugen");
@@ -143,7 +143,7 @@ const path = require("node:path");
     await field(page, "Stilname", { exact: true }).fill("Shared Noir");
     await field(
       page,
-      "Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)",
+      "Darstellung-Regeln (ohne Charakter- oder Outfitmerkmale)",
       {
         exact: true,
       },
@@ -160,7 +160,7 @@ const path = require("node:path");
     await field(page, "Stilname", { exact: true }).fill("Alternate Ink");
     await field(
       page,
-      "Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)",
+      "Darstellung-Regeln (ohne Charakter- oder Outfitmerkmale)",
       {
         exact: true,
       },
@@ -371,7 +371,7 @@ const path = require("node:path");
     await expect(slider).toHaveAttribute("aria-valuenow", /2[45]/);
     await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
     await cdp.detach();
-    await comparison.getByLabel("Create Zoom", { exact: true }).selectOption("100");
+    await comparison.getByLabel("Studio Zoom", { exact: true }).selectOption("100");
     const rects = () =>
       comparison.locator(".compare-stage img").evaluateAll((images) =>
         images.map((img) => {
@@ -567,7 +567,7 @@ const path = require("node:path");
     const historical = (await manifest()).attempts;
     await field(
       page,
-      "Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)",
+      "Darstellung-Regeln (ohne Charakter- oder Outfitmerkmale)",
       {
         exact: true,
       },
@@ -597,7 +597,7 @@ const path = require("node:path");
       exact: true,
     }).inputValue();
     await studioStep(page, "Auswählen");
-    const workingMaster = await field(page, "Create Masterversion", {
+    const workingMaster = await field(page, "Studio Masterversion", {
       exact: true,
     }).inputValue();
     await studioExpert(page);
@@ -611,7 +611,7 @@ const path = require("node:path");
     );
     await studioStep(page, "Auswählen");
     await expect(
-      field(page, "Create Masterversion", { exact: true }),
+      field(page, "Studio Masterversion", { exact: true }),
     ).toHaveValue(workingMaster);
     await studioExpert(page);
     await history
@@ -651,7 +651,7 @@ const path = require("node:path");
       .click();
     await nav(page, "Studio");
     await studioStep(page, "Auswählen");
-    await field(page, "Create Anbieter", { exact: true }).selectOption(
+    await field(page, "Studio Anbieter", { exact: true }).selectOption(
       "codex-native",
     );
     await studioStep(page, "Auswählen");
@@ -1057,7 +1057,7 @@ const path = require("node:path");
         .click();
       expect((await manifest()).assets.at(-1).status).toBe("approved");
       await page
-        .getByRole("button", { name: "In Library prüfen", exact: true })
+        .getByRole("button", { name: "In Bibliothek prüfen", exact: true })
         .click();
       await expect(
         page.getByRole("slider", {
@@ -1118,7 +1118,12 @@ const path = require("node:path");
       /STYLE LOCK — Shared Noir/,
     );
     await studioExpert(page);
-    await expect(page.getByRole("heading", {name: "Technische Details · Herkunft", exact: true})).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "Technische Details · Herkunft",
+        exact: true,
+      }),
+    ).toBeVisible();
     await studioExpert(page);
     await page
       .getByRole("button", { name: "Codex-Verfügbarkeit prüfen", exact: true })
@@ -1168,9 +1173,7 @@ const path = require("node:path");
         filePaths: [directory],
       });
     }, project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       page.getByRole("heading", { name: "Synthetic Native", exact: true }),
     ).toBeVisible();

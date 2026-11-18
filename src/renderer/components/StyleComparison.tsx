@@ -1,3 +1,6 @@
+import { uiLabel } from "../../shared/locales";
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { useEffect, useRef, useState } from "react";
 import type { Project } from "../../shared/domain";
 import {
@@ -70,34 +73,32 @@ export function StyleComparison({
       : undefined;
   return (
     <details className="analysis-comparison">
-      <summary>Stilmetriken vergleichen · manuelle Prüfung</summary>
+      <summary>{tr("styles.m54845edc9f")}</summary>
       {!records.length ? (
-        <p>
-          Noch keine geprüfte Stilanalyse gespeichert. Zuerst Art Direction →
-          Stil analysieren.
-        </p>
+        <p>{tr("styles.m9f6b2949e5")}</p>
       ) : (
         <>
           <label>
-            Geprüfter Referenzsatz
+            {tr("styles.m865f8d78ba")}
             <select
-              aria-label="Vergleich Stilanalyse"
+              aria-label={tr("styles.m7b36f72ff9")}
               disabled={running}
               value={record?.id ?? ""}
               onChange={(e) => setAnalysisId(e.target.value)}
             >
               {records.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {p.artDirections.find((s) => s.id === a.profileId)?.name} · V
+                  {p.artDirections.find((s) => s.id === a.profileId)?.name}{" "}
+                  {tr("styles.m0ca423fba8")}
                   {a.profileRevision}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Referenz im Satz
+            {tr("styles.m78e9515a47")}
             <select
-              aria-label="Vergleich Stilreferenz"
+              aria-label={tr("styles.m6d5f08e2e8")}
               value={reference?.id ?? ""}
               onChange={(e) => setReferenceId(e.target.value)}
             >
@@ -110,24 +111,24 @@ export function StyleComparison({
           </label>
           {!sourceId && (
             <label>
-              Charakterasset
+              {tr("styles.ma128f80337")}
               <select
-                aria-label="Stilvergleich Charakterasset"
+                aria-label={tr("styles.m71919ff39c")}
                 disabled={running}
                 value={candidateId}
                 onChange={(e) => setCandidateId(e.target.value)}
               >
-                <option value="">Asset auswählen …</option>
+                <option value="">{tr("styles.m34178f4801")}</option>
                 {candidates.map((a) => (
                   <option key={a.id} value={a.id}>
                     {p.characters.find((c) => c.id === a.characterId)?.name} ·{" "}
                     {"locked" in a
-                      ? `Master V${a.version}`
+                      ? tr("styles.mf483464116", { v0: a.version })
                       : "sourceId" in a
-                        ? "Qualitätsversion"
+                        ? tr("styles.m32acc49c2f")
                         : "attemptId" in a
-                          ? "Kandidat / Expression"
-                          : "Asset"}{" "}
+                          ? tr("styles.m2745b0e2cb")
+                          : tr("styles.m80d298c9f2")}{" "}
                     · {a.id.slice(0, 8)}
                   </option>
                 ))}
@@ -135,13 +136,11 @@ export function StyleComparison({
             </label>
           )}
           <fieldset disabled={running}>
-            <legend>
-              Kandidatenbereich · gleiche Bildregion manuell wählen
-            </legend>
+            <legend>{tr("styles.mc20879a8c0")}</legend>
             <label>
-              Kandidatentyp
+              {tr("styles.m4a94ee72ee")}
               <select
-                aria-label="Vergleich Kandidatentyp"
+                aria-label={tr("styles.m23bab419ae")}
                 value={type}
                 onChange={(e) => {
                   setType(e.target.value as AnalysisInput["type"]);
@@ -157,10 +156,10 @@ export function StyleComparison({
             </label>
             <div className="inspector-options">
               {(["x", "y", "width", "height"] as const).map((key) => (
-                <label key={key}>
-                  {key}
+                <label key={uiLabel(key)}>
+                  {uiLabel(key)}
                   <input
-                    aria-label={`Vergleich ROI ${key}`}
+                    aria-label={tr("styles.ma0e8e5117b", { v0: key })}
                     type="number"
                     min={key === "x" || key === "y" ? 0 : 1}
                     value={roi[key]}
@@ -181,7 +180,7 @@ export function StyleComparison({
               const serial = job.current.serial;
               setRunning(true);
               setResult(undefined);
-              setStatus("Vergleich wird lokal gemessen …");
+              setStatus(tr("styles.m109901d534"));
               try {
                 const pixels = await window.laceframe.analysisSource(
                   candidate.id,
@@ -209,12 +208,12 @@ export function StyleComparison({
                   setRunning(false);
                   if (e.data.ok) {
                     setResult(e.data.value);
-                    setStatus("Gemessen. Keine automatische Freigabe.");
+                    setStatus(tr("styles.mecbbc2a5c4"));
                   } else setStatus(e.data.error);
                 };
                 worker.onerror = () => {
                   stop();
-                  setStatus("Vergleichsworker fehlgeschlagen");
+                  setStatus(tr("styles.m5a529db986"));
                 };
                 worker.postMessage(
                   {
@@ -227,25 +226,25 @@ export function StyleComparison({
                 if (serial === job.current.serial) {
                   setRunning(false);
                   setStatus(
-                    e instanceof Error ? e.message : "Vergleich fehlgeschlagen",
+                    e instanceof Error ? e.message : tr("styles.m138d9c9a2f"),
                   );
                 }
               }
             }}
           >
-            Stilabweichungen messen
+            {tr("styles.m50ab0bbffe")}
           </button>
           {running && (
             <button
               onClick={() => {
                 stop();
-                setStatus("Vergleich abgebrochen");
+                setStatus(tr("styles.m76d637326b"));
               }}
             >
-              Stilvergleich abbrechen
+              {tr("styles.mfe30f43bb3")}
             </button>
           )}
-          <p role="status" aria-label="Stilvergleich-Status">
+          <p role="status" aria-label={tr("styles.mae7c7283f3")}>
             {status}
           </p>
           {reference && candidate && (
@@ -256,25 +255,22 @@ export function StyleComparison({
                 height: reference.metrics.height,
               }}
               candidate={candidate}
-              beforeLabel="Stilreferenz"
-              previewPrefix="Stilanalyse"
+              beforeLabel={tr("styles.md7f9a116bd")}
+              previewPrefix={tr("styles.ma91ef6dc3c")}
             />
           )}
           {comparison && result && (
             <>
               {reference?.type !== result.type && (
-                <p className="warning">
-                  Unterschiedliche Referenztypen · nicht direkt vergleichbar.
-                  Keine Portraitregeln aus Environment-Metriken ableiten.
-                </p>
+                <p className="warning">{tr("styles.m551fa33da0")}</p>
               )}
               <table>
                 <thead>
                   <tr>
-                    <th>Messwert</th>
-                    <th>Referenz</th>
-                    <th>Kandidat</th>
-                    <th>Δ Kandidat − Referenz</th>
+                    <th>{tr("styles.maf7b439bd1")}</th>
+                    <th>{tr("styles.me131139872")}</th>
+                    <th>{tr("styles.m3c49ac4c54")}</th>
+                    <th>{tr("styles.md2ff0a43b7")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -290,7 +286,7 @@ export function StyleComparison({
                     <tr key={d.hex}>
                       <td>
                         <i style={{ background: d.hex }} />
-                        {d.hex} (2-bit RGB, vollständige Verteilung)
+                        {d.hex} {tr("styles.m987d0af022")}
                       </td>
                       <td>{d.reference.toFixed(3)}</td>
                       <td>{d.candidate.toFixed(3)}</td>
@@ -300,12 +296,12 @@ export function StyleComparison({
                 </tbody>
               </table>
               <p>
-                Detail-Δ bei Schritt 1 / 2 / 4:{" "}
+                {tr("styles.mbcfab2dd74")}{" "}
                 {comparison.detailDelta.map((v) => v.toFixed(3)).join(" / ")}
               </p>
               {comparison.warnings.map((w) => (
-                <p className="warning" key={w}>
-                  {w}
+                <p className="warning" key={displayMessage(w)}>
+                  {displayMessage(w)}
                 </p>
               ))}
             </>

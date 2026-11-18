@@ -1,3 +1,6 @@
+import { uiLabel } from "../../shared/locales";
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { PixelEditEditor } from "./PixelEditEditor";
 import type { StudioStep } from "./StudioSteps";
 import { ColorConsistency } from "./ColorConsistency";
@@ -40,7 +43,7 @@ export function Evidence({
         }
       })
       .catch(() => {
-        if (live) setError("Qualitätsprüfung fehlgeschlagen.");
+        if (live) setError(tr("common.m360bf5d4e0"));
       });
     return () => {
       live = false;
@@ -49,15 +52,21 @@ export function Evidence({
   if (error)
     return (
       <p className="warning">
-        {label}: {error} · kein Transparenznachweis.
+        {label}: {displayMessage(error)} {tr("common.m4eba347e0c")}
       </p>
     );
-  if (!report) return <p>{label}: Pixel werden geprüft …</p>;
+  if (!report)
+    return (
+      <p>
+        {label}
+        {tr("common.m0714494ba3")}
+      </p>
+    );
   const names = {
-    transparent: "Transparenz vorhanden · Silhouette manuell prüfen",
-    suspicious: "Hintergrund verdächtig · Freistellung erforderlich",
-    opaque: "Vollständig deckend · Freistellung erforderlich",
-    empty: "Leeres transparentes Bild · nicht produktionsfertig",
+    transparent: tr("common.m73b7cad572"),
+    suspicious: tr("common.m04af8bbd2a"),
+    opaque: tr("common.m7fbacabe0e"),
+    empty: tr("common.ma02b930134"),
   };
   return (
     <div className="quality-evidence" data-quality-status={report.status}>
@@ -67,31 +76,33 @@ export function Evidence({
       {!compact && (
         <>
           <small>
-            {report.width} × {report.height} · {report.format.toUpperCase()} ·
-            Alpha-Null: {report.transparent} · Teilalpha: {report.partial} ·
-            Deckend: {report.opaque} · Transparenter Rand:{" "}
-            {report.edgeTransparent}/{report.edgePixels}
+            {report.width} × {report.height} · {report.format.toUpperCase()}{" "}
+            {tr("common.mc4f01d8af0")}
+            {report.transparent} {tr("common.me6ec73312a")}
+            {report.partial} {tr("common.mb0f2399b7f")}
+            {report.opaque} {tr("common.m7f9f66460c")} {report.edgeTransparent}/
+            {report.edgePixels}
           </small>
           <div
             className="quality-palette"
-            aria-label={`${label} dominante Farben`}
+            aria-label={tr("common.mf58cb167bb", { v0: label })}
           >
             {report.palette.map((p) => (
               <span
                 key={p.color}
-                title={`${p.color} · ${p.pixels} Pixel (5-Bit-Farbgruppe)`}
+                title={tr("common.m41ae0d7c6d", { v0: p.color, v1: p.pixels })}
                 style={{ background: p.color }}
               />
             ))}
           </div>
           <small>
-            Dominante 5-Bit-Farbgruppen sichtbarer Pixel. Nachbarwechsel:{" "}
-            {report.neighborChanges}/{report.neighborPairs}. Vergleichshilfe für
-            Detaildichte, kein Stilscore.
+            {tr("common.m289b871808")} {report.neighborChanges}/
+            {report.neighborPairs}
+            {tr("common.m318c1351a4")}
           </small>
         </>
       )}
-      <small>{report.warnings.join(" ")}</small>
+      <small>{report.warnings.map(displayMessage).join(" ")}</small>
     </div>
   );
 }
@@ -236,8 +247,7 @@ export function AssetQuality({
           if (live)
             set({
               allowed: false,
-              reason:
-                "Freistellungsprüfung fehlgeschlagen. Quelle erneut öffnen.",
+              reason: tr("common.mefca899900"),
             });
         });
     };
@@ -305,7 +315,10 @@ export function AssetQuality({
       if (!r.ok) throw new Error(r.error);
       if (r.value)
         setNotice(
-          `Exportiert: ${r.value.name}${includeProvenance ? " + Provenienz-JSON" : ""}`,
+          tr("common.ma4bbd2d022", {
+            v0: r.value.name,
+            v1: includeProvenance ? " + Provenienz-JSON" : "",
+          }),
         );
     } catch (e) {
       setError(String(e));
@@ -326,14 +339,14 @@ export function AssetQuality({
       <div
         className="button-row quality-tools"
         role="toolbar"
-        aria-label="Bildwerkzeuge"
+        aria-label={tr("common.mf3d8c5b69a")}
         hidden={workspaceStep === "Freigeben"}
       >
         <button
           disabled={busy || !eligibility?.allowed}
           onClick={() => setRelighting({ source: active })}
         >
-          Live Relighting öffnen
+          {tr("common.m1ba1656607")}
         </button>
         {lightingRecipe && (
           <button
@@ -351,31 +364,31 @@ export function AssetQuality({
               });
             }}
           >
-            Lichtrevision bearbeiten
+            {tr("common.m035d80e3f1")}
           </button>
         )}
         <button
           disabled={busy}
           onClick={() => setPixelEditor({ id: active.id, mode: "snap" })}
         >
-          Pixel Snap öffnen
+          {tr("common.mf79c202e21")}
         </button>
         <button
           disabled={busy}
           onClick={() => setPixelEditor({ id: active.id, mode: "color" })}
         >
-          Color Correction öffnen
+          {tr("common.mcffb81462e")}
         </button>
         <button disabled={busy} onClick={() => void beginCutout()}>
-          Hintergrund freistellen
+          {tr("common.m46746f197e")}
         </button>
         {(!workspaceStep || showExpert) && (
           <>
             <button disabled={busy} onClick={() => void exportImage(false)}>
-              Transparentes PNG exportieren
+              {tr("common.m0cabbd24eb")}
             </button>
             <button disabled={busy} onClick={() => void exportImage(true)}>
-              Ausdrücklich Rohbild exportieren
+              {tr("common.ma6c5fe73d3")}
             </button>
           </>
         )}
@@ -394,17 +407,17 @@ export function AssetQuality({
         id={active.id}
         label={
           derivative
-            ? "Qualitätsversion"
+            ? tr("common.m32acc49c2f")
             : sourceQuality?.operation === "cutout"
-              ? "Freigestellte freigegebene Version"
-              : "Bildprüfung"
+              ? tr("common.m5c4c929543")
+              : tr("common.m77bd0460ce")
         }
       />
       <section className="asset-quality">
         <h3>
           {workspaceStep === "Freigeben"
-            ? "Qualitätsversion prüfen"
-            : "Bild bearbeiten"}
+            ? tr("common.m7e45e4629f")
+            : tr("common.m2d329f0554")}
         </h3>
         {!workspaceStep && (
           <label className="quality-expert-toggle">
@@ -413,66 +426,77 @@ export function AssetQuality({
               checked={advanced}
               onChange={(e) => setAdvanced(e.target.checked)}
             />
-            Expertenoptionen
+            {tr("common.mf1c856c99f")}
           </label>
         )}
         {expanded && (
           <>
             {error && (
               <p role="alert" className="error">
-                {error}
+                {displayMessage(error)}
               </p>
             )}
-            {notice && <p role="status">{notice}</p>}
+            {notice && <p role="status">{displayMessage(notice)}</p>}
             {showExpert && (
               <>
                 <p>
-                  Quelle:{" "}
+                  {tr("common.m1eb7dc4391")}{" "}
                   {derivative
                     ? derivative.operation === "cutout"
-                      ? "Freigestellter Kandidat"
+                      ? tr("common.m6879c746d2")
                       : derivative.operation === "relighting"
-                        ? `2D-Lichtkandidat · R${derivative.relighting?.revision}`
+                        ? tr("common.m17ce52206c", {
+                            v0: derivative.relighting?.revision,
+                          })
                         : derivative.operation === "pixel-snap"
-                          ? `Pixel-Snap-Kandidat · R${derivative.pixelEdit?.revision}`
+                          ? tr("common.mdd7a25049d", {
+                              v0: derivative.pixelEdit?.revision,
+                            })
                           : derivative.operation === "color-adjustment"
-                            ? `Manueller Farbkandidat · R${derivative.pixelEdit?.revision}`
+                            ? tr("common.m0495c8e9ca", {
+                                v0: derivative.pixelEdit?.revision,
+                              })
                             : derivative.operation === "color-correction"
-                              ? `Farbkandidat · R${derivative.colorCorrection?.revision}`
-                              : "Separate Auflösungsvariante"
+                              ? tr("common.m30e7da66f9", {
+                                  v0: derivative.colorCorrection?.revision,
+                                })
+                              : tr("common.mbe4efc90c5")
                     : sourceQuality
-                      ? "Freigegebene abgeleitete Version"
-                      : "Unverändertes Rohbild"}
-                  . Rohfreigabe allein ist kein Nachweis für ein
-                  produktionsfertiges Transparenzasset.
+                      ? tr("common.mb9d3662999")
+                      : tr("common.m590c2c345b")}
+                  {tr("common.mb5740e6f85")}
                 </p>
               </>
             )}
             {showExpert && sourceQuality && (
               <p className="mono">
-                Abgeleitet aus {sourceQuality.sourceId} · SHA-256{" "}
-                {sourceQuality.sourceSha256}. Das Rohoriginal bleibt erhalten.
+                {tr("common.mcc2e5420cf")}
+                {sourceQuality.sourceId} {tr("common.md7e1f4d17c")}{" "}
+                {sourceQuality.sourceSha256}
+                {tr("common.mc646deb90a")}
               </p>
             )}
             {showExpert && (
               <>
                 <p>
                   {derivative
-                    ? `Prüfstatus: ${derivative.status} · ${derivative.notes ?? "Freigabe steht aus"}`
-                    : "Eine bestehende Freigabe belegt keine Transparenz. Deckende Assets bleiben als Rohbilder nutzbar."}
+                    ? tr("common.maf995901c9", {
+                        v0: derivative.status,
+                        v1: derivative.notes ?? "Freigabe steht aus",
+                      })
+                    : tr("common.m0ba5ff9c79")}
                 </p>
               </>
             )}
-            <p role="status" aria-label="Relighting Freigabe">
-              {eligibility?.reason ??
-                "Freistellungs-Herkunft und Alpha werden geprüft …"}
+            <p role="status" aria-label={tr("common.mb9ceaedccd")}>
+              {eligibility?.reason ?? tr("common.mdfa6ee9ec0")}
             </p>
             {lightingRecipe &&
               recipeEligibility &&
               !recipeEligibility.allowed && (
                 <p className="warning">
-                  Lichtrevision bleibt historisch erhalten. Keine neue Revision:{" "}
-                  {recipeEligibility.reason}
+                  {tr("common.m706038b300")}{" "}
+                  {displayMessage(recipeEligibility.reason)}
                 </p>
               )}
             {(!workspaceStep || showExpert) && (
@@ -484,16 +508,16 @@ export function AssetQuality({
                     disabled={busy}
                     onChange={(e) => setIncludeProvenance(e.target.checked)}
                   />
-                  Provenienz-JSON exportieren (Prompt, Herkunft, Prüfnotizen)
+                  {tr("common.mcfa9657e86")}
                 </label>
               </>
             )}
             {(derivatives.length > 0 || derivative) && (
               <>
                 <label>
-                  Qualitätsversion
+                  {tr("common.m32acc49c2f")}
                   <select
-                    aria-label="Qualitätsversion"
+                    aria-label={tr("common.m32acc49c2f")}
                     value={derivative?.id ?? ""}
                     onChange={(e) => setSelected(e.target.value)}
                   >
@@ -502,8 +526,8 @@ export function AssetQuality({
                       : derivatives
                     ).map((d, i) => (
                       <option key={d.id} value={d.id}>
-                        {i + 1} · {d.operation} · {d.width}×{d.height} ·{" "}
-                        {d.status}
+                        {i + 1} · {uiLabel(d.operation)} · {d.width}×{d.height}{" "}
+                        · {uiLabel(d.status)}
                       </option>
                     ))}
                   </select>
@@ -520,8 +544,8 @@ export function AssetQuality({
                       : source
                   }
                   candidate={derivative}
-                  beforeLabel="Original"
-                  previewPrefix="Qualität"
+                  beforeLabel={tr("common.m88d759ea02")}
+                  previewPrefix={tr("common.meb718207ad")}
                 />
                 {derivative?.status === "candidate" && (
                   <div
@@ -529,9 +553,9 @@ export function AssetQuality({
                     hidden={workspaceStep === "Bearbeiten"}
                   >
                     <label>
-                      Stil-/Silhouettenprüfung und Abweichungen
+                      {tr("common.m7d3c3d381f")}
                       <textarea
-                        aria-label="Qualitätsnotiz"
+                        aria-label={tr("common.mcaa6d3fd8e")}
                         maxLength={8000}
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
@@ -543,27 +567,14 @@ export function AssetQuality({
                         checked={confirmed}
                         onChange={(e) => setConfirmed(e.target.checked)}
                       />
-                      Identität, Outfit, Konturen, Raster, Stil und Alpha-Kanten
-                      visuell geprüft
+                      {tr("common.m417b2918c4")}
                     </label>
-                    <small>
-                      Raster und Cluster bei 1:1 und Vergrößerung prüfen; die
-                      manuelle Rasterentscheidung in der Notiz dokumentieren.
-                      Notiz und Sichtprüfung erforderlich. Deckende, leere oder
-                      verdächtige Ergebnisse können nicht produktiv freigegeben
-                      werden. Eine Masterfreigabe erzeugt eine neue Version;
-                      alte Verknüpfungen bleiben erhalten.
-                    </small>
+                    <small>{tr("common.m0be39dc703")}</small>
                     <div className="button-row">
                       <button
                         disabled={busy || !confirmed || !notes.trim()}
                         onClick={() => {
-                          if (
-                            !window.confirm(
-                              "Qualitätsversion ausdrücklich freigeben? Ein neuer Master wird als aktuelle Version aktiviert; bisherige Master und Expressions bleiben unverändert erhalten.",
-                            )
-                          )
-                            return;
+                          if (!window.confirm(tr("common.m7c1b763808"))) return;
                           void command({
                             type: "reviewQuality",
                             id: derivative.id,
@@ -574,7 +585,7 @@ export function AssetQuality({
                           }).catch(() => {});
                         }}
                       >
-                        Qualitätsversion freigeben
+                        {tr("common.m35bca28ae0")}
                       </button>
                       <button
                         disabled={busy || !notes.trim()}
@@ -589,7 +600,7 @@ export function AssetQuality({
                           }).catch(() => {});
                         }}
                       >
-                        Qualitätsversion ablehnen
+                        {tr("common.mb5ac0ec95b")}
                       </button>
                     </div>
                   </div>
@@ -599,12 +610,12 @@ export function AssetQuality({
             {showExpert && (
               <section className="quality-expert">
                 <StyleComparison project={project} sourceId={active.id} />
-                <h3>Auflösungsprofil · separate Variante</h3>
+                <h3>{tr("common.m73648e8f54")}</h3>
                 <div className="inline-form">
                   <label>
-                    Vorlage
+                    {tr("common.m697cf59a62")}
                     <select
-                      aria-label="Auflösungsvorlage"
+                      aria-label={tr("common.m52e19d6c5e")}
                       onChange={(e) =>
                         setProfile({
                           ...RESOLUTION_PROFILES[Number(e.target.value)],
@@ -619,7 +630,7 @@ export function AssetQuality({
                     </select>
                   </label>
                   <label>
-                    Profilname
+                    {tr("common.m3f5b0786ba")}
                     <input
                       value={profile.name}
                       onChange={(e) =>
@@ -629,9 +640,11 @@ export function AssetQuality({
                   </label>
                   {(["width", "height"] as const).map((k) => (
                     <label key={k}>
-                      {k === "width" ? "Breite" : "Höhe"}
+                      {k === "width"
+                        ? tr("common.m28240c279d")
+                        : tr("common.ma4d8c3470c")}
                       <input
-                        aria-label={`Profil ${k}`}
+                        aria-label={tr("common.m46b0d480a0", { v0: k })}
                         type="number"
                         min={1}
                         max={4096}
@@ -646,7 +659,7 @@ export function AssetQuality({
                     </label>
                   ))}
                   <label>
-                    Skalierung
+                    {tr("common.me1c8e71ab0")}
                     <select
                       value={profile.sampling}
                       onChange={(e) =>
@@ -658,13 +671,15 @@ export function AssetQuality({
                       }
                     >
                       <option value="nearest">
-                        Nearest Neighbor · Pixelart
+                        {tr("common.mbb8f690b15")}
                       </option>
-                      <option value="bilinear">Bilinear · alpha-korrekt</option>
+                      <option value="bilinear">
+                        {tr("common.mcba5512ae2")}
+                      </option>
                     </select>
                   </label>
                   <label>
-                    Seitenverhältnis
+                    {tr("common.m0e9f31ec4b")}
                     <select
                       value={profile.fit}
                       onChange={(e) =>
@@ -675,32 +690,28 @@ export function AssetQuality({
                       }
                     >
                       <option value="contain">
-                        Einpassen + transparentes Padding
+                        {tr("common.m6debc775be")}
                       </option>
-                      <option value="cover">
-                        Füllen + zentrierter Zuschnitt
-                      </option>
+                      <option value="cover">{tr("common.m0cc0d661d8")}</option>
                     </select>
                   </label>
                 </div>
                 <p>
                   {active.width === profile.width &&
                   active.height === profile.height
-                    ? "Auflösung entspricht Profil"
-                    : "Auflösung weicht ab"}{" "}
-                  · Ist {active.width}×{active.height} / Ziel {profile.width}×
-                  {profile.height}. Nearest Neighbor erzeugt keinen
-                  Pixelart-Stil aus Fotorealismus. Keine Verzerrung; Quelle
-                  bleibt erhalten.
+                    ? tr("common.mfb8cde0dc1")
+                    : tr("common.mc25877f87e")}{" "}
+                  {tr("common.mce296e5214")}
+                  {active.width}×{active.height} {tr("common.mfec7d610a1")}
+                  {profile.width}×{profile.height}
+                  {tr("common.m3bbd97a968")}
                 </p>
                 <button
                   disabled={busy}
                   onClick={() => {
                     if (
                       profile.fit === "cover" &&
-                      !window.confirm(
-                        "Zentrierten Zuschnitt ausdrücklich anwenden? Die Quelle bleibt erhalten.",
-                      )
+                      !window.confirm(tr("common.m62c640b139"))
                     )
                       return;
                     void command({
@@ -710,38 +721,35 @@ export function AssetQuality({
                     }).catch(() => {});
                   }}
                 >
-                  Separate Auflösungsvariante erstellen
+                  {tr("common.md2c8f574a3")}
                 </button>
               </section>
             )}
             {showExpert && (
               <section className="quality-expert">
                 <h3>
-                  Art-Direction-Vergleich ·{" "}
+                  {tr("common.m2b2801eb85")}{" "}
                   {style?.name ?? "Eigener Masterstil"} · {styleIds.length}{" "}
-                  Stilreferenzen
+                  {tr("common.mbc0cc2fa3d")}
                 </h3>
                 <p>
-                  Zielpalette:{" "}
-                  {style?.colorRules ??
-                    "Keine explizite Zielpalette; dominante Referenzfarben vergleichen."}
-                  . Identität, Outfit und Hintergrund sind unabhängig vom
-                  Renderingstil. Konturen, Farbflächen, Cluster und Details bei
-                  gleichem Zoom prüfen; keine automatische Stilfreigabe.
+                  {tr("common.mc2770b9300")}{" "}
+                  {style?.colorRules ?? tr("common.m9ba712cd0f")}
+                  {tr("common.m5507d9a136")}
                 </p>
                 {styleIds.map((id) => (
                   <div key={id}>
                     <ImagePreview
                       id={id}
-                      caption="Stilreferenz · keine Identitäts-/Outfitvorlage"
+                      caption={tr("common.md1c68d5b2a")}
                       zoom={100}
                     />
-                    <Evidence id={id} label="Stilreferenz" />
+                    <Evidence id={id} label={tr("common.md7f9a116bd")} />
                     <MasterCandidateCompare
                       master={project.styleAssets.find((a) => a.id === id)}
                       candidate={active}
-                      beforeLabel="Stilreferenz"
-                      previewPrefix="Stilprüfung"
+                      beforeLabel={tr("common.md7f9a116bd")}
+                      previewPrefix={tr("common.m004f657191")}
                     />
                   </div>
                 ))}

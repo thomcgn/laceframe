@@ -142,14 +142,14 @@ const fs = require("node:fs/promises"),
     await seedHistoricalMaster(project, original);
     await launch();
     await chooser(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       page.getByRole("heading", { name: "Protected portrait", exact: true }),
     ).toBeVisible();
     let quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+    await expect(
+      quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+    ).toBeVisible();
     await quality
       .getByRole("button", { name: "Hintergrund freistellen", exact: true })
       .click();
@@ -347,7 +347,9 @@ const fs = require("node:fs/promises"),
     hp = await canvasPoint(625, 600);
     cb = await dialog().locator("canvas").boundingBox();
     const nativeBefore = ((hp.x - cb.x) * 1254) / cb.width;
-    await page.mouse.move(hp.x, hp.y);
+    await page.keyboard.down("Alt");
+    await page.mouse.click(hp.x, hp.y);
+    await page.keyboard.up("Alt");
     await page.mouse.wheel(0, -120);
     await page.waitForTimeout(80);
     cb = await dialog().locator("canvas").boundingBox();
@@ -611,7 +613,9 @@ const fs = require("node:fs/promises"),
     // Wheel zoom keeps the native pixel below the cursor registered.
     const anchor = await canvasPoint(700, 650),
       priorCanvas = await dialog().locator("canvas").boundingBox();
-    await page.mouse.move(anchor.x, anchor.y);
+    await page.keyboard.down("Alt");
+    await page.mouse.click(anchor.x, anchor.y);
+    await page.keyboard.up("Alt");
     await page.mouse.wheel(0, -130);
     await expect
       .poll(async () => (await dialog().locator("canvas").boundingBox()).width)
@@ -978,14 +982,14 @@ const fs = require("node:fs/promises"),
     await app.close();
     await launch();
     await chooser(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       page.getByRole("heading", { name: "Protected portrait", exact: true }),
     ).toBeVisible();
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
-    await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+    await expect(
+      quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+    ).toBeVisible();
     await quality
       .getByRole("button", { name: "Hintergrund freistellen", exact: true })
       .click();
@@ -1060,7 +1064,9 @@ const fs = require("node:fs/promises"),
     await expect.poll(async () => (await manifest()).masters.length).toBe(2);
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     if ((await quality.getAttribute("open")) === null)
-      await expect(quality.getByRole("heading", {name: "Bild bearbeiten", exact: true})).toBeVisible();
+      await expect(
+        quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
+      ).toBeVisible();
     await chooser(exports);
     await quality
       .getByRole("button", {

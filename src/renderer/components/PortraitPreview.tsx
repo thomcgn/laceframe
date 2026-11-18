@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { PixelViewport } from "./PixelViewport";
 import { usePreview } from "./useImagePreview";
 /** Read-only image presentation through the existing validated preview IPC. */
@@ -19,7 +20,7 @@ export function PortraitPreview({
       ) : (
         <p className="portrait-empty">
           {preview.error ||
-            (image ? "Lade Bild …" : "Noch kein Bild ausgewählt")}
+            (image ? tr("common.mab9f00032e") : tr("common.m7e0dcba96d"))}
         </p>
       )}
     </figure>

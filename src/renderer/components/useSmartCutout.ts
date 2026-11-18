@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { useEffect, useRef, useState } from "react";
 import {
   validateCutoutImage,
@@ -112,7 +113,7 @@ export function useSmartCutout(
       if (!source.ok) throw new Error(source.error);
       validateCutoutImage(source.value);
       if (source.value.width !== width || source.value.height !== height)
-        throw new Error("Bildquelle passt nicht zu den Asset-Abmessungen.");
+        throw new Error(tr("common.m868d6f5089"));
       let d: CutoutDraft = {
         settings: defaultCutoutSettings(),
         manual: initial
@@ -135,9 +136,7 @@ export function useSmartCutout(
       }
     })().catch((e) => {
       if (live)
-        setLoadError(
-          e instanceof Error ? e.message : "Bild konnte nicht geladen werden",
-        );
+        setLoadError(e instanceof Error ? e.message : tr("common.m6f62337731"));
     });
     return () => {
       live = false;
@@ -164,9 +163,7 @@ export function useSmartCutout(
           stop();
           wanted.current = undefined;
           setCancelled(true);
-          setError(
-            "Freistellungs-Worker fehlgeschlagen. Neu berechnen oder Dialog erneut öffnen.",
-          );
+          setError(tr("common.mad887e2d44"));
         };
       }
       // Handler must retain the draft for this exact request, not the first worker request.
@@ -205,9 +202,7 @@ export function useSmartCutout(
             e.data.conflicts < 0 ||
             e.data.conflicts > count
           ) {
-            setError(
-              "Ungültige Freistellungsvorschau. Hintergrundauswahl erneut aktualisieren.",
-            );
+            setError(tr("common.ma8df76e070"));
             setRunning(false);
             return;
           }

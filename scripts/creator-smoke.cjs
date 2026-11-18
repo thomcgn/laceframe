@@ -150,7 +150,7 @@ const { createHash } = require("node:crypto");
     );
     await field(
       page,
-      "Rendering-Regeln (ohne Charakter- oder Outfitmerkmale)",
+      "Darstellung-Regeln (ohne Charakter- oder Outfitmerkmale)",
       {
         exact: true,
       },
@@ -200,7 +200,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Outfit ist unvollständig.", exact: true })
       .click();
-    await expect(field(page, "Creator Outfit", { exact: true })).toBeFocused();
+    await expect(field(page, "Figurenerstellung Outfit", { exact: true })).toBeFocused();
     const webp = await page.evaluate(() => {
       const c = document.createElement("canvas");
       c.width = 72;
@@ -360,13 +360,13 @@ const { createHash } = require("node:crypto");
         .first(),
     ).toBeDisabled();
     await studioStep(page, "Auswählen");
-    await field(page, "Creator Outfit", { exact: true }).fill(
+    await field(page, "Figurenerstellung Outfit", { exact: true }).fill(
       "Blue jacket and plain white shirt, no pendant or plaid.",
     );
     await studioStep(page, "Auswählen");
-    await field(page, "Creator Identitätsmerkmale", { exact: true }).fill(
-      "Use only the individual in the identity photos.",
-    );
+    await field(page, "Figurenerstellung Identitätsmerkmale", {
+      exact: true,
+    }).fill("Use only the individual in the identity photos.");
     await studioExpert(page);
     await expect(
       field(page, "Creator Promptmodus", { exact: true }),
@@ -379,7 +379,7 @@ const { createHash } = require("node:crypto");
     ).toHaveValue(/Images 4–4 are STYLE ONLY/);
     // A retained draft survives style editing, mode changes and Library round trips.
     await studioStep(page, "Auswählen");
-    const originalOutfit = await field(page, "Creator Outfit", {
+    const originalOutfit = await field(page, "Figurenerstellung Outfit", {
       exact: true,
     }).inputValue();
     await expect(
@@ -387,7 +387,7 @@ const { createHash } = require("node:crypto");
     ).toBeHidden();
     await studioStep(page, "Auswählen");
     await page
-      .getByRole("button", { name: "Art Direction bearbeiten", exact: true })
+      .getByRole("button", { name: "Stilgestaltung bearbeiten", exact: true })
       .click();
     await field(page, "Licht und Schattierung", { exact: true }).fill(
       "Soft directional light, retained draft R3.",
@@ -422,9 +422,9 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Zurück zum Studio", exact: true })
       .click();
-    await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
-      originalOutfit,
-    );
+    await expect(
+      field(page, "Figurenerstellung Outfit", { exact: true }),
+    ).toHaveValue(originalOutfit);
     await studioExpert(page);
     await expect(
       field(page, "Creator Arbeits-Prompt", { exact: true }),
@@ -467,7 +467,7 @@ const { createHash } = require("node:crypto");
     ).toHaveValue(expertText);
     await studioStep(page, "Auswählen");
     await page
-      .getByRole("button", { name: "Art Direction bearbeiten", exact: true })
+      .getByRole("button", { name: "Stilgestaltung bearbeiten", exact: true })
       .click();
     await field(page, "Licht und Schattierung", { exact: true }).fill(
       "Soft directional light, expert conflict R4.",
@@ -513,9 +513,9 @@ const { createHash } = require("node:crypto");
       .getByRole("button", { name: "Master erstellen", exact: true })
       .click();
     await studioStep(page, "Auswählen");
-    await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
-      originalOutfit,
-    );
+    await expect(
+      field(page, "Figurenerstellung Outfit", { exact: true }),
+    ).toHaveValue(originalOutfit);
     expect(await turns()).toEqual([]);
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()[0].setSize(960, 720),
@@ -556,7 +556,7 @@ const { createHash } = require("node:crypto");
     await generate.click();
     await expect(
       page.getByRole("status", {
-        name: "Character Creator Status",
+        name: "Character Figurenerstellung Status",
         exact: true,
       }),
     ).toContainText("Mastergenerierung läuft");
@@ -594,13 +594,13 @@ const { createHash } = require("node:crypto");
       .click();
     await expect(
       page.getByRole("status", {
-        name: "Character Creator Status",
+        name: "Character Figurenerstellung Status",
         exact: true,
       }),
     ).toContainText("Mastergenerierung abgeschlossen");
     await studioStep(page, "Erzeugen");
     await expect(
-      image(page, "Character Creator · Ergebnisvorschau", {
+      image(page, "Character Figurenerstellung · Ergebnisvorschau", {
         exact: true,
       }),
     ).toBeVisible();
@@ -637,7 +637,7 @@ const { createHash } = require("node:crypto");
     await studioStep(page, "Erzeugen");
     await generate.click();
     await expect(
-      page.getByRole("status", { name: "Character Creator Status" }),
+      page.getByRole("status", { name: "Character Figurenerstellung Status" }),
     ).toContainText("fehlgeschlagen");
     await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
@@ -659,7 +659,9 @@ const { createHash } = require("node:crypto");
         }),
       ).toBeInViewport();
       await expect(
-        page.getByRole("status", { name: "Character Creator Status" }),
+        page.getByRole("status", {
+          name: "Character Figurenerstellung Status",
+        }),
       ).toContainText("Mastergenerierung läuft");
     }
     await page
@@ -672,7 +674,7 @@ const { createHash } = require("node:crypto");
       .toBe("cancelled");
     await nav(page, "Studio");
     await expect(
-      page.getByRole("status", { name: "Character Creator Status" }),
+      page.getByRole("status", { name: "Character Figurenerstellung Status" }),
     ).toContainText("abgebrochen");
     await studioStep(page, "Erzeugen");
     await expect(generate).toBeEnabled();
@@ -680,16 +682,16 @@ const { createHash } = require("node:crypto");
     await studioStep(page, "Erzeugen");
     await generate.click();
     await expect(
-      page.getByRole("status", { name: "Character Creator Status" }),
+      page.getByRole("status", { name: "Character Figurenerstellung Status" }),
     ).toContainText("Mastergenerierung läuft");
     await expect(
-      page.getByRole("status", { name: "Character Creator Status" }),
+      page.getByRole("status", { name: "Character Figurenerstellung Status" }),
     ).toContainText("Mastergenerierung abgeschlossen");
     await page
-      .getByRole("button", { name: "In Library prüfen", exact: true })
+      .getByRole("button", { name: "In Bibliothek prüfen", exact: true })
       .click();
     const latestCandidate = (await manifest()).masterCandidates.at(-1);
-    await expect(field(page, "Library Asset", { exact: true })).toHaveValue(
+    await expect(field(page, "Bibliothek Asset", { exact: true })).toHaveValue(
       latestCandidate.id,
     );
     await page
@@ -699,9 +701,9 @@ const { createHash } = require("node:crypto");
       })
       .click();
     await studioStep(page, "Auswählen");
-    await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
-      originalOutfit,
-    );
+    await expect(
+      field(page, "Figurenerstellung Outfit", { exact: true }),
+    ).toHaveValue(originalOutfit);
     await studioStep(page, "Freigeben");
     await field(page, "Master Identität bestätigt", { exact: true }).check();
     await field(page, "Master Silhouette geprüft", { exact: true }).check();
@@ -733,9 +735,7 @@ const { createHash } = require("node:crypto");
       reviewWarning = d.message();
       void d.dismiss();
     });
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     expect(reviewWarning).toContain("Ungespeicherte");
     await expect(field(page, "Master Prüfnotiz", { exact: true })).toHaveValue(
       "Synthetic silhouette and identity reviewed",
@@ -789,10 +789,10 @@ const { createHash } = require("node:crypto");
       })
       .click();
     await expect(
-      field(page, "Create Masterversion", { exact: true }),
+      field(page, "Studio Masterversion", { exact: true }),
     ).toHaveValue(master.id);
     await studioStep(page, "Auswählen");
-    await field(page, "Create Anbieter", { exact: true }).selectOption(
+    await field(page, "Studio Anbieter", { exact: true }).selectOption(
       "codex-native",
     );
     const expression = page.getByRole("button", {
@@ -817,10 +817,10 @@ const { createHash } = require("node:crypto");
       "Als Expression freigegeben",
     );
     await page
-      .getByRole("button", { name: "In Library prüfen", exact: true })
+      .getByRole("button", { name: "In Bibliothek prüfen", exact: true })
       .click();
     const expressionAsset = (await manifest()).assets[0];
-    await expect(field(page, "Library Asset", { exact: true })).toHaveValue(
+    await expect(field(page, "Bibliothek Asset", { exact: true })).toHaveValue(
       expressionAsset.id,
     );
     const exportDir = path.join(root, "exports");
@@ -859,7 +859,7 @@ const { createHash } = require("node:crypto");
       })
       .click();
     await expect(
-      field(page, "Create Masterversion", { exact: true }),
+      field(page, "Studio Masterversion", { exact: true }),
     ).toHaveValue(master.id);
     // Returning to creator never replaces the locked master. Referenced photo removal retains history.
     await page
@@ -881,9 +881,7 @@ const { createHash } = require("node:crypto");
     await app.close();
     await launch();
     await chooser(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       image(page, "Freigegebener Master V1", { exact: true }),
     ).toBeVisible();
@@ -893,7 +891,7 @@ const { createHash } = require("node:crypto");
       .click();
     await studioStep(page, "Erzeugen");
     await expect(
-      image(page, "Character Creator · Ergebnisvorschau", {
+      image(page, "Character Figurenerstellung · Ergebnisvorschau", {
         exact: true,
       }),
     ).toBeVisible();
@@ -926,9 +924,9 @@ const { createHash } = require("node:crypto");
         .locator(".studio-editor:visible")
         .getByRole("button", { name: "1. Auswählen", exact: true }),
     ).toHaveAttribute("aria-current", "step");
-    await expect(field(page, "Creator Outfit", { exact: true })).toHaveValue(
-      originalOutfit,
-    );
+    await expect(
+      field(page, "Figurenerstellung Outfit", { exact: true }),
+    ).toHaveValue(originalOutfit);
     expect(await turnCount()).toBe(turnsBefore);
     expect((await manifest()).characters[0].masterId).toBe(v1.id);
     const gen = () =>
@@ -938,7 +936,7 @@ const { createHash } = require("node:crypto");
       });
     const job = () =>
       page.getByRole("status", {
-        name: "Character Creator Status",
+        name: "Character Figurenerstellung Status",
         exact: true,
       });
     const approveButton = () =>
@@ -1011,7 +1009,8 @@ const { createHash } = require("node:crypto");
             sourceSha256: c.sha256,
             identityConfirmed: true,
             silhouetteConfirmed: true,
-            activationConfirmed: true, rasterConfirmed: true,
+            activationConfirmed: true,
+            rasterConfirmed: true,
             notes: "Direct IPC must still fail transparency",
           },
         }),
@@ -1086,15 +1085,13 @@ const { createHash } = require("node:crypto");
     await app.close();
     await launch();
     await chooser(project);
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       image(page, "Freigegebener Master V1", { exact: true }),
     ).toBeVisible();
     await assertOld();
     await nav(page, "Library");
-    await field(page, "Library Asset", { exact: true }).selectOption(
+    await field(page, "Bibliothek Asset", { exact: true }).selectOption(
       pending.id,
     );
     await expect(
@@ -1174,7 +1171,7 @@ const { createHash } = require("node:crypto");
       })
       .click();
     await expect(
-      field(page, "Create Masterversion", { exact: true }),
+      field(page, "Studio Masterversion", { exact: true }),
     ).toHaveValue(v2.id);
     await nav(page, "Characters");
     await expect(

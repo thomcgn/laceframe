@@ -1,3 +1,5 @@
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { PixelViewport } from "./PixelViewport";
 import { EditorWorkspace } from "./EditorWorkspace";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -97,8 +99,7 @@ export function ColorRegionEditor({
       if (e.data.error) setError(e.data.error);
       else setPreview(e.data);
     };
-    w.onerror = () =>
-      setError("Farbauswahl-Worker ausgefallen; nichts gespeichert.");
+    w.onerror = () => setError(tr("editing.mbc988c742a"));
     w.postMessage({ pixels, selection: history.present });
     return () => w.terminate();
   }, [pixels, history.present]);
@@ -131,7 +132,7 @@ export function ColorRegionEditor({
       return;
     const i = y * pixels.width + x;
     if (pixels.data[i * 4 + 3] < 128) {
-      setError("Farbe von einem ausreichend sichtbaren Pixel aufnehmen.");
+      setError(tr("editing.m8712692e38"));
       return;
     }
     setPicked({ x, y, hex: pixelHex(pixels, i) });
@@ -157,7 +158,7 @@ export function ColorRegionEditor({
       mutation.current = undefined;
     };
     w.onerror = () => {
-      setError("Farbauswahl fehlgeschlagen; nichts gespeichert.");
+      setError(tr("editing.mdbf7138ce2"));
       setMutating(false);
       w.terminate();
       mutation.current = undefined;
@@ -186,20 +187,17 @@ export function ColorRegionEditor({
       0,
     ) ?? 0;
   const close = () => {
-    if (
-      !history.past.length ||
-      window.confirm("Ungespeicherte Region verwerfen?")
-    )
+    if (!history.past.length || window.confirm(tr("editing.m65e16b0b60")))
       onClose();
   };
   return (
-    <EditorWorkspace title="Auswahl nach Farbe" className="">
+    <EditorWorkspace title={tr("editing.mbe7ed3a938")} className="">
       <section
         ref={modal}
         className="color-region-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Auswahl nach Farbe"
+        aria-label={tr("editing.mbe7ed3a938")}
         tabIndex={-1}
         onKeyDown={(e) => {
           if (brush) return;
@@ -226,40 +224,34 @@ export function ColorRegionEditor({
         }}
       >
         <div className="section-head">
-          <h2>Auswahl nach Farbe</h2>
-          <button onClick={close}>Region verwerfen / schließen</button>
+          <h2>{tr("editing.mbe7ed3a938")}</h2>
+          <button onClick={close}>{tr("editing.m945010968c")}</button>
         </div>
-        <p>
-          Farben manuell zuweisen. Sage markiert die Region; Originalpixel
-          bleiben unverändert. Keine automatische Haar- oder Hauterkennung.
-        </p>
+        <p>{tr("editing.m22803a458d")}</p>
         {error && (
           <p className="error" role="alert">
-            {error}
+            {displayMessage(error)}
           </p>
         )}
         <div className="color-region-layout">
           <div className="color-region-controls">
             <label>
-              Regionname
+              {tr("editing.m7208d15f9f")}
               <input
-                aria-label="Regionname"
+                aria-label={tr("editing.m7208d15f9f")}
                 value={name}
                 maxLength={120}
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
-            <strong>Farbe aufnehmen</strong>
-            <p>
-              Klick ins Bild oder auf ein Farbfeld. Bei „zusammenhängend“
-              bestimmt der aufgenommene Pixel den Startpunkt.
-            </p>
-            <div className="button-row" aria-label="Dominante Bildfarben">
+            <strong>{tr("editing.mac7a08390d")}</strong>
+            <p>{tr("editing.m0401f508f3")}</p>
+            <div className="button-row" aria-label={tr("editing.m936cf147d4")}>
               {dominant.map((c) => (
                 <button
                   key={c.hex}
-                  aria-label={`Bildfarbe ${c.hex}`}
-                  title={`${c.count} Pixel in Farbgruppe`}
+                  aria-label={tr("editing.m191f7ddab0", { v0: c.hex })}
+                  title={tr("editing.md10a207b2b", { v0: c.count })}
                   style={{ borderBottom: `8px solid ${c.hex}` }}
                   onClick={() => pickSwatch(c.hex)}
                 >
@@ -269,13 +261,18 @@ export function ColorRegionEditor({
             </div>
             <p role="status">
               {picked
-                ? `Farbe aufgenommen: ${picked.hex} · ${picked.x}, ${picked.y}`
-                : "Werkzeug: Pipette · noch keine Farbe aufgenommen"}
+                ? tr("editing.m2ec37f166e", {
+                    v0: picked.hex,
+                    v1: picked.x,
+                    v2: picked.y,
+                  })
+                : tr("editing.m48866b2f6a")}
             </p>
             <label>
-              Toleranz (ΔE76) · {tolerance}
+              {tr("editing.m7bd0af1a86")}
+              {tolerance}
               <input
-                aria-label="Auswahltoleranz"
+                aria-label={tr("editing.mfe284ab8f6")}
                 type="range"
                 min="0"
                 max="100"
@@ -289,7 +286,7 @@ export function ColorRegionEditor({
                 checked={connected}
                 onChange={(e) => setConnected(e.target.checked)}
               />
-              Zusammenhängend (sonst global)
+              {tr("editing.mad8769ae0b")}
             </label>
             <div className="button-row">
               <button
@@ -298,7 +295,7 @@ export function ColorRegionEditor({
                 }
                 onClick={() => apply("add")}
               >
-                Zur Region hinzufügen
+                {tr("editing.mfae4cc249a")}
               </button>
               <button
                 disabled={
@@ -306,19 +303,16 @@ export function ColorRegionEditor({
                 }
                 onClick={() => apply("subtract")}
               >
-                Von Region entfernen
+                {tr("editing.mcc881fd72c")}
               </button>
             </div>
-            <small>
-              Toleranz und Modus gelten für den nächsten Farbschritt. Maximal 32
-              Schritte; Pinselkorrekturen anschließend möglich.
-            </small>
-            <strong>Aktuelle Regionspalette</strong>
-            <div className="button-row" aria-label="Ausgewählte Regionsfarben">
+            <small>{tr("editing.m82b9660041")}</small>
+            <strong>{tr("editing.m749edd8837")}</strong>
+            <div className="button-row" aria-label={tr("editing.m460c38ab1e")}>
               {preview?.colors.map((c) => (
                 <button
                   key={c.hex}
-                  aria-label={`Regionsfarbe ${c.hex}`}
+                  aria-label={tr("editing.m54fad24ae6", { v0: c.hex })}
                   style={{ borderBottom: `8px solid ${c.hex}` }}
                   onClick={() => pickSwatch(c.hex, preview.weights)}
                 >
@@ -326,21 +320,25 @@ export function ColorRegionEditor({
                 </button>
               ))}
             </div>
-            <p aria-label="Regionsabdeckung">
-              {count} sichtbare Pixel ·{" "}
-              {((100 * count) / (pixels.width * pixels.height)).toFixed(1)} %
-              der Zeichenfläche
+            <p aria-label={tr("editing.mf0750a834d")}>
+              {count} {tr("editing.ma545dfb506")}{" "}
+              {((100 * count) / (pixels.width * pixels.height)).toFixed(1)}{" "}
+              {tr("editing.m6911c38624")}
             </p>
-            <ol aria-label="Gespeicherte Farbschritte">
+            <ol aria-label={tr("editing.m0a69487488")}>
               {history.present.seeds.map((s, i) => (
                 <li key={i}>
-                  {s.operation === "add" ? "+" : "−"} {s.hex} · ΔE {s.tolerance}{" "}
-                  · {s.connected ? `verbunden ab ${s.x},${s.y}` : "global"}
+                  {s.operation === "add" ? "+" : "−"} {s.hex}{" "}
+                  {tr("editing.m3f86452c2a")}
+                  {s.tolerance} ·{" "}
+                  {s.connected
+                    ? tr("editing.m697d6f3c96", { v0: s.x, v1: s.y })
+                    : "global"}
                 </li>
               ))}
             </ol>
             <button disabled={!preview} onClick={() => setBrush(true)}>
-              Pinsel für Feinkorrekturen
+              {tr("editing.med8d3a7f00")}
             </button>
             <div className="button-row">
               {(["x", "y"] as const).map((k) => (
@@ -348,7 +346,7 @@ export function ColorRegionEditor({
                   {k}
                   <input
                     type="number"
-                    aria-label={`Regionspipette ${k}`}
+                    aria-label={tr("editing.md736189315", { v0: k })}
                     min="0"
                     max={k === "x" ? pixels.width - 1 : pixels.height - 1}
                     value={coords[k]}
@@ -360,20 +358,20 @@ export function ColorRegionEditor({
               ))}
             </div>
             <button onClick={() => pick(coords.x, coords.y)}>
-              Farbe an Koordinate aufnehmen
+              {tr("editing.m7e955c4f76")}
             </button>
           </div>
           <figure>
             <figcaption>
-              {name} · {pixels.width}×{pixels.height} · Pipette /
-              Auswahlvorschau
+              {name} · {pixels.width}×{pixels.height}{" "}
+              {tr("editing.m1ca8348b89")}
             </figcaption>
             <PixelViewport width={pixels.width} height={pixels.height}>
               <canvas
                 ref={canvas}
                 width={pixels.width}
                 height={pixels.height}
-                aria-label="Farbauswahlfläche"
+                aria-label={tr("editing.m44bcb3b721")}
                 onClick={(e) => {
                   const r = e.currentTarget.getBoundingClientRect(),
                     scale = Math.min(
@@ -404,13 +402,13 @@ export function ColorRegionEditor({
             disabled={mutating || !history.past.length}
             onClick={() => setHistory(undoRegion)}
           >
-            Region rückgängig
+            {tr("editing.m4f4d826007")}
           </button>
           <button
             disabled={mutating || !history.future.length}
             onClick={() => setHistory(redoRegion)}
           >
-            Region wiederholen
+            {tr("editing.mf0ecf88402")}
           </button>
           <button
             disabled={!preview || !name.trim() || !count || !!error}
@@ -419,7 +417,7 @@ export function ColorRegionEditor({
               preview && onSave(preview.weights, name.trim(), history.present)
             }
           >
-            Region speichern
+            {tr("editing.m68e4f9a4e6")}
           </button>
         </div>
         {brush && preview && (
@@ -428,10 +426,9 @@ export function ColorRegionEditor({
             initialName={name}
             initialWeights={preview.weights}
             contextLabel={{
-              title: "Farbregion",
-              description:
-                "Weiß wählt Pixel für die Farbregion. Schwarz entfernt sie. Pinsel nur zur manuellen Feinkorrektur.",
-              saveLabel: "In Farbentwurf übernehmen",
+              title: tr("editing.m4281a9366b"),
+              description: tr("editing.mb812b1f1e1"),
+              saveLabel: tr("editing.m6776e0bb5f"),
               readOnlyName: true,
             }}
             onClose={() => setBrush(false)}

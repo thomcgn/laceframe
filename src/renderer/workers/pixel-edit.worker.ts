@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { pixelReview } from "../../shared/pixel-review";
 import { analyzeSnap } from "../../shared/pixel-snap";
 import { applyPixelEdit, type PixelEdit } from "../../shared/pixel-snap";
@@ -22,12 +23,12 @@ worker.onmessage = async (
       source = e.data.source;
       return;
     }
-    if (!source) throw new Error("Quelle fehlt.");
+    if (!source) throw new Error(tr("editing.md13bab7592"));
     if (e.data.analyze) {
       worker.postMessage({ id, analysis: analyzeSnap(source) });
       return;
     }
-    if (!e.data.edit) throw new Error("Bearbeitungsparameter fehlen.");
+    if (!e.data.edit) throw new Error(tr("editing.m6c18c6c931"));
     const result = applyPixelEdit(
       source,
       e.data.edit,
@@ -47,10 +48,7 @@ worker.onmessage = async (
   } catch (error) {
     worker.postMessage({
       id,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Pixelbearbeitung fehlgeschlagen.",
+      error: error instanceof Error ? error.message : tr("editing.mab747d2834"),
     });
   }
 };

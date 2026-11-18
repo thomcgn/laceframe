@@ -1,3 +1,5 @@
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import type { Requirement } from "../../shared/studio";
 export function GenerationRequirements({
   items,
@@ -10,7 +12,7 @@ export function GenerationRequirements({
     <div
       className="generation-requirements"
       aria-live="polite"
-      aria-label="Voraussetzungen"
+      aria-label={tr("common.m7f746fc447")}
     >
       {items.length ? (
         <ul>
@@ -49,7 +51,7 @@ export function GenerationRequirements({
                     });
                   }}
                 >
-                  {r.message}
+                  {displayMessage(r.message)}
                 </button>
               ) : (
                 r.message
@@ -58,9 +60,7 @@ export function GenerationRequirements({
           ))}
         </ul>
       ) : (
-        <small>
-          Bereit · Auftrag wird ausschließlich durch deinen Klick gestartet.
-        </small>
+        <small>{tr("common.m4186f297d7")}</small>
       )}
     </div>
   );

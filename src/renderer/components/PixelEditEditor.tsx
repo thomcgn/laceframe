@@ -1,3 +1,5 @@
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import type { PixelReview } from "../../shared/pixel-review";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project, Snapshot } from "../../shared/domain";
@@ -166,7 +168,7 @@ export function PixelEditEditor({
       w.terminate();
       worker.current = undefined;
       setBusy(false);
-      setError("Pixel-Worker ausgefallen; nichts gespeichert.");
+      setError(tr("editing.m00952a39e6"));
     };
     w.postMessage({ id: 0, source });
     return w;
@@ -207,8 +209,7 @@ export function PixelEditEditor({
   }
   function close() {
     if (saving) return;
-    if (!dirty.current || window.confirm("Pixel-/Farbentwurf verwerfen?"))
-      onClose();
+    if (!dirty.current || window.confirm(tr("editing.mef963bd99f"))) onClose();
   }
   async function save() {
     if (!source || !draft || !result) return;
@@ -253,7 +254,9 @@ export function PixelEditEditor({
   }, [source]);
   return (
     <EditorWorkspace
-      title={mode === "snap" ? "Pixel Snap" : "Color Correction"}
+      title={
+        mode === "snap" ? tr("editing.mee2eeb1aef") : tr("editing.mbe3eaabccb")
+      }
       className="pixel-edit-workspace"
     >
       <section
@@ -284,20 +287,28 @@ export function PixelEditEditor({
         }}
         role="dialog"
         aria-modal="true"
-        aria-label={mode === "snap" ? "Pixel Snap" : "Color Correction"}
+        aria-label={
+          mode === "snap"
+            ? tr("editing.mee2eeb1aef")
+            : tr("editing.mbe3eaabccb")
+        }
       >
         <header>
-          <h2>{mode === "snap" ? "Pixel Snap" : "Color Correction"}</h2>
+          <h2>
+            {mode === "snap"
+              ? tr("editing.mee2eeb1aef")
+              : tr("editing.mbe3eaabccb")}
+          </h2>
           <span>
             {source && `${source.width} × ${source.height} · Originalauflösung`}
           </span>
           <button disabled={saving} onClick={close}>
-            Verwerfen
+            {tr("editing.m594ca889c4")}
           </button>
         </header>
         {error && (
           <p role="alert" className="error">
-            {error}
+            {displayMessage(error)}
           </p>
         )}
         {source && draft && (
@@ -305,22 +316,22 @@ export function PixelEditEditor({
             <div className="pixel-edit-body">
               <div
                 className="pixel-edit-pair"
-                aria-label="Vorschau vergleichen"
+                aria-label={tr("editing.m369aef5742")}
               >
                 {[
-                  { pixels: source, label: "Original" },
+                  { pixels: source, label: tr("editing.m88d759ea02") },
                   {
                     pixels:
                       difference && result?.review.difference
                         ? result.review.difference
                         : (result?.result ?? source),
-                    label: "Pixel-Snap-Vorschau",
+                    label: tr("common.md1e1cfeaf0"),
                   },
                 ].map((v) => (
                   <figure key={v.label}>
                     <figcaption>
                       {v.label === "Pixel-Snap-Vorschau" && mode === "color"
-                        ? "Farbvorschau"
+                        ? tr("editing.m3f5f11f7de")
                         : v.label}
                     </figcaption>
                     <PixelViewport
@@ -342,24 +353,19 @@ export function PixelEditEditor({
                         checked={accepted}
                         onChange={(e) => setAccepted(e.target.checked)}
                       />
-                      Motiv und freigestellte Silhouette geprüft
+                      {tr("editing.m4fcb9fafa8")}
                     </label>
-                    <p>
-                      Sprite Fusion Original-Engine · automatische
-                      Rastererkennung und Quantisierung in Rust/WASM. Keine
-                      separate Rasterdiagnose oder Confidence-Ausgabe.
-                    </p>
+                    <p>{tr("editing.m7ef7ef8f51")}</p>
                     <button disabled={busy || saving} onClick={() => run(true)}>
-                      Zusätzlichen Rasterhinweis messen
+                      {tr("editing.m6ead2fa53d")}
                     </button>
                     {analysis && (
                       <p>
-                        Separate Laceframe-Diagnose:{" "}
+                        {tr("editing.m2d7dc7a5d9")}{" "}
                         {analysis.grid
-                          ? `${analysis.grid} Pixel Rasterhinweis`
-                          : "Kein eindeutiger Rasterhinweis"}
-                        . Kein Qualitätsnachweis; Sprite Fusion erkennt sein
-                        Raster unabhängig während der Transformation.
+                          ? tr("editing.m2e41819239", { v0: analysis.grid })
+                          : tr("editing.mecf06dc251")}
+                        {tr("common.m8cce3dcaa2")}
                       </p>
                     )}
                     <label>
@@ -373,11 +379,11 @@ export function PixelEditEditor({
                           })
                         }
                       />
-                      Automatische Rastervorgabe
+                      {tr("editing.m70f2467a73")}
                     </label>
                     {settings.pixelSize !== undefined && (
                       <label>
-                        Rastergröße
+                        {tr("editing.m050dc910c3")}
                         <input
                           type="number"
                           min={1}
@@ -394,7 +400,7 @@ export function PixelEditEditor({
                       </label>
                     )}
                     <label>
-                      Farbanzahl
+                      {tr("editing.m3933e9485c")}
                       <input
                         type="number"
                         min={1}
@@ -409,7 +415,7 @@ export function PixelEditEditor({
                       />
                     </label>
                     <label>
-                      Benutzerdefinierte Palette (Hex, durch Komma getrennt)
+                      {tr("editing.m2847c55cb9")}
                       <input
                         value={settings.palette?.join(", ") ?? ""}
                         placeholder="#0d2b45, #ffecd6"
@@ -423,25 +429,11 @@ export function PixelEditEditor({
                         }}
                       />
                     </label>
-                    <small>
-                      Auch mit eigener Palette führt die Original-Engine
-                      zunächst K-Means mit der gewählten Farbanzahl aus. Raster
-                      und Farbquantisierung sind in diesem Originalpfad
-                      gekoppelt. Regionale Color Correction bleibt ein
-                      getrenntes Werkzeug.
-                    </small>
-                    <p>
-                      Das Original-Resampling kann Bildmaße, Transparenz und
-                      Details verändern. Original und Vorschau haben
-                      unabhängigen Zoom/Pan. Identität und transparente
-                      Außenbereiche manuell prüfen.
-                    </p>
+                    <small>{tr("editing.m795017b9c0")}</small>
+                    <p>{tr("editing.mb1622e965f")}</p>
                     {draft.protectedWeights.some(Boolean) && (
                       <p role="alert" className="warning">
-                        Mit aktiven Schutzmasken gesperrt: Sprite Fusion
-                        verändert die Geometrie. Masken werden weder entfernt
-                        noch ungeprüft kopiert. Color Correction bleibt
-                        verfügbar.
+                        {tr("editing.me25a7d50aa")}
                       </p>
                     )}
                   </>
@@ -451,14 +443,15 @@ export function PixelEditEditor({
                     {masterPalettes.length > 0 && (
                       <section>
                         <label>
-                          Masterpalette als Referenz
+                          {tr("editing.m367ea7d13e")}
                           <select
                             value={referenceId}
                             onChange={(e) => setReferenceId(e.target.value)}
                           >
                             {masterPalettes.map((p) => (
                               <option key={p.id} value={p.id}>
-                                Masterpalette R{p.revision}
+                                {tr("editing.m50eb0ad00e")}
+                                {p.revision}
                               </option>
                             ))}
                           </select>
@@ -471,7 +464,9 @@ export function PixelEditEditor({
                                 <button
                                   key={c.hex}
                                   title={c.hex}
-                                  aria-label={`Masterfarbe übernehmen ${c.hex}`}
+                                  aria-label={tr("editing.m773fbbb3bf", {
+                                    v0: c.hex,
+                                  })}
                                   style={{ background: c.hex }}
                                   onClick={() => {
                                     if (draft.edit.kind === "color")
@@ -494,23 +489,22 @@ export function PixelEditEditor({
                       </section>
                     )}
                     <button onClick={() => setRegion("selection")}>
-                      Auswahl nach Farbe
+                      {tr("editing.mbe7ed3a938")}
                     </button>
                     <p>
                       {draft.edit.weights.filter((v) => v > 0).length}{" "}
-                      ausgewählte Pixel · Auswahl bleibt auf diese Maske
-                      begrenzt.
+                      {tr("editing.m5a5fad2d33")}
                     </p>
                     {(["sourceColor", "targetColor"] as const).map((k) => (
                       <label key={k}>
                         {k === "sourceColor"
-                          ? "Aufgenommene Farbe"
-                          : "Zielfarbe"}
+                          ? tr("editing.mf559a5e704")
+                          : tr("editing.m2c74e311fc")}
                         <input
                           aria-label={
                             k === "sourceColor"
-                              ? "Aufgenommene Farbe"
-                              : "Zielfarbe"
+                              ? tr("editing.mf559a5e704")
+                              : tr("editing.m2c74e311fc")
                           }
                           type="color"
                           value={
@@ -534,12 +528,15 @@ export function PixelEditEditor({
                         />
                       </label>
                     ))}
-                    <div className="quality-palette" aria-label="Quellpalette">
+                    <div
+                      className="quality-palette"
+                      aria-label={tr("editing.m6b72bf1d2f")}
+                    >
                       {palette.map((c) => (
                         <button
                           key={c.hex}
                           title={c.hex}
-                          aria-label={`Farbe aufnehmen ${c.hex}`}
+                          aria-label={tr("editing.m1c232ba46a", { v0: c.hex })}
                           style={{ background: c.hex }}
                           onClick={() => {
                             if (draft.edit.kind === "color")
@@ -558,7 +555,7 @@ export function PixelEditEditor({
                       ))}
                     </div>
                     <label>
-                      Farbtoleranz
+                      {tr("editing.m554b6b4de2")}
                       <input
                         type="range"
                         min={1}
@@ -580,7 +577,7 @@ export function PixelEditEditor({
                       />
                     </label>
                     <label>
-                      Korrekturstärke
+                      {tr("editing.m21aebe37d7")}
                       <input
                         type="range"
                         min={0}
@@ -602,28 +599,25 @@ export function PixelEditEditor({
                         }}
                       />
                     </label>
-                    <p>
-                      Helligkeitsabstufungen und zusätzliche Schatten bleiben
-                      erhalten. Keine Vollquantisierung. Masterpaletten stehen
-                      im separaten Werkzeug „Farbkonsistenz prüfen“ für
-                      Expressions bereit.
-                    </p>
+                    <p>{tr("editing.m4a2db1d6bc")}</p>
                   </>
                 )}
                 {result && (
-                  <section aria-label="Pixelprüfung">
+                  <section aria-label={tr("editing.m88686ca551")}>
                     <p>
-                      Transparente Pixel: {result.review.before.transparent} →{" "}
-                      {result.review.after.transparent}; Teilalpha:{" "}
-                      {result.review.before.partial} →{" "}
-                      {result.review.after.partial}.
+                      {tr("editing.m0aa47ca8f5")}
+                      {result.review.before.transparent} →{" "}
+                      {result.review.after.transparent}
+                      {tr("editing.m9564113717")} {result.review.before.partial}{" "}
+                      → {result.review.after.partial}.
                     </p>
                     {result.review.sameDimensions ? (
                       <>
                         <p>
-                          {result.review.changedPixels} veränderte RGBA-Pixel ·{" "}
-                          {result.review.alphaChanged} geänderte Alpha-Werte bei
-                          gleichen Koordinaten.
+                          {result.review.changedPixels}{" "}
+                          {tr("editing.mf891bd81d2")}{" "}
+                          {result.review.alphaChanged}{" "}
+                          {tr("editing.m591e973261")}
                         </p>
                         <label>
                           <input
@@ -631,15 +625,11 @@ export function PixelEditEditor({
                             checked={difference}
                             onChange={(e) => setDifference(e.target.checked)}
                           />
-                          Differenzansicht
+                          {tr("editing.m9bcfbfdc79")}
                         </label>
                       </>
                     ) : (
-                      <p>
-                        Neue Geometrie: Eine pixelgenaue Änderungszahl und
-                        registrierte Differenz sind ohne bestätigte Zuordnung
-                        nicht definiert.
-                      </p>
+                      <p>{tr("editing.m77367a0041")}</p>
                     )}
                   </section>
                 )}
@@ -647,7 +637,7 @@ export function PixelEditEditor({
                   disabled={busy || saving}
                   onClick={() => setRegion("protect")}
                 >
-                  Schutzbereiche auswählen
+                  {tr("editing.md60d518d6b")}
                 </button>
                 <div className="button-row">
                   <button
@@ -659,7 +649,7 @@ export function PixelEditEditor({
                       restore(d);
                     }}
                   >
-                    Rückgängig
+                    {tr("editing.mdd7bd2f68c")}
                   </button>
                   <button
                     disabled={!future.length || saving}
@@ -670,7 +660,7 @@ export function PixelEditEditor({
                       restore(d);
                     }}
                   >
-                    Wiederholen
+                    {tr("editing.me0ef009b54")}
                   </button>
                   <button
                     disabled={saving}
@@ -678,7 +668,7 @@ export function PixelEditEditor({
                       edit(initial.current!);
                     }}
                   >
-                    Zurücksetzen
+                    {tr("editing.m1ba0463c46")}
                   </button>
                 </div>
               </aside>
@@ -694,8 +684,8 @@ export function PixelEditEditor({
                 onClick={() => run()}
               >
                 {mode === "snap"
-                  ? "Pixel bereinigen"
-                  : "Farbvorschau berechnen"}
+                  ? tr("editing.me619dba5ff")
+                  : tr("editing.md6f5c040c1")}
               </button>
               {busy && (
                 <button
@@ -705,32 +695,40 @@ export function PixelEditEditor({
                     worker.current = undefined;
                     setBusy(false);
                     setResult(undefined);
-                    setError("Berechnung abgebrochen. Nichts gespeichert.");
+                    setError(tr("editing.mf7d979d08b"));
                   }}
                 >
-                  Berechnung abbrechen
+                  {tr("editing.mb4c1b411ad")}
                 </button>
               )}
               {result && mode === "snap" && (
-                <span aria-label="Ergebnismaße">
-                  {result.result.width} × {result.result.height} PNG ·
-                  Skalierungsfaktor X{" "}
+                <span aria-label={tr("editing.m1e572eba8e")}>
+                  {result.result.width} × {result.result.height}{" "}
+                  {tr("editing.m90de0a3633")}{" "}
                   {(result.result.width / source.width).toFixed(3)} / Y{" "}
                   {(result.result.height / source.height).toFixed(3)}
                 </span>
               )}
               <span role="status">
                 {busy
-                  ? "Lokale Berechnung läuft …"
+                  ? tr("editing.m569a057a06")
                   : result
-                    ? `Vorschau bereit${result.result.changed !== undefined ? ` · ${result.result.changed} bereinigte Pixel · ${result.result.ambiguous} unklare Pixel unverändert` : ""}`
-                    : "Original unverändert · Vorschau noch nicht berechnet"}
+                    ? tr("editing.m943e715f53", {
+                        v0:
+                          result.result.changed !== undefined
+                            ? tr("editing.m6aa45b75c8", {
+                                v0: result.result.changed,
+                                v1: result.result.ambiguous,
+                              })
+                            : "",
+                      })
+                    : tr("editing.m91bdc31a73")}
               </span>
               <button
                 disabled={!result || busy || saving}
                 onClick={() => void save()}
               >
-                Ergebnis übernehmen
+                {tr("editing.m3c0e9bc7bc")}
               </button>
             </footer>
           </>
@@ -750,7 +748,11 @@ export function PixelEditEditor({
           initialSelection={
             region === "selection" ? draft.selection : undefined
           }
-          initialName={region === "protect" ? "Geschützte Pixel" : "Farbregion"}
+          initialName={
+            region === "protect"
+              ? tr("editing.m3c340a38f2")
+              : tr("editing.m4281a9366b")
+          }
           onClose={() => setRegion(undefined)}
           onSave={(weights, _name, selection) => {
             if (region === "protect") {

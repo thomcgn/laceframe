@@ -11,7 +11,18 @@ exports.text = (page, ...args) =>
 exports.nav = async (page, view) => {
   await page
     .getByRole("navigation", { name: "Hauptnavigation" })
-    .getByRole("button", { name: new RegExp(view + "$") })
+    .getByRole("button", {
+      name: new RegExp(
+        ({
+          Characters: "Figuren",
+          Studio: "Studio",
+          Expressions: "Ausdrücke",
+          Library: "Bibliothek",
+          Motion: "Animation",
+          "Art Direction": "Stilgestaltung",
+        }[view] ?? view) + "$",
+      ),
+    })
     .click();
 };
 
@@ -57,11 +68,17 @@ exports.studioExpert = async (page) => {
 // New application entry: wait for the real ten-second boot; never bypass lifecycle.
 exports.projectSelection = async (page) => {
   await page
+    .getByRole("combobox", { name: /^(Language|Sprache)$/ })
+    .selectOption("de");
+  await page
     .getByRole("button", { name: "Neues Projekt", exact: true })
     .waitFor({ state: "visible", timeout: 25000 });
 };
 exports.prepareProjectCreation = async (page) => {
-  await page.locator(".splash-screen, .project-management").first().waitFor({ state: "visible", timeout: 25000 });
+  await page
+    .locator(".splash-screen, .project-management")
+    .first()
+    .waitFor({ state: "visible", timeout: 25000 });
   if (await page.locator(".splash-screen").count()) {
     await exports.projectSelection(page);
     await page

@@ -167,16 +167,16 @@ const { field, nav } = require("./smoke-ui.cjs");
     await page
       .getByRole("button", { name: "Im Studio verwenden", exact: true })
       .click();
-    await expect(field(page, "Create Variante", { exact: true })).toHaveValue(
+    await expect(field(page, "Studio Variante", { exact: true })).toHaveValue(
       selected,
     );
     await expect(
-      field(page, "Create Stimmaktion", { exact: true }),
+      field(page, "Studio Stimmaktion", { exact: true }),
     ).toHaveValue("speaking");
-    await expect(field(page, "Create Intensität", { exact: true })).toHaveValue(
+    await expect(field(page, "Studio Intensität", { exact: true })).toHaveValue(
       "0.65",
     );
-    const master = await field(page, "Create Masterversion", {
+    const master = await field(page, "Studio Masterversion", {
       exact: true,
     }).inputValue();
     await expect(
@@ -208,9 +208,9 @@ const { field, nav } = require("./smoke-ui.cjs");
       .filter({ visible: true })
       .click();
     await expect(
-      field(page, "Create Masterversion", { exact: true }),
+      field(page, "Studio Masterversion", { exact: true }),
     ).toHaveValue(master);
-    await expect(field(page, "Create Variante", { exact: true })).toHaveValue(
+    await expect(field(page, "Studio Variante", { exact: true })).toHaveValue(
       selected,
     );
     await expect(
@@ -236,13 +236,10 @@ const { field, nav } = require("./smoke-ui.cjs");
       field(page, "Persönlicher Ausdruck", { exact: true }),
     ).toHaveValue("Unsaved personal draft");
     page.once("dialog", (dialog) => dialog.dismiss());
-    await page
-      .getByRole("button", { name: /^Projekt öffnen(?: …)?$/ })
-      .click();
+    await page.getByRole("button", { name: /^Projekt öffnen(?: …)?$/ }).click();
     await expect(
       field(page, "Persönlicher Ausdruck", { exact: true }),
     ).toHaveValue("Unsaved personal draft");
-
 
     await page
       .getByRole("button", { name: "Zurück zum Studio", exact: true })
@@ -250,7 +247,7 @@ const { field, nav } = require("./smoke-ui.cjs");
       .click();
     await expect(prompt).toHaveValue(/EXPERT DRAFT/);
     await expect(
-      field(page, "Create Masterversion", { exact: true }),
+      field(page, "Studio Masterversion", { exact: true }),
     ).toHaveValue(master);
     await nav(page, "Expressions");
     await field(page, "Persönlicher Ausdruck", { exact: true }).fill(

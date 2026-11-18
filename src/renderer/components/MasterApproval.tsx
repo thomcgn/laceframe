@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { useEffect, useState } from "react";
 import type {
   QualityReport,
@@ -49,7 +50,7 @@ export function MasterApproval({
         }
       })
       .catch(() => {
-        if (live) setError("Bildprüfung fehlgeschlagen.");
+        if (live) setError(tr("characters.mbdb3c8753d"));
       });
     return () => {
       live = false;
@@ -63,77 +64,77 @@ export function MasterApproval({
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   if (!visible) return null;
   return (
-    <section className="master-approval" aria-label="Masterfreigabe">
-      <p role="status" aria-label="Master Transparenzprüfung">
+    <section
+      className="master-approval"
+      aria-label={tr("characters.me55c5672c2")}
+    >
+      <p role="status" aria-label={tr("characters.m5aab71c5c1")}>
         {error
-          ? `Ungültiges Bild – nicht freigabefähig: ${error}`
+          ? tr("characters.me73ef4df3e", { v0: error })
           : !report
-            ? "Gespeicherte RGBA-Pixel werden geprüft …"
+            ? tr("characters.m44c6e90c11")
             : report.status === "transparent"
-              ? "Transparenz vorhanden – manuelle Prüfung erforderlich"
+              ? tr("characters.m219f49bcc9")
               : report.status === "opaque"
-                ? "Dieser Master-Kandidat hat keinen echten transparenten Hintergrund."
-                : "Transparenz verdächtig oder Bild leer – Korrektur erforderlich"}
+                ? tr("characters.m9a3b03866d")
+                : tr("characters.m309473cac1")}
       </p>
       {report && (
         <small>
-          {report.width} × {report.height} · Alpha-Null {report.transparent} ·
-          Teilalpha {report.partial} · Deckend {report.opaque} · Rand{" "}
-          {report.edgeTransparent}/{report.edgePixels} · Transparenter
-          Außenbereich {report.exteriorTransparent}. Transparenz beweist keine
-          perfekte Silhouette.
+          {report.width} × {report.height} {tr("characters.m38fe578dc6")}
+          {report.transparent} {tr("characters.m6db683287a")}
+          {report.partial} {tr("characters.me97b73245b")}
+          {report.opaque} {tr("characters.m16e3eaed7f")}{" "}
+          {report.edgeTransparent}/{report.edgePixels}{" "}
+          {tr("characters.me3e8100f6a")}
+          {report.exteriorTransparent}
+          {tr("common.m6bac5d6dae")}
         </small>
       )}
       {report?.status !== "transparent" && (
         <div className="button-row">
           {onRetry && (
             <button disabled={disabled} onClick={onRetry}>
-              Erneut generieren
+              {tr("characters.me5c1eb29cb")}
             </button>
           )}
           <button disabled={disabled || !!error || !report} onClick={onCutout}>
-            Hintergrund freistellen
+            {tr("characters.m46746f197e")}
           </button>
         </div>
       )}
       <label>
         <input
-          aria-label="Master Identität bestätigt"
+          aria-label={tr("characters.meaa9efbb3f")}
           type="checkbox"
           checked={identity}
           onChange={(e) => setIdentity(e.target.checked)}
         />
-        Identität, neutrale Mimik und Outfit bestätigt
+        {tr("characters.m056045b14d")}
       </label>
       <label>
         <input
-          aria-label="Master Silhouette geprüft"
+          aria-label={tr("characters.m2278b82bc5")}
           type="checkbox"
           checked={silhouette}
           onChange={(e) => setSilhouette(e.target.checked)}
         />
-        Silhouette und Alpha-Kanten auf hellem, dunklem und
-        Schachbretthintergrund geprüft
+        {tr("characters.m60a43fa340")}
       </label>
       <label>
         <input
           type="checkbox"
-          aria-label="Master Rasterqualität geprüft"
+          aria-label={tr("characters.mb2f3510676")}
           checked={raster}
           onChange={(e) => setRaster(e.target.checked)}
         />
-        Raster und Pixelcluster bei 1:1 und Vergrößerung geprüft; Mixels
-        korrigiert oder bewusst manuell beurteilt
+        {tr("characters.m8295c64aed")}
       </label>
-      <p>
-        Bei unsicherem Raster zuerst Pixel Snap in „Bearbeiten“ prüfen.
-        Automatische Hinweise sind kein Identitäts- oder Qualitätsnachweis.
-        Entscheidung in der Prüfnotiz dokumentieren.
-      </p>
+      <p>{tr("characters.m453416428d")}</p>
       <label>
-        Prüfnotiz
+        {tr("characters.mbcb1613882")}
         <textarea
-          aria-label="Master Prüfnotiz"
+          aria-label={tr("characters.mb261f549e9")}
           maxLength={8000}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -141,14 +142,12 @@ export function MasterApproval({
       </label>
       <label>
         <input
-          aria-label="Master Aktivierung bestätigen"
+          aria-label={tr("characters.md800bc277d")}
           type="checkbox"
           checked={activation}
           onChange={(e) => setActivation(e.target.checked)}
         />
-        Der neue Master wird als aktuelle Version dieser Figur aktiviert.
-        Bisherige Master und Expressions bleiben erhalten und werden nicht
-        automatisch verändert.
+        {tr("characters.maddb80a58f")}
       </label>
       <button
         className="primary"

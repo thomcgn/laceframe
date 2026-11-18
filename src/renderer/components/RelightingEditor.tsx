@@ -1,3 +1,5 @@
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { EditorWorkspace } from "./EditorWorkspace";
 import { useEffect, useRef, useState } from "react";
 import type { Project, Snapshot } from "../../shared/domain";
@@ -26,20 +28,24 @@ const controls: [
   number,
   number,
 ][] = [
-  ["direction", "Lichtrichtung", 0, 360, 1],
-  ["intensity", "Intensität", 0, 2, 0.01],
-  ["temperature", "Farbtemperatur", -1, 1, 0.01],
-  ["ambient", "Umgebungslicht", 0, 2, 0.01],
-  ["shadows", "Schattenstärke", 0, 1, 0.01],
-  ["contrast", "Kontrast", 0.25, 2, 0.01],
-  ["highlights", "Highlight-Stärke", 0, 1, 0.01],
+  ["direction", tr("editing.m056593a4e3"), 0, 360, 1],
+  ["intensity", tr("editing.ma0da0528bb"), 0, 2, 0.01],
+  ["temperature", tr("editing.m06f33ee32c"), -1, 1, 0.01],
+  ["ambient", tr("editing.m41201bc82c"), 0, 2, 0.01],
+  ["shadows", tr("editing.m5c3660b481"), 0, 1, 0.01],
+  ["contrast", tr("editing.mf857e3bb48"), 0.25, 2, 0.01],
+  ["highlights", tr("editing.mc8dead99eb"), 0, 1, 0.01],
 ];
 const roles = {
-  skin: "Gesicht und Haut",
-  hair: "Haare / Bart",
-  clothes: "Kleidung",
-  accessories: "Accessoires",
-  custom: "Eigene Region",
+  get skin() {
+    return tr("editing.m1fb68fe010");
+  },
+  hair: tr("common.mc5011ce211"),
+  clothes: tr("common.me6bb4b3e53"),
+  accessories: tr("editing.m148459d4e8"),
+  get custom() {
+    return tr("editing.mbd9ad835b8");
+  },
 };
 export function RelightingEditor({
   source,
@@ -95,7 +101,7 @@ export function RelightingEditor({
   function close() {
     if (
       !locked.current &&
-      (!dirty.current || window.confirm("Lichtentwurf verwerfen?"))
+      (!dirty.current || window.confirm(tr("editing.md5240bf390")))
     )
       onClose();
   }
@@ -108,7 +114,7 @@ export function RelightingEditor({
         return;
       if (e.key === "Escape" && !locked.current) {
         e.preventDefault();
-        if (!dirty.current || window.confirm("Lichtentwurf verwerfen?"))
+        if (!dirty.current || window.confirm(tr("editing.md5240bf390")))
           onClose();
       }
       if (e.key === "Tab") {
@@ -145,9 +151,7 @@ export function RelightingEditor({
     w.onerror = () => {
       if (live) {
         inFlight.current = false;
-        setError(
-          "Licht-Worker ausgefallen. Editor schließen und neu öffnen; keine Datei gespeichert.",
-        );
+        setError(tr("editing.m79f3f92a30"));
         setReady(false);
       }
     };
@@ -267,66 +271,60 @@ export function RelightingEditor({
     }
   }
   return (
-    <EditorWorkspace title="Live Relighting" className="relight-backdrop">
+    <EditorWorkspace
+      title={tr("editing.mce2c754057")}
+      className="relight-backdrop"
+    >
       <section
         className="relight-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Live Relighting"
+        aria-label={tr("editing.mce2c754057")}
         tabIndex={-1}
         ref={modal}
       >
         <div className="section-head">
           <div>
-            <h2>Live Relighting · 2D</h2>
+            <h2>{tr("editing.m48eaa8a00a")}</h2>
             <small>
-              {source.width}×{source.height} · Original bleibt unverändert ·
-              maximal 4 MP
+              {source.width}×{source.height} {tr("editing.m932167e233")}
             </small>
           </div>
           <button disabled={busy} onClick={close}>
-            Verwerfen & schließen
+            {tr("editing.m9e85b94f97")}
           </button>
         </div>
-        <p className="muted">
-          Tonwerte und gerichteter 2D-Lichtverlauf. Keine
-          Tiefen-/Normalenerkennung und keine physikalisch korrekte
-          3D-Beleuchtung. Alpha bleibt unverändert; kein Bloom, keine neuen
-          Hintergründe.
-        </p>
+        <p className="muted">{tr("editing.ma1c0c95d61")}</p>
         {error && (
           <p role="alert" className="error">
-            {error}
+            {displayMessage(error)}
           </p>
         )}
         <div className="relight-layout">
           <fieldset disabled={busy || !ready} className="relight-controls">
             <label>
-              Bearbeitungsregion
+              {tr("editing.m34bf058aee")}
               <select
-                aria-label="Lichtregion"
+                aria-label={tr("editing.m4a862d0140")}
                 value={selected}
                 onChange={(e) => setSelected(e.target.value)}
               >
-                <option value="global">Gesamtes Bild</option>
+                <option value="global">{tr("editing.m42bb06db64")}</option>
                 {draft.regions.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name} · R{r.revision}
+                    {r.name} {tr("editing.mda8ec3e284")}
+                    {r.revision}
                   </option>
                 ))}
               </select>
             </label>
-            <small>
-              Regionen werden manuell zugeordnet. Weiß bearbeitet, Schwarz
-              schützt. Regionale Werte ersetzen den globalen Ton; Überlappungen
-              folgen der Listenreihenfolge.
-            </small>
+            <small>{tr("editing.m9ca9995333")}</small>
             {controls.map(([key, label, min, max, step]) => (
               <label key={key}>
-                {label} · {light[key]}
+                {displayMessage(label)} · {light[key]}
                 {key === "direction" ? "°" : ""}
                 <input
-                  aria-label={label}
+                  aria-label={displayMessage(label)}
                   type="range"
                   min={min}
                   max={max}
@@ -341,19 +339,19 @@ export function RelightingEditor({
             <label>
               <input
                 type="checkbox"
-                aria-label="Pixelart-Licht"
+                aria-label={tr("editing.m51827accde")}
                 checked={light.pixelArt}
                 onChange={(e) =>
                   changeLight({ ...light, pixelArt: e.target.checked })
                 }
               />
-              Pixelart · quantisierte Lichtstufen, Nearest-Anzeige
+              {tr("editing.mc8d0b1af91")}
             </label>
             {light.pixelArt && (
               <label>
-                Lichtstufen
+                {tr("editing.m6abf9adb17")}
                 <input
-                  aria-label="Lichtstufen"
+                  aria-label={tr("editing.m6abf9adb17")}
                   type="range"
                   min={2}
                   max={16}
@@ -366,7 +364,8 @@ export function RelightingEditor({
             )}
             <details>
               <summary>
-                Manuelle Lichtregionen · {draft.regions.length}/5
+                {tr("editing.m6d88795797")}
+                {draft.regions.length}/5
               </summary>
               {Object.entries(roles).map(([role, name]) => (
                 <button
@@ -392,13 +391,13 @@ export function RelightingEditor({
                     setMaskRegion(id);
                   }}
                 >
-                  {name} anlegen
+                  {displayMessage(name)} {tr("editing.m5c1058aea6")}
                 </button>
               ))}
               {region && (
                 <>
                   <label>
-                    Regionsname
+                    {tr("editing.m97645946c9")}
                     <input
                       maxLength={120}
                       value={region.name}
@@ -415,7 +414,7 @@ export function RelightingEditor({
                     />
                   </label>
                   <button onClick={() => setMaskRegion(region.id)}>
-                    Lichtmaske bearbeiten
+                    {tr("editing.m06afca6c8c")}
                   </button>
                   <button
                     onClick={() => {
@@ -428,20 +427,20 @@ export function RelightingEditor({
                       setSelected("global");
                     }}
                   >
-                    Region entfernen
+                    {tr("editing.m2b6f5200d8")}
                   </button>
                   <label>
-                    Bearbeitungsmaske als Lichtgewicht kopieren
+                    {tr("editing.mea3df8c414")}
                     <select
-                      aria-label="Vorhandene Maske"
+                      aria-label={tr("editing.m22158ea77f")}
                       value={reuse}
                       onChange={(e) => setReuse(e.target.value)}
                     >
-                      <option value="">Maske auswählen</option>
+                      <option value="">{tr("editing.maa19763a3b")}</option>
                       {compatibleMasks.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.name} · R{m.revision} · nur gleiche
-                          Pixelkoordinaten
+                          {m.name} {tr("editing.mda8ec3e284")}
+                          {m.revision} {tr("editing.mc26b92124d")}
                         </option>
                       ))}
                     </select>
@@ -493,12 +492,9 @@ export function RelightingEditor({
                       }
                     }}
                   >
-                    Maske kopieren · Original bleibt Bearbeitungsfreigabe
+                    {tr("editing.m839d08e059")}
                   </button>
-                  <small>
-                    Nur Gewichte kopieren. Ausrichtung selbst prüfen; gleiche
-                    Maße beweisen keine Registrierung.
-                  </small>
+                  <small>{tr("editing.m57230551b6")}</small>
                 </>
               )}
             </details>
@@ -509,18 +505,19 @@ export function RelightingEditor({
                 aria-pressed={showOriginal}
                 onClick={() => setShowOriginal((v) => !v)}
               >
-                Original / Vorschau vergleichen
+                {tr("editing.m1456dc30a0")}
               </button>
               <label>
-                Zoom
+                {tr("editing.m509c517ede")}
                 <select
-                  aria-label="Lichtzoom"
+                  aria-label={tr("editing.md9e1ccd576")}
                   value={zoom}
                   onChange={(e) => setZoom(Number(e.target.value))}
                 >
                   {![0.25, 0.5, 1, 2, 4].includes(zoom) && (
                     <option value={zoom}>
-                      {Math.round(zoom * 100)}% · aktuell
+                      {Math.round(zoom * 100)}
+                      {tr("editing.m5825e389ad")}
                     </option>
                   )}
                   <option value={0.25}>25%</option>
@@ -533,11 +530,11 @@ export function RelightingEditor({
               <label>
                 <input
                   type="checkbox"
-                  aria-label="CPU-Anzeige erzwingen"
+                  aria-label={tr("editing.md167ed8b61")}
                   checked={cpu}
                   onChange={(e) => setCPU(e.target.checked)}
                 />
-                CPU-Anzeige
+                {tr("editing.m096379dd16")}
               </label>
             </div>
             {(showOriginal ? pixels : output?.pixels) && (
@@ -552,17 +549,15 @@ export function RelightingEditor({
                 forceCPU={cpu}
               />
             )}
-            <p role="status" aria-label="Lichtberechnung">
+            <p role="status" aria-label={tr("editing.m9a7adfb81e")}>
               {output?.serial === serial
-                ? `Vorschau bereit · ${Math.round(output.ms)} ms · RGBA8 SHA-256 ${output.sha.slice(0, 12)}`
-                : "Lichtvorschau wird berechnet …"}
+                ? tr("editing.m8064167c24", {
+                    v0: Math.round(output.ms),
+                    v1: output.sha.slice(0, 12),
+                  })
+                : tr("editing.m7018b36ece")}
             </p>
-            <small>
-              Berechnung im CPU-Worker; GPU zeigt dieselben Pixel. Kein
-              Dateischreiben bei Slideränderungen. Darstellungsalpha wird
-              premultipliziert, PNG erhält unveränderte Alpha- und transparente
-              RGB-Werte.
-            </small>
+            <small>{tr("editing.mea84062454")}</small>
           </div>
         </div>
         <div className="relight-actions button-row">
@@ -576,7 +571,7 @@ export function RelightingEditor({
               setSerial((n) => n + 1);
             }}
           >
-            Licht rückgängig
+            {tr("editing.m3640afeae7")}
           </button>
           <button
             disabled={busy || !future.length}
@@ -587,13 +582,13 @@ export function RelightingEditor({
               setSerial((n) => n + 1);
             }}
           >
-            Licht wiederholen
+            {tr("editing.m56f0fa77ae")}
           </button>
           <button
             disabled={busy || !ready}
             onClick={() => edit({ light: { ...DEFAULT_LIGHT }, regions: [] })}
           >
-            Licht zurücksetzen
+            {tr("editing.mb545d604d0")}
           </button>
           <button
             className="primary"
@@ -602,7 +597,7 @@ export function RelightingEditor({
             }
             onClick={() => void save()}
           >
-            Als Lichtkandidat übernehmen
+            {tr("editing.me8bd72a8c4")}
           </button>
         </div>
         {mask && (

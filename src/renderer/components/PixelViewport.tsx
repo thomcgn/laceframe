@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales/index";
 import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { anchoredPan, fitScale } from "./editor-geometry";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -82,7 +83,7 @@ export function PixelViewport({
       <div
         className="pixel-camera-tools"
         role="toolbar"
-        aria-label="Bildansicht"
+        aria-label={tr("editing.mdc6710c419")}
       >
         <button
           onClick={() => {
@@ -92,14 +93,14 @@ export function PixelViewport({
             setPan({ x: 0, y: 0 });
           }}
         >
-          Einpassen
+          {tr("editing.m6697a0f7da")}
         </button>
         <button onClick={() => setZoom(1)}>1:1</button>
         <button onClick={() => setZoom(2)}>200%</button>
         <button onClick={() => setZoom(4)}>400%</button>
         <button onClick={() => setZoom(8)}>800%</button>
         <input
-          aria-label="Zoomregler"
+          aria-label={tr("editing.m574db8099d")}
           type="range"
           min="1"
           max="800"
@@ -107,32 +108,34 @@ export function PixelViewport({
           onChange={(e) => setZoom(Number(e.target.value) / 100)}
         />
         <button
-          aria-label="Bild verkleinern"
+          aria-label={tr("editing.mc0c03ab2e1")}
           onClick={() => setZoom(scale / 1.25)}
         >
           −
         </button>
-        <output aria-label="Bildzoom">{Math.round(scale * 100)}%</output>
+        <output aria-label={tr("editing.m1487a4bca5")}>
+          {Math.round(scale * 100)}%
+        </output>
         <button
-          aria-label="Bild vergrößern"
+          aria-label={tr("editing.mfd0d09a508")}
           onClick={() => setZoom(scale * 1.25)}
         >
           +
         </button>
         <button
-          aria-label="Ansicht verschieben"
-          title="Alt + Ziehen verschiebt ebenfalls die Ansicht"
+          aria-label={tr("editing.m6a4768841c")}
+          title={tr("editing.md74050edae")}
           aria-pressed={hand}
           onClick={() => setHand((v) => !v)}
         >
-          Hand
+          {tr("editing.mfa18c06733")}
         </button>
       </div>
       <div
         className="pixel-camera-viewport checker"
         ref={ref}
         tabIndex={0}
-        aria-label="Bildfläche · Alt ziehen zum Verschieben"
+        aria-label={tr("editing.m43dab86506")}
         onBlur={() => {
           held.current = false;
           drag.current = null;

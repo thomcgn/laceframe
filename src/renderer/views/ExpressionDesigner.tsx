@@ -1,3 +1,5 @@
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { PackTools } from "../components/PackTools";
 import { useEffect, useState } from "react";
 import type {
@@ -16,7 +18,11 @@ type Perform = <T>(
   success: (value: T) => void,
   notice?: string,
 ) => Promise<void>;
-const actions = { silent: "Still", speaking: "Sprechend", shouting: "Rufend" };
+const actions = {
+  silent: tr("expressions.m70bcb5a44e"),
+  speaking: tr("expressions.mf541c979a4"),
+  shouting: tr("expressions.m1b5e7851ce"),
+};
 export function ExpressionDesigner({
   snapshot,
   busy,
@@ -108,22 +114,20 @@ export function ExpressionDesigner({
     variant && draft && JSON.stringify(variant) !== JSON.stringify(draft);
   const personalDirty = direction !== savedDirection;
   return (
-    <section className="expressions-workspace" aria-label="Expression Designer">
+    <section
+      className="expressions-workspace"
+      aria-label={tr("expressions.m8c785892bb")}
+    >
       <header className="designer-heading">
         <div>
-          <p className="eyebrow">DEFINITIONEN · KEINE BILDGENERIERUNG</p>
-          <h2>Expressions</h2>
-          <p>
-            Globale Emotionen definieren, persönliche Ausdrucksweisen bewusst
-            zuordnen.
-          </p>
+          <p className="eyebrow">{tr("expressions.m22230e2101")}</p>
+          <h2>{tr("common.navExpressions")}</h2>
+          <p>{tr("expressions.m1e78fc7ede")}</p>
         </div>
-        <button onClick={onBack}>Zurück zum Studio</button>
+        <button onClick={onBack}>{tr("expressions.md42458a59e")}</button>
       </header>
       <p className="muted">
-        {dirty
-          ? "Ungespeicherte Entwürfe bleiben beim Navigieren in diesem Projekt erhalten."
-          : "Gespeicherte Regeln werden im Studio verwendet. Historische Prompts bleiben unverändert."}
+        {dirty ? tr("expressions.m715987ca53") : tr("expressions.me34fe80c0e")}
       </p>
       <PackTools
         snapshot={snapshot}
@@ -136,9 +140,9 @@ export function ExpressionDesigner({
       <fieldset disabled={busy} className="designer-layout">
         <aside className="panel designer-navigation">
           <label>
-            Emotionsfamilie
+            {tr("expressions.m5fe8308e23")}
             <select
-              aria-label="Emotionsfamilie"
+              aria-label={tr("expressions.m5fe8308e23")}
               value={family?.id ?? ""}
               onChange={(e) => {
                 setFamilyId(e.target.value);
@@ -173,7 +177,7 @@ export function ExpressionDesigner({
               }}
             >
               <label>
-                Familienname
+                {tr("expressions.m6d61135a03")}
                 <input
                   required
                   maxLength={120}
@@ -190,7 +194,7 @@ export function ExpressionDesigner({
                 />
               </label>
               <label>
-                Familienkennung
+                {tr("expressions.mb7355e1a61")}
                 <input
                   required
                   maxLength={120}
@@ -206,11 +210,11 @@ export function ExpressionDesigner({
                   }
                 />
               </label>
-              <button type="submit">Familie speichern</button>
+              <button type="submit">{tr("expressions.m1e94a536dc")}</button>
             </form>
           )}
           <details>
-            <summary>Eigene Familie hinzufügen</summary>
+            <summary>{tr("expressions.mbc7e424d53")}</summary>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -222,7 +226,7 @@ export function ExpressionDesigner({
               }}
             >
               <label>
-                Neue Familie
+                {tr("expressions.mfb52200b7f")}
                 <input
                   required
                   maxLength={120}
@@ -233,7 +237,7 @@ export function ExpressionDesigner({
                 />
               </label>
               <label>
-                Kennung
+                {tr("expressions.mf1f479e20f")}
                 <input
                   required
                   maxLength={120}
@@ -243,18 +247,18 @@ export function ExpressionDesigner({
                   }
                 />
               </label>
-              <button type="submit">Familie hinzufügen</button>
+              <button type="submit">{tr("expressions.m7ee181a0c4")}</button>
             </form>
           </details>
           <label>
-            Variante
+            {tr("expressions.ma0f6dc6453")}
             <select
-              aria-label="Variante"
+              aria-label={tr("expressions.ma0f6dc6453")}
               value={variant?.id ?? ""}
               onChange={(e) => setVariantId(e.target.value)}
             >
               <option disabled value="">
-                Variante anlegen
+                {tr("expressions.md0e1778ffe")}
               </option>
               {members.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -265,7 +269,7 @@ export function ExpressionDesigner({
             </select>
           </label>
           <details>
-            <summary>Variante hinzufügen</summary>
+            <summary>{tr("expressions.m9763b13c5b")}</summary>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -280,7 +284,7 @@ export function ExpressionDesigner({
               }}
             >
               <label>
-                Neue Variante
+                {tr("expressions.mcbbbd7e70b")}
                 <input
                   required
                   maxLength={120}
@@ -291,7 +295,7 @@ export function ExpressionDesigner({
                 />
               </label>
               <label>
-                Neue Variantenkennung
+                {tr("expressions.mf1843b5593")}
                 <input
                   required
                   maxLength={120}
@@ -302,7 +306,7 @@ export function ExpressionDesigner({
                 />
               </label>
               <button type="submit" disabled={!family}>
-                Variante hinzufügen
+                {tr("expressions.m9763b13c5b")}
               </button>
             </form>
           </details>
@@ -322,13 +326,13 @@ export function ExpressionDesigner({
                 );
               }}
             >
-              <p className="eyebrow">GLOBAL · FÜR ALLE FIGUREN</p>
+              <p className="eyebrow">{tr("expressions.m0f75eaf7e2")}</p>
               <h3>
                 {familyDraft?.label} → {draft.label}
               </h3>
               <div className="designer-fields">
                 <label>
-                  Variantenname
+                  {tr("expressions.m61494064f0")}
                   <input
                     required
                     maxLength={120}
@@ -342,7 +346,7 @@ export function ExpressionDesigner({
                   />
                 </label>
                 <label>
-                  Variantenkennung
+                  {tr("expressions.ma15e3f38b1")}
                   <input
                     required
                     maxLength={120}
@@ -357,9 +361,9 @@ export function ExpressionDesigner({
                 </label>
               </div>
               <label>
-                Globale Generierungsanweisung
+                {tr("expressions.md5a7715544")}
                 <textarea
-                  aria-label="Globale Generierungsanweisung"
+                  aria-label={tr("expressions.md5a7715544")}
                   rows={4}
                   maxLength={8000}
                   value={draft.prompt}
@@ -373,7 +377,7 @@ export function ExpressionDesigner({
               </label>
               <div className="designer-fields">
                 <label>
-                  Intensität · optional (0–1)
+                  {tr("expressions.m4fc7d464df")}
                   <input
                     type="number"
                     min="0"
@@ -395,9 +399,9 @@ export function ExpressionDesigner({
                   />
                 </label>
                 <label>
-                  Vorgeschlagene Stimmaktion
+                  {tr("expressions.m4c9f6ae2c2")}
                   <select
-                    aria-label="Vorgeschlagene Stimmaktion"
+                    aria-label={tr("expressions.m4c9f6ae2c2")}
                     value={draft.suggestedAction}
                     onChange={(e) =>
                       setVariants({
@@ -411,34 +415,31 @@ export function ExpressionDesigner({
                   >
                     {Object.entries(actions).map(([id, label]) => (
                       <option key={id} value={id}>
-                        {label}
+                        {displayMessage(label)}
                       </option>
                     ))}
                   </select>
                 </label>
               </div>
-              <p className="muted">
-                Emotion und Stimmaktion bleiben getrennt. Intensität und
-                Stimmaktion sind Vorgaben für eine neue Studio-Auswahl.
-              </p>
+              <p className="muted">{tr("expressions.m588976fb69")}</p>
               <button className="primary" type="submit">
-                Variante speichern
+                {tr("expressions.m6b431264b2")}
               </button>
             </form>
           ) : (
-            <p className="panel">Zuerst eine Familie und Variante anlegen.</p>
+            <p className="panel">{tr("expressions.mcb817c5327")}</p>
           )}
           <section className="panel">
-            <p className="eyebrow">PERSÖNLICH · FIGUR × VARIANTE</p>
+            <p className="eyebrow">{tr("expressions.m3aec95802f")}</p>
             <label>
-              Figur für Expression
+              {tr("expressions.m55637e704a")}
               <select
-                aria-label="Expression Figur"
+                aria-label={tr("expressions.m83e2c5fafc")}
                 value={character?.id ?? ""}
                 onChange={(e) => setCharacterId(e.target.value)}
               >
                 <option disabled value="">
-                  Figur unter Characters anlegen
+                  {tr("expressions.mfa592ba2c2")}
                 </option>
                 {p.characters.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -468,9 +469,9 @@ export function ExpressionDesigner({
                 }}
               >
                 <label>
-                  Persönlicher Ausdruck
+                  {tr("expressions.me81e30b813")}
                   <textarea
-                    aria-label="Persönlicher Ausdruck"
+                    aria-label={tr("expressions.me81e30b813")}
                     rows={3}
                     maxLength={8000}
                     value={direction}
@@ -480,48 +481,45 @@ export function ExpressionDesigner({
                   />
                 </label>
                 <p className="muted">
-                  Nur {character.name} / {variant.label}. Eine persönliche
-                  Anweisung ersetzt die globale Ausdrucksanweisung für diese
-                  Kombination. Name, Intensität und Stimmaktion bleiben
-                  unabhängig. Leer speichern, um wieder die globale Vorlage zu
-                  erben.
+                  {tr("expressions.md1847a6fb4")}
+                  {character.name} / {variant.label}
+                  {tr("common.m8a3fe62c50")}
                 </p>
-                <button type="submit">Persönlichen Ausdruck speichern</button>
+                <button type="submit">{tr("expressions.m1d35eb5f65")}</button>
               </form>
             ) : (
-              <p>
-                Figur und Variante wählen, um einen persönlichen Ausdruck
-                festzulegen.
-              </p>
+              <p>{tr("expressions.m0e2a7ecbbd")}</p>
             )}
           </section>
           {draft && (
             <section
               className="panel effective-expression"
-              aria-label="Wirksame Ausdrucksanweisung"
+              aria-label={tr("expressions.m93578d669a")}
             >
               <h3>
-                Wirksame Regeln · {character?.name ?? "keine Figur"} /{" "}
-                {draft.label}
+                {tr("expressions.md5ea80f991")}
+                {character?.name ?? tr("common.m53ca322299")} / {draft.label}
               </h3>
               <p>
                 {direction.trim() && character
-                  ? "Persönliche Ausdrucksanweisung (ersetzt die globale Vorlage):"
-                  : "Geerbte globale Ausdrucksanweisung:"}
+                  ? tr("expressions.m22f294b3b5")
+                  : tr("expressions.m71bf33efef")}
               </p>
               <p className="expression-direction">
                 {(character && direction.trim()) ||
                   draft.prompt ||
-                  "Keine zusätzliche Ausdrucksanweisung. Familienname und Variante werden verwendet."}
+                  tr("expressions.noAdditionalDirection")}
               </p>
               <p>
-                Intensität: {draft.intensity ?? "nicht vorgegeben"} ·
-                Stimmaktion: {actions[draft.suggestedAction]}
+                {tr("expressions.m0537abe594")}
+                {draft.intensity ?? tr("common.m9f3337276d")}{" "}
+                {tr("expressions.mffd84c536d")}
+                {actions[draft.suggestedAction]}
               </p>
               <p className="muted">
                 {familyDirty || variantDirty || personalDirty
-                  ? "Vorschau enthält ungespeicherte Änderungen. Vor Verwendung im Studio speichern."
-                  : "Gespeicherte Regeln. Character Lock und Art Direction ergänzt Studio; zusätzliche kreative Anweisungen sind dort separat möglich."}
+                  ? tr("expressions.m1f685e0f38")
+                  : tr("expressions.mefe292e06c")}
               </p>
               <button
                 disabled={
@@ -538,12 +536,10 @@ export function ExpressionDesigner({
                     });
                 }}
               >
-                Im Studio verwenden
+                {tr("expressions.m13b168a606")}
               </button>
               {!character?.masterId && (
-                <p className="warning">
-                  Zuerst unter Characters einen Master freigeben.
-                </p>
+                <p className="warning">{tr("expressions.m05fbf7440e")}</p>
               )}
             </section>
           )}

@@ -1,3 +1,6 @@
+import { i18n } from "../../shared/locales";
+import { displayMessage } from "../../shared/locales";
+import { tr } from "../../shared/locales/index";
 import { PortraitPreview } from "../components/PortraitPreview";
 import { StudioSteps, useStudioSteps } from "../components/StudioSteps";
 import { MasterApproval } from "../components/MasterApproval";
@@ -138,7 +141,7 @@ export function CharacterCreator({
   );
   const [codex, setCodex] = useState<CodexStatus>({
     state: "unavailable",
-    message: "Codex-Verfügbarkeit prüfen.",
+    message: tr("characters.ma1b71a7774"),
   });
   const settings = character
     ? {
@@ -177,9 +180,7 @@ export function CharacterCreator({
       promptMode === "expert" &&
       composer.edited &&
       mode !== "expert" &&
-      !window.confirm(
-        "Eigenen Expert Override verwerfen und zur strukturierten Vorlage wechseln?",
-      )
+      !window.confirm(tr("characters.mb840957a3f"))
     )
       return;
     setPromptMode(mode);
@@ -190,9 +191,7 @@ export function CharacterCreator({
       intent?.mode === "master" &&
       intent.characterId === character?.id &&
       (reviewDirty || qualityDirty) &&
-      !window.confirm(
-        "Ungespeicherte Prüfnotizen verwerfen und Studio-Kontext wechseln?",
-      )
+      !window.confirm(tr("characters.m953368ccbf"))
     )
       return;
     if (
@@ -340,15 +339,13 @@ export function CharacterCreator({
     void perform(
       async () => {
         if (!character || !targetValid)
-          throw new Error("Zuerst eine Entwurfsfigur anlegen.");
+          throw new Error(tr("characters.ma2752a9beb"));
         const slots = replaceId ? 1 : 3 - identities.length;
         if (files && (!files.length || files.length > slots))
-          throw new Error(
-            `Noch ${slots} von 3 Plätzen verfügbar. Die gesamte Auswahl wurde abgelehnt.`,
-          );
+          throw new Error(tr("characters.mda4aff8a61", { v0: slots }));
         const errors = files
           ?.filter((f) => !f.size || f.size > 16 * 1024 * 1024)
-          .map((f) => `${f.name}: Identitätsbilder bis 16 MiB.`);
+          .map((f) => tr("characters.m38199134b2", { v0: f.name }));
         if (errors?.length) throw new Error(errors.join("\n"));
         const value = await unwrap(
           window.laceframe.importIdentityImages({
@@ -377,9 +374,7 @@ export function CharacterCreator({
     if (!valid || !draft) return;
     if (
       (reviewDirty || qualityDirty) &&
-      !window.confirm(
-        "Ungespeicherte Prüfnotizen verwerfen und neuen Masterentwurf erzeugen?",
-      )
+      !window.confirm(tr("characters.me3b279a3ad"))
     )
       return;
     flow.setStep("Erzeugen");
@@ -398,35 +393,33 @@ export function CharacterCreator({
   const requirements: Requirement[] = [];
   if (busy && !running)
     requirements.push({
-      message: "Eine andere Aktion oder Generierung läuft.",
+      message: tr("characters.mb632c4ceb4"),
     });
   if (!character)
     requirements.push({
-      message: "Figur fehlt. Einen Figurenentwurf anlegen.",
+      message: tr("characters.ma38bf09f80"),
       target: "creator-identity",
     });
   if (!targetValid)
     requirements.push({
-      message:
-        "Master gesperrt oder Rebuild-Ausgangsversion veraltet. In Characters ausdrücklich Master neu aufbauen wählen.",
+      message: tr("characters.m2a35544f50"),
     });
   const promptConflict = transparencyConflicts(
     `${identityNotes} ${outfit} ${composition.pose} ${composition.framing} ${creative} ${promptMode === "expert" ? composer.text.replaceAll(TRANSPARENT_CHARACTER_INSTRUCTION, "") : ""}`,
   );
   if (promptConflict)
     requirements.push({
-      message:
-        "Prompt widerspricht der verbindlichen Alpha-Transparenz. Hintergrundanweisung korrigieren.",
+      message: tr("characters.md4dc2ff574"),
       target: "creator-prompt-builder",
     });
   if (!identities.length)
     requirements.push({
-      message: "Identitätsbild fehlt.",
+      message: tr("characters.m823923b8b2"),
       target: "creator-identity",
     });
   if (!outfit.trim())
     requirements.push({
-      message: "Outfit ist unvollständig.",
+      message: tr("characters.m95c840d657"),
       target: "creator-outfit",
     });
   if (
@@ -441,16 +434,14 @@ export function CharacterCreator({
     composition.targetHeight > 4096
   )
     requirements.push({
-      message:
-        "Komposition oder Zielabmessungen unvollständig (64–4096 Pixel).",
+      message: tr("characters.m13344d5a40"),
       target: "creator-composition",
     });
   if (!codex.available && !running)
     requirements.push({ message: codex.message });
   if (identities.length + styleRefs.length > 1 && !codex.multipleReferences)
     requirements.push({
-      message:
-        "Mehrfachreferenzen nicht bestätigt. Provider-Verfügbarkeit prüfen.",
+      message: tr("characters.mfa65ab7dff"),
     });
   if (!running)
     requirements.push(
@@ -461,8 +452,7 @@ export function CharacterCreator({
     );
   if (!valid && !running && !requirements.length)
     requirements.push({
-      message:
-        "Einstellungen oder Prompt überschreiten die erlaubten Grenzen. Eingaben im Prompt Builder prüfen.",
+      message: tr("characters.mad802ee11a"),
       target: "creator-prompt-builder",
     });
   const slot = document.getElementById("create-action-slot");
@@ -478,23 +468,23 @@ export function CharacterCreator({
         createPortal(
           <div className="create-action-bar">
             <div className="job-status">
-              <p role="status" aria-label="Character Creator Status">
+              <p role="status" aria-label={tr("characters.m7336504985")}>
                 <strong>
                   {codex.state === "running"
-                    ? "Mastergenerierung läuft"
+                    ? tr("characters.mc673b8d6bf")
                     : codex.state === "completed"
-                      ? "Mastergenerierung abgeschlossen"
+                      ? tr("characters.mdc66f66e52")
                       : codex.state === "failed"
-                        ? "Mastergenerierung fehlgeschlagen"
+                        ? tr("characters.m255b894212")
                         : codex.state === "cancelled"
-                          ? "Mastergenerierung abgebrochen"
-                          : "Character Creator"}
+                          ? tr("characters.m67b3b8347a")
+                          : tr("characters.m890dcb2590")}
                 </strong>
-                <span>{codex.message}</span>
+                <span>{displayMessage(codex.message)}</span>
               </p>
               {timing && (
                 <output
-                  aria-label="Mastergenerierungszeit"
+                  aria-label={tr("characters.m62ee00ec21")}
                   className="generation-time"
                 >
                   {executionLabel(timing, running)}
@@ -511,17 +501,14 @@ export function CharacterCreator({
                   }}
                 />
               )}
-              <small>
-                Nur dieser Klick übermittelt die unten aufgeführten Identitäts-
-                und Stilbilder an Codex und nutzt dein Codex-Kontingent.
-              </small>
+              <small>{tr("characters.m11fb8fbc15")}</small>
             </div>
             <button
               className="primary"
               disabled={busy || running || !valid}
               onClick={generate}
             >
-              Neutralen Masterkandidaten generieren
+              {tr("characters.m44c4da2293")}
             </button>
             {running && (
               <button
@@ -542,7 +529,7 @@ export function CharacterCreator({
                   )
                 }
               >
-                Mastergenerierung abbrechen
+                {tr("characters.m52186150e3")}
               </button>
             )}
           </div>,
@@ -554,33 +541,35 @@ export function CharacterCreator({
       )}
       <div className="section-head">
         <div>
-          <p className="eyebrow">CREATE CHARACTER</p>
+          <p className="eyebrow">{tr("characters.m907fedcb93")}</p>
           <h2>
             {rebuilding
-              ? "Master neu aufbauen"
-              : "Vom Identitätsbild zum neutralen Master"}
+              ? tr("characters.m87759f9b8c")
+              : tr("characters.m47a685f79f")}
           </h2>
         </div>
-        <button onClick={onClose}>Zur Charakterbibliothek</button>
+        <button onClick={onClose}>{tr("characters.m33554da851")}</button>
       </div>
       {!contextControlled && (
         <>
           <label>
-            Aktive Figur
+            {tr("characters.mf1f9565fea")}
             <select
-              aria-label="Creator Figur"
+              aria-label={tr("characters.mb254bea44a")}
               value={character?.id ?? ""}
               onChange={(e) =>
                 command({ type: "selectCharacter", id: e.target.value })
               }
             >
               <option value="" disabled>
-                Entwurfsfigur anlegen
+                {tr("characters.mb161d496f5")}
               </option>
               {p.characters.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
-                  {c.masterId ? " · Master gesperrt" : " · Entwurf"}
+                  {c.masterId
+                    ? tr("characters.md941d8fb01")
+                    : tr("characters.m8d5242b1c0")}
                 </option>
               ))}
             </select>
@@ -589,45 +578,51 @@ export function CharacterCreator({
       )}
       {step === "Auswählen" && (
         <section className="creator-new-character">
-          <h3>Neue Figur anlegen</h3>
+          <h3>{tr("characters.md558f02a7b")}</h3>
           <form
             className="inline-form"
             onSubmit={(e) => {
               e.preventDefault();
               command(
                 { type: "addCharacter", name },
-                "Figurenentwurf angelegt.",
+                tr("characters.mf058e1b8cd"),
               );
             }}
           >
             <label>
-              Neue Entwurfsfigur
+              {tr("characters.m89c61fd325")}
               <input
-                aria-label="Name der Entwurfsfigur"
+                aria-label={tr("characters.mcd61a304c3")}
                 required
                 maxLength={120}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
-            <button>Figurenentwurf anlegen</button>
+            <button>{tr("characters.m1b63a306c7")}</button>
           </form>
         </section>
       )}
       {character && (
         <>
           <p>
-            Aktive Figur: <strong>{character.name}</strong> ·{" "}
+            {tr("characters.m361e8a07aa")}
+            <strong>{character.name}</strong> ·{" "}
             {character.masterId
-              ? `Master V${p.masters.find((m) => m.id === character.masterId)?.version ?? "—"} gesperrt`
-              : "Entwurf ohne Master"}
+              ? tr("characters.m361a4aec2f", {
+                  v0:
+                    p.masters.find((m) => m.id === character.masterId)
+                      ?.version ?? "—",
+                })
+              : tr("characters.md75675ed46")}
           </p>
           {character.masterId && (
             <p className="warning">
-              Aktueller Master V{currentMaster?.version} bleibt aktiv.{" "}
+              {tr("characters.m7b5a81f16c")}
+              {currentMaster?.version} {tr("characters.m68a75ad27e")}{" "}
               {rebuilding
-                ? "Rebuild für dieselbe Figur: ein separat geprüfter Kandidat wird erst nach ausdrücklicher Freigabe zur nächsten Version."
-                : "Für einen neuen Master derselben Figur in Characters Master neu aufbauen wählen."}
+                ? tr("characters.mb414452505")
+                : tr("characters.m9984970ec2")}
             </p>
           )}
           {step === "Auswählen" && (
@@ -649,38 +644,36 @@ export function CharacterCreator({
               >
                 <PortraitPreview
                   image={activeReference ?? identities[0] ?? currentMaster}
-                  caption={`${character.name} · Identitätsvorlage`}
+                  caption={tr("characters.md048925ecf", { v0: character.name })}
                 />
                 <h3 data-focus-target="creator-identity">
-                  Identität schützen · Identitätsquellen
+                  {tr("characters.ma464f7143e")}
                 </h3>
-                <p>
-                  Bis zu drei Fotos derselben Person oder Illustrationen.
-                  PNG/JPEG/WebP, je 16 MiB / 16 MP. Originale bleiben lokal, bis
-                  du generierst.
-                </p>
+                <p>{tr("characters.m04764ac10c")}</p>
                 <button
                   disabled={
                     !targetValid || identities.length >= 3 || busy || running
                   }
                   onClick={() => importIdentity()}
                 >
-                  Identitätsbilder hinzufügen …
+                  {tr("characters.m4f08f6ea7a")}
                 </button>
-                <p role="status">{identities.length} von 3 Bildern</p>
+                <p role="status">
+                  {identities.length} {tr("characters.m01dd83bc18")}
+                </p>
                 <div className="creator-references">
                   {identities.map((a, i) => (
                     <div key={a.id}>
                       <ImagePreview
                         id={a.id}
-                        caption={`Identität ${i + 1}`}
+                        caption={tr("characters.mc3ae7c05fb", { v0: i + 1 })}
                         zoom="fit"
                       />
                       <small>
                         {a.width} × {a.height} · {a.format.toUpperCase()} ·{" "}
                         {expert
                           ? a.sha256.slice(0, 12)
-                          : "Original bleibt erhalten"}
+                          : tr("characters.m3ba020ea77")}
                       </small>
                       <button
                         disabled={!candidate}
@@ -689,45 +682,35 @@ export function CharacterCreator({
                           setReferenceId(a.id);
                         }}
                       >
-                        Vergleichen
+                        {tr("characters.m9ced3dc6dc")}
                       </button>
                       <button
                         disabled={busy || running}
                         onClick={() => importIdentity(undefined, a.id)}
                       >
-                        Referenz austauschen …
+                        {tr("characters.m79f4982b2d")}
                       </button>
                       <button
                         onClick={() => {
-                          if (
-                            window.confirm(
-                              "Identitätsbild aus aktiver Auswahl entfernen? Historisch verwendete Quellen bleiben für ihre Provenienz erhalten; unbenutzte Projektkopien werden gelöscht. Originaldateien außerhalb des Projekts bleiben unverändert.",
-                            )
-                          )
+                          if (window.confirm(tr("characters.mde46966099")))
                             command(
                               { type: "removeIdentityReference", id: a.id },
-                              "Referenz entfernt; historische Abhängigkeiten bleiben erhalten.",
+                              tr("characters.m11eb222831"),
                             );
                         }}
                       >
-                        Referenz entfernen
+                        {tr("characters.mc39b6d0c17")}
                       </button>
                     </div>
                   ))}
                 </div>
                 {p.identityAssets.some(
                   (a) => a.characterId === character.id && a.removedAt,
-                ) && (
-                  <small>
-                    Entfernte, historisch verwendete Referenzen bleiben im
-                    Projektarchiv. Kein sicheres Überschreiben oder Löschen von
-                    Codex-internen Dateien wird behauptet.
-                  </small>
-                )}
+                ) && <small>{tr("characters.m5ed6813309")}</small>}
                 <label>
-                  Identitätsmerkmale
+                  {tr("characters.m95abad6ff7")}
                   <textarea
-                    aria-label="Creator Identitätsmerkmale"
+                    aria-label={tr("characters.m843ee58ea1")}
                     maxLength={4000}
                     rows={2}
                     value={identityNotes}
@@ -736,17 +719,17 @@ export function CharacterCreator({
                 </label>
               </section>
               <section className="panel">
-                <h3>Art Direction / Style Lock</h3>
+                <h3>{tr("characters.m6d6e419781")}</h3>
                 <button
                   className="text-link"
                   onClick={() => onArtDirection(style?.id)}
                 >
-                  Art Direction bearbeiten
+                  {tr("characters.mef0771e059")}
                 </button>
                 <label>
-                  Darstellungsstil
+                  {tr("characters.m7ddbb7dd9b")}
                   <select
-                    aria-label="Creator Art Direction"
+                    aria-label={tr("characters.m78e387bca7")}
                     value={style?.id ?? ""}
                     onChange={(e) => {
                       setStyleId(e.target.value);
@@ -760,57 +743,49 @@ export function CharacterCreator({
                         });
                     }}
                   >
-                    <option value="">Ohne zusätzliches Stilprofil</option>
+                    <option value="">{tr("characters.m7e1c3b6a36")}</option>
                     {p.artDirections.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name} · R{s.revision}
+                        {s.name} {tr("characters.mda8ec3e284")}
+                        {s.revision}
                       </option>
                     ))}
                   </select>
                 </label>
-                <p>
-                  Nur Rendering, Konturen, Licht und Farbe. Keine
-                  Gesichtsmerkmale oder Kleidung aus Stilbildern übernehmen.
-                </p>
+                <p>{tr("characters.meaaf4fdecf")}</p>
                 <div className="creator-references">
                   {styleRefs.map((r, i) => (
                     <ImagePreview
                       key={r.id}
                       id={r.id}
-                      caption={`Stil ${i + 1} · nur Darstellung`}
+                      caption={tr("characters.m0c1288f0a7", { v0: i + 1 })}
                       zoom="fit"
                     />
                   ))}
                 </div>
-                {!style && (
-                  <small>
-                    Stilprofile und Stilbilder lassen sich unter Art Direction
-                    anlegen.
-                  </small>
-                )}
-                <h3 data-focus-target="creator-outfit">Outfit</h3>
+                {!style && <small>{tr("characters.maeeecd120c")}</small>}
+                <h3 data-focus-target="creator-outfit">
+                  {tr("characters.m2fa46a9387")}
+                </h3>
                 <label>
-                  Individuelle Kleidung
+                  {tr("characters.m1e07144140")}
                   <textarea
-                    aria-label="Creator Outfit"
+                    aria-label={tr("characters.m8807dcae2d")}
                     rows={3}
                     maxLength={4000}
                     value={outfit}
-                    placeholder="Kleidung und Accessoires unabhängig von Fotos und Stilbildern"
+                    placeholder={tr("characters.mbb141e16ae")}
                     onChange={(e) => setOutfit(e.target.value)}
                   />
                 </label>
                 {expert && (
                   <section data-focus-target="creator-composition">
-                    <h3>Composition · Pose, Ausschnitt & Zielauflösung</h3>
-                    <p>
-                      Hintergrund: echte Alpha-Transparenz, keine Kulisse. Das
-                      tatsächliche Ergebnis wird vor dem Review geprüft.
-                    </p>
+                    <h3>{tr("characters.mcbb9a9da30")}</h3>
+                    <p>{tr("characters.mda8e6f83c7")}</p>
                     <label>
-                      Zielauflösungsprofil
+                      {tr("characters.ma3adb24d73")}
                       <select
-                        aria-label="Creator Auflösungsprofil"
+                        aria-label={tr("characters.m0606cda0ae")}
                         value={
                           composition.targetResolution
                             ? String(
@@ -834,7 +809,7 @@ export function CharacterCreator({
                         }}
                       >
                         <option value="" disabled>
-                          Benutzerdefiniertes Ziel
+                          {tr("characters.mde41930f95")}
                         </option>
                         {RESOLUTION_PROFILES.map((p, i) => (
                           <option key={p.name} value={i}>
@@ -845,14 +820,16 @@ export function CharacterCreator({
                     </label>
                     {(
                       [
-                        ["pose", "Neutrale Pose"],
-                        ["framing", "Bildausschnitt"],
+                        ["pose", tr("characters.m43ceeba3f7")],
+                        ["framing", tr("characters.m10370c280c")],
                       ] as const
                     ).map(([key, label]) => (
                       <label key={key}>
                         {label}
                         <textarea
-                          aria-label={`Creator ${label}`}
+                          aria-label={tr("characters.m4ca9aea16c", {
+                            v0: label,
+                          })}
                           rows={2}
                           maxLength={4000}
                           value={composition[key]}
@@ -866,9 +843,9 @@ export function CharacterCreator({
                       </label>
                     ))}
                     <label>
-                      Asset-Profil
+                      {tr("characters.m666b877c19")}
                       <input
-                        aria-label="Creator Asset-Profil"
+                        aria-label={tr("characters.m893f2ce1b0")}
                         maxLength={120}
                         value={composition.profile}
                         onChange={(e) =>
@@ -882,14 +859,16 @@ export function CharacterCreator({
                     <div className="button-row">
                       {(
                         [
-                          ["targetWidth", "Zielbreite"],
-                          ["targetHeight", "Zielhöhe"],
+                          ["targetWidth", tr("characters.mbf565c6ff3")],
+                          ["targetHeight", tr("characters.mfd7225e4bd")],
                         ] as const
                       ).map(([key, label]) => (
                         <label key={key}>
                           {label}
                           <input
-                            aria-label={`Creator ${label}`}
+                            aria-label={tr("characters.m4ca9aea16c", {
+                              v0: label,
+                            })}
                             type="number"
                             min={64}
                             max={4096}
@@ -905,10 +884,7 @@ export function CharacterCreator({
                         </label>
                       ))}
                     </div>
-                    <small>
-                      Gewünschte Auflösung ist ein Ziel. Tatsächliche Ausgabe
-                      bleibt unverändert; keine 64×64-Konvertierung.
-                    </small>
+                    <small>{tr("characters.me40df7eaba")}</small>
                   </section>
                 )}
               </section>
@@ -917,59 +893,68 @@ export function CharacterCreator({
           <div
             className="reference-roles"
             hidden={step !== "Erzeugen"}
-            aria-label="Creator Referenzreihenfolge"
+            aria-label={tr("characters.mda8c5290ad")}
           >
-            <strong>An Codex bei Generierung:</strong>
+            <strong>{tr("characters.mea3886919c")}</strong>
             <span>
-              Bild 1–{identities.length}: Identität ({identities.length})
+              {tr("characters.m604898aad1")}
+              {identities.length}
+              {tr("characters.mf00df963d9")}
+              {identities.length})
             </span>
-            <span>Danach Stil ({styleRefs.length}) · nur Darstellung</span>
+            <span>
+              {tr("characters.me9586646ac")}
+              {styleRefs.length}
+              {tr("characters.m73c11c511b")}
+            </span>
             {identities.length + styleRefs.length > 1 &&
               !codex.multipleReferences && (
-                <p className="warning">
-                  Mehrere Referenzen nicht bestätigt. Generierung blockiert;
-                  Identität nicht stillschweigend weglassen.
-                </p>
+                <p className="warning">{tr("characters.m8daf42a33a")}</p>
               )}
           </div>
           {step === "Erzeugen" && (
             <section className="creator-generation-reference">
               <PortraitPreview
                 image={activeReference ?? identities[0] ?? currentMaster}
-                caption={`${character.name} · ${identities.length ? "Identitätsreferenz" : "Masterreferenz"}`}
+                caption={tr("characters.m78735b8fba", {
+                  v0: character.name,
+                  v1: identities.length
+                    ? tr("characters.m443d3d4a05")
+                    : tr("characters.m558170f96d"),
+                })}
               />
               <p>
-                {style?.name ?? "Ohne zusätzliches Stilprofil"} · Neutraler
-                Master · {composition.targetWidth} × {composition.targetHeight}{" "}
-                als Ziel
+                {style?.name ?? tr("characters.m7e1c3b6a36")}{" "}
+                {tr("characters.m3505489f9f")}
+                {composition.targetWidth} × {composition.targetHeight}{" "}
+                {tr("characters.m0d381994ab")}
               </p>
             </section>
           )}
           <section className="panel creator-result" data-step={step}>
-            {step !== "Auswählen" && <h3>Masterentwürfe prüfen</h3>}
+            {step !== "Auswählen" && <h3>{tr("characters.mfa83ada6cf")}</h3>}
             {expert && (
               <label>
-                Masterversuch
+                {tr("characters.mbc975cc96b")}
                 <select
-                  aria-label="Masterversuch"
+                  aria-label={tr("characters.mbc975cc96b")}
                   value={active?.id ?? ""}
                   onChange={(e) => {
                     if (
                       (reviewDirty || qualityDirty) &&
                       e.target.value !== activeId &&
-                      !window.confirm(
-                        "Ungespeicherte Prüfnotizen verwerfen und anderen Versuch prüfen?",
-                      )
+                      !window.confirm(tr("characters.mccf1e82e56"))
                     )
                       return;
                     setActiveId(e.target.value);
                   }}
                 >
-                  <option value="">Kein Versuch ausgewählt</option>
+                  <option value="">{tr("characters.m361ddf9304")}</option>
                   {attempts.map((a, i) => (
                     <option key={a.id} value={a.id}>
-                      Versuch {i + 1} ·{" "}
-                      {a.execution?.status ?? "ohne Abschluss"} ·{" "}
+                      {tr("characters.mb52614c76a")}
+                      {i + 1} ·{" "}
+                      {a.execution?.status ?? tr("common.m0316ff637a")} ·{" "}
                       {a.id.slice(0, 8)}
                     </option>
                   ))}
@@ -979,28 +964,31 @@ export function CharacterCreator({
             {candidate ? (
               <>
                 <button onClick={() => onLibrary(candidate.id)}>
-                  In Library prüfen
+                  {tr("characters.m72b8b4ea0e")}
                 </button>
                 <p className={`badge ${candidate.status}`}>
-                  Masterkandidat ·{" "}
+                  {tr("characters.mc434610aca")}{" "}
                   {candidate.status === "approved"
-                    ? "freigegeben"
+                    ? tr("common.m9ebf36386d")
                     : candidate.status === "rejected"
-                      ? "abgelehnt"
-                      : "ungeprüft"}
+                      ? tr("common.me310994718")
+                      : tr("characters.m08112f78b5")}
                 </p>
                 {step === "Freigeben" && (
-                  <p aria-label="Gespeicherte Masterherkunft">
-                    Entwurf vom{" "}
-                    {new Date(candidate.createdAt).toLocaleString("de-DE")} ·{" "}
-                    {candidate.width} × {candidate.height} · Codex.
+                  <p aria-label={tr("characters.m5d7f8ef6ec")}>
+                    {tr("characters.m71b6fc373b")}{" "}
+                    {new Date(candidate.createdAt).toLocaleString(
+                      i18n.language,
+                    )}{" "}
+                    · {candidate.width} × {candidate.height}{" "}
+                    {tr("characters.m7706edd02d")}
                     {active && (
                       <>
                         {" "}
-                        Generierungsanweisung vom{" "}
+                        {tr("characters.mf9f5f67237")}{" "}
                         {new Date(
                           active.promptRevision.createdAt,
-                        ).toLocaleString("de-DE")}
+                        ).toLocaleString(i18n.language)}
                         .
                       </>
                     )}
@@ -1009,14 +997,14 @@ export function CharacterCreator({
                 {step === "Erzeugen" && (
                   <PortraitPreview
                     image={candidate}
-                    caption="Character Creator · Ergebnisvorschau"
+                    caption={tr("characters.m84b98070cd")}
                   />
                 )}
                 {(step === "Bearbeiten" || step === "Freigeben") && (
                   <MasterCandidateCompare
                     master={activeReference}
                     candidate={candidate}
-                    beforeLabel="Identität"
+                    beforeLabel={tr("characters.m09841f4a4e")}
                     identityComparison
                     requested={
                       active
@@ -1054,11 +1042,11 @@ export function CharacterCreator({
                             id: candidate.id,
                             status: "rejected",
                           },
-                          "Masterkandidat abgelehnt. Neuer Versuch möglich.",
+                          tr("characters.mbd0e2a2e11"),
                         )
                       }
                     >
-                      Masterkandidat ablehnen
+                      {tr("characters.m0d7e9c39f9")}
                     </button>
                     <MasterApproval
                       visible={step === "Freigeben"}
@@ -1068,8 +1056,10 @@ export function CharacterCreator({
                       disabled={busy || running || !targetValid}
                       label={
                         currentMaster
-                          ? `Als Master V${currentMaster.version + 1} freigeben & aktivieren`
-                          : "Als Master V1 freigeben & sperren"
+                          ? tr("characters.m12a9d9472b", {
+                              v0: currentMaster.version + 1,
+                            })
+                          : tr("characters.ma810d96bcb")
                       }
                       onRetry={valid ? generate : undefined}
                       onCutout={() => setCutoutRequested((v) => v + 1)}
@@ -1082,8 +1072,8 @@ export function CharacterCreator({
                             review,
                           },
                           currentMaster
-                            ? "Neuer Master aktiviert; bisherige Versionen bleiben erhalten."
-                            : "Master V1 freigegeben und gesperrt.",
+                            ? tr("characters.m51b070a7c5")
+                            : tr("characters.mb4ceaef3c5"),
                         )
                       }
                     />
@@ -1091,18 +1081,16 @@ export function CharacterCreator({
                 )}
                 {Boolean(character.masterId) && (
                   <button className="primary" onClick={onExpressions}>
-                    Expressions mit diesem Master erstellen
+                    {tr("characters.m7b900bc673")}
                   </button>
                 )}
               </>
             ) : step !== "Auswählen" ? (
-              <p>
-                Hier erscheint dein neuer Masterentwurf nach der Generierung.
-              </p>
+              <p>{tr("characters.m2c6fce92e5")}</p>
             ) : null}
             {active && expert && step !== "Auswählen" && (
               <section>
-                <h3>Gespeicherte Herkunft dieses Versuchs</h3>
+                <h3>{tr("characters.m266575d66e")}</h3>
                 <p className="mono">
                   {JSON.stringify(
                     { ...active, promptRevision: undefined },
@@ -1118,52 +1106,44 @@ export function CharacterCreator({
           </section>
           {expert && step === "Erzeugen" && (
             <section className="panel creator-expert">
-              <h3>Prompt Builder & Generierungsdetails</h3>
-              <p className="muted">
-                Verbindliche Systemregel in jedem Modus, auch Expert Override:
-                echte Alpha-Transparenz, kein eingebrannter Hintergrund. Main
-                ergänzt diese Regel im tatsächlich gesendeten Prompt. Das Modell
-                garantiert keinen transparenten Output; die Pixelprüfung
-                entscheidet über die Freigabe.
-              </p>
+              <h3>{tr("characters.m1d61310d2f")}</h3>
+              <p className="muted">{tr("characters.mf2ce618274")}</p>
               <PromptComposer
                 sources={[
                   {
-                    layer: "System",
-                    source:
-                      "Echte Alpha-Anforderung, immutable Referenzen, technische Prüfung und manuelle Freigabe (Main/Provider).",
+                    layer: tr("common.m6725e7bbcd"),
+                    source: tr("characters.me00295dbad"),
                   },
                   {
-                    layer: "Style",
+                    layer: tr("common.m7e744141b4"),
                     source: style
                       ? `${style.name} · R${style.revision}`
-                      : "Kein gemeinsamer Style",
+                      : tr("characters.m85c4503ec2"),
                   },
                   {
-                    layer: "Character Identity",
-                    source: `${character?.name} · ausgewählte private Identitätsreferenzen und Identitätsnotizen`,
+                    layer: tr("common.m2770dce311"),
+                    source: tr("characters.m919727880b", {
+                      v0: character?.name,
+                    }),
                   },
                   {
                     layer: "Outfit",
-                    source:
-                      "Editierbarer Outfitentwurf dieser Figur; unabhängig vom Stil.",
+                    source: tr("characters.m7368bfb0c9"),
                   },
                   {
-                    layer: "Expression Performance",
-                    source:
-                      "Neutraler Master; keine persönliche Emotionsperformance.",
+                    layer: tr("common.m1279850d20"),
+                    source: tr("characters.mb9c43542ea"),
                   },
                   {
-                    layer: "Composition",
-                    source:
-                      "Pose, Framing, Hintergrund und Auflösungsziel aus diesem Creator-Entwurf.",
+                    layer: tr("common.m47fca483c8"),
+                    source: tr("characters.md09bc927e2"),
                   },
                   {
-                    layer: "Creative Supplements",
+                    layer: tr("common.m1c9b1f80be"),
                     source:
                       promptMode === "expert"
-                        ? "Expert Override mit verbindlichen Systemregeln."
-                        : creative || "Keine Ergänzung",
+                        ? tr("characters.m1c49a5fb66")
+                        : creative || tr("common.m375cda06a9"),
                   },
                 ]}
                 labelPrefix="Creator"
@@ -1180,7 +1160,7 @@ export function CharacterCreator({
                   void perform(() => window.laceframe.checkCodex(), setCodex)
                 }
               >
-                Creator-Verfügbarkeit prüfen
+                {tr("characters.m64e6016d1b")}
               </button>
             </section>
           )}

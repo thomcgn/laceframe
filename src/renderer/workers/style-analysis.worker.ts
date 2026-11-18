@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales";
 import { measureStyle, type AnalysisInput } from "../../shared/style-analysis";
 self.onmessage = (
   event: MessageEvent<{
@@ -18,7 +19,7 @@ self.onmessage = (
   } catch (error) {
     self.postMessage({
       ok: false,
-      error: error instanceof Error ? error.message : "Analyse fehlgeschlagen",
+      error: error instanceof Error ? error.message : tr("editing.mc30667e750"),
     });
   }
 };

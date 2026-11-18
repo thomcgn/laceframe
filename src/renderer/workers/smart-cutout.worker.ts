@@ -1,3 +1,4 @@
+import { tr } from "../../shared/locales";
 import {
   prepareCutout,
   selectBackground,
@@ -27,7 +28,7 @@ self.onmessage = (
   } catch (e) {
     self.postMessage({
       serial: event.data.serial,
-      error: e instanceof Error ? e.message : "Auswahl fehlgeschlagen",
+      error: e instanceof Error ? e.message : tr("editing.m2b58e179b6"),
     });
   }
 };
