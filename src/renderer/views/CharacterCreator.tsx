@@ -752,6 +752,7 @@ export function CharacterCreator({
                     ))}
                   </select>
                 </label>
+                {style?.description && <p>{style.description}</p>}
                 <p>{tr("characters.meaaf4fdecf")}</p>
                 <div className="creator-references">
                   {styleRefs.map((r, i) => (

@@ -35,7 +35,9 @@ export function App() {
   const [view, setView] = useState<View>("Characters");
   const [expressionRunning, setExpressionRunning] = useState(false);
   const [creatorRunning, setCreatorRunning] = useState(false);
-  const generationRunning = expressionRunning || creatorRunning;
+  const [styleAnalysisRunning, setStyleAnalysisRunning] = useState(false);
+  const generationRunning =
+    expressionRunning || creatorRunning || styleAnalysisRunning;
   const [draftDirty, setDraftDirty] = useState<Record<string, boolean>>({});
   const [styleDirty, setStyleDirty] = useState(false);
   const createDirty = styleDirty || Object.values(draftDirty).some(Boolean);
@@ -726,6 +728,15 @@ export function App() {
                 onSnapshot={setSnapshot}
                 selectedId={styleIntent?.id}
                 requestSerial={styleIntent?.serial}
+                onUseStyle={(id) => {
+                  if (p.selectedCharacterId)
+                    enterStudio({
+                      mode: "master",
+                      characterId: p.selectedCharacterId,
+                      styleId: id,
+                    });
+                }}
+                onRunningChange={setStyleAnalysisRunning}
                 onDirtyChange={setStyleDirty}
               />
             </section>
