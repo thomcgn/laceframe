@@ -201,6 +201,7 @@ const review = async () =>
     status: "approved",
     notes: "Identity, silhouette and alpha reviewed manually",
     confirmStyleAndSilhouette: true,
+    rasterConfirmed: true,
   });
 describe("relighting project lifecycle", () => {
   it("rejects an unapproved master candidate before cutout/review, retaining its sources", async () => {

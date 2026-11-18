@@ -277,7 +277,7 @@ describe("attempt persistence and secure approval", () => {
       source,
     );
   });
-  it("retains rejected/discarded results and rejects replacing an immutable attempt", async () => {
+  it("retains rejection provenance, deletes unreferenced bytes and rejects replacing an immutable attempt", async () => {
     const asset = await importResult();
     await service.command({ type: "review", id: asset.id, status: "rejected" });
     const image = await service.stage(png(), "replacement.png");
@@ -291,9 +291,8 @@ describe("attempt persistence and secure approval", () => {
     expect(
       (await new ProjectService().open(root)).project.assets[0].status,
     ).toBe("rejected");
-    expect(await fs.readFile(path.join(root, asset.file))).toEqual(
-      png(23, 40, 140),
-    );
+    await expect(fs.readFile(path.join(root, asset.file))).rejects.toThrow();
+    expect(service.snapshot().project.assets[0].discardedAt).toBeTruthy();
   });
   it("deduplicates repeated image bytes while keeping every attempt/result ID", async () => {
     const a = await importResult(),

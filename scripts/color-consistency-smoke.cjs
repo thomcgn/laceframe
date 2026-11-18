@@ -444,7 +444,7 @@ const { nav } = require("./smoke-ui.cjs");
       .fill("Synthetic human palette, alpha and silhouette review");
     await quality
       .getByLabel(
-        "Identität, Outfit, Konturen, Stil und Alpha-Kanten visuell geprüft",
+        "Identität, Outfit, Konturen, Raster, Stil und Alpha-Kanten visuell geprüft",
         { exact: true },
       )
       .check();

@@ -29,6 +29,7 @@ export function MasterApproval({
   const [identity, setIdentity] = useState(false),
     [silhouette, setSilhouette] = useState(false),
     [activation, setActivation] = useState(false),
+    [raster, setRaster] = useState(false),
     [notes, setNotes] = useState("");
   useEffect(() => {
     let live = true;
@@ -37,6 +38,7 @@ export function MasterApproval({
     setIdentity(false);
     setSilhouette(false);
     setActivation(false);
+    setRaster(false);
     setNotes("");
     void window.laceframe
       .qualityReport(source.id)
@@ -54,8 +56,10 @@ export function MasterApproval({
     };
   }, [source.id, source.sha256]);
   useEffect(() => {
-    onDirtyChange?.(Boolean(identity || silhouette || activation || notes));
-  }, [identity, silhouette, activation, notes, onDirtyChange]);
+    onDirtyChange?.(
+      Boolean(identity || silhouette || activation || raster || notes),
+    );
+  }, [identity, silhouette, activation, raster, notes, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   if (!visible) return null;
   return (
@@ -112,6 +116,21 @@ export function MasterApproval({
         Schachbretthintergrund geprüft
       </label>
       <label>
+        <input
+          type="checkbox"
+          aria-label="Master Rasterqualität geprüft"
+          checked={raster}
+          onChange={(e) => setRaster(e.target.checked)}
+        />
+        Raster und Pixelcluster bei 1:1 und Vergrößerung geprüft; Mixels
+        korrigiert oder bewusst manuell beurteilt
+      </label>
+      <p>
+        Bei unsicherem Raster zuerst Pixel Snap in „Bearbeiten“ prüfen.
+        Automatische Hinweise sind kein Identitäts- oder Qualitätsnachweis.
+        Entscheidung in der Prüfnotiz dokumentieren.
+      </p>
+      <label>
         Prüfnotiz
         <textarea
           aria-label="Master Prüfnotiz"
@@ -140,6 +159,7 @@ export function MasterApproval({
           !identity ||
           !silhouette ||
           !activation ||
+          !raster ||
           !notes.trim()
         }
         onClick={() =>
@@ -148,6 +168,7 @@ export function MasterApproval({
             identityConfirmed: true,
             silhouetteConfirmed: true,
             activationConfirmed: true,
+            rasterConfirmed: true,
             notes,
           })
         }

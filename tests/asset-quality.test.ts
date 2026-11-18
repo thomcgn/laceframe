@@ -219,6 +219,7 @@ const approve = () =>
     status: "approved",
     notes: "Silhouette, palette and outfit manually checked",
     confirmStyleAndSilhouette: true,
+    rasterConfirmed: true,
   });
 async function cutout(sourceId = service.snapshot().project.masters[0].id) {
   await service.command({
@@ -358,6 +359,7 @@ describe("immutable quality lifecycle, versions and exports", () => {
         status: "approved",
         notes: "checked",
         confirmStyleAndSilhouette: true,
+        rasterConfirmed: true,
       }),
     ).rejects.toThrow("aktuellen Master");
   });
@@ -382,6 +384,7 @@ describe("immutable quality lifecycle, versions and exports", () => {
         status: "approved",
         notes: "",
         confirmStyleAndSilhouette: true,
+        rasterConfirmed: true,
       }),
     ).rejects.toThrow();
     await service.command({
@@ -390,6 +393,7 @@ describe("immutable quality lifecycle, versions and exports", () => {
       status: "rejected",
       notes: "Contour needs correction",
       confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
     });
     await expect(approve()).rejects.toThrow("Ungeprüfte");
   });

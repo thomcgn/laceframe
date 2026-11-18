@@ -222,6 +222,7 @@ export function App() {
             identityConfirmed: true,
             silhouetteConfirmed: true,
             activationConfirmed: true,
+            rasterConfirmed: true,
             notes: importNotes,
           },
         };
@@ -1000,8 +1001,8 @@ export function App() {
                     checked={importReviewed}
                     onChange={(e) => setImportReviewed(e.target.checked)}
                   />
-                  Identität, Silhouette und Alpha-Kanten geprüft; diesen Master
-                  ausdrücklich aktivieren
+                  Identität, Raster bei 1:1 und Vergrößerung, Silhouette und
+                  Alpha-Kanten geprüft; diesen Master ausdrücklich aktivieren
                 </label>
                 <label>
                   Prüfnotiz

@@ -234,6 +234,7 @@ describe("decoded transparency gate and manual approval", () => {
       "identityConfirmed",
       "silhouetteConfirmed",
       "activationConfirmed",
+      "rasterConfirmed",
       "notes",
     ] as const) {
       const invalid = { ...review, [key]: undefined };
@@ -331,6 +332,7 @@ describe("decoded transparency gate and manual approval", () => {
       status: "approved",
       notes: "Cutout silhouette, identity and activation explicitly reviewed",
       confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
     });
     const next = state().masters[1];
     expect(next).toMatchObject({
@@ -363,6 +365,7 @@ describe("decoded transparency gate and manual approval", () => {
         status: "approved",
         notes: "Human review",
         confirmStyleAndSilhouette: true,
+        rasterConfirmed: true,
       }),
     ).rejects.toThrow(/maske/i);
     expect(state().masters).toHaveLength(0);

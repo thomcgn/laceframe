@@ -1,3 +1,4 @@
+import { hasOtherAssetReference } from "./asset-retention";
 import { pixelEditInputSchema, MAX_SNAP_PIXELS } from "./pixel-snap";
 import {
   paletteSchema,
@@ -73,6 +74,7 @@ export const masterCandidateSchema = z
     createdAt: z.iso.datetime(),
     reviewedAt: z.iso.datetime().optional(),
     approvedMasterId: idSchema.optional(),
+    discardedAt: z.iso.datetime().optional(),
   })
   .strict();
 export const masterSchema = z
@@ -111,6 +113,7 @@ export const assetSchema = z
     variantId: idSchema,
     action: actionSchema,
     status: z.enum(["candidate", "approved", "rejected"]),
+    discardedAt: z.iso.datetime().optional(),
     createdAt: z.iso.datetime(),
     reviewedAt: z.iso.datetime().optional(),
     attemptId: idSchema.optional(),
@@ -333,6 +336,13 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       )
     )
       fail("Invalid master palette");
+  }
+  for (const a of [...p.assets, ...p.masterCandidates, ...p.qualityAssets]) {
+    if (
+      a.discardedAt &&
+      (a.status !== "rejected" || hasOtherAssetReference(p, a.id))
+    )
+      fail("Discarded candidate is approved or referenced");
   }
   const qualitySources = [
     ...p.masters,
@@ -1105,6 +1115,7 @@ export const commandSchema = z.discriminatedUnion("type", [
       status: z.enum(["approved", "rejected"]),
       notes: z.string().trim().min(1).max(8000),
       confirmStyleAndSilhouette: z.literal(true),
+      rasterConfirmed: z.literal(true).optional(),
     })
     .strict(),
   z

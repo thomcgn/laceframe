@@ -87,6 +87,7 @@ export const qualityDerivativeSchema = z
     pixelEdit: pixelEditRecordSchema.optional(),
     smartCutout: smartCutoutRecordSchema.optional(),
     status: z.enum(["candidate", "approved", "rejected"]),
+    discardedAt: z.iso.datetime().optional(),
     reviewedAt: z.iso.datetime().optional(),
     notes: z.string().max(8000).optional(),
     approvedMasterId: uuid.optional(),
@@ -122,6 +123,7 @@ export const masterApprovalInputSchema = z
     identityConfirmed: z.literal(true),
     silhouetteConfirmed: z.literal(true),
     activationConfirmed: z.literal(true),
+    rasterConfirmed: z.literal(true).optional(),
     notes: z.string().trim().min(1).max(8000),
   })
   .strict();

@@ -278,6 +278,7 @@ describe("safe versioned palette/candidate persistence", () => {
       status: "approved",
       notes: "Explicit synthetic color and silhouette review",
       confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
     });
     const asset = s.snapshot().project.assets.at(-1)!;
     expect(asset.status).toBe("approved");
@@ -486,6 +487,7 @@ describe("safe versioned palette/candidate persistence", () => {
       status: "approved",
       notes: "Synthetic one-pixel color review",
       confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
     });
     const out = await s.analysisSource(s.snapshot().project.assets.at(-1)!.id),
       master = await s.analysisSource(m.id);

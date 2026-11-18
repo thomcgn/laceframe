@@ -1,3 +1,5 @@
+import { pixelReview } from "../../shared/pixel-review";
+import { analyzeSnap } from "../../shared/pixel-snap";
 import { applyPixelEdit, type PixelEdit } from "../../shared/pixel-snap";
 import type { ColorPixels } from "../../shared/color-consistency";
 const worker = self as unknown as {
@@ -10,6 +12,7 @@ worker.onmessage = async (
     id: number;
     source?: ColorPixels;
     edit?: PixelEdit;
+    analyze?: boolean;
     protectedWeights?: Uint8Array;
   }>,
 ) => {
@@ -20,6 +23,10 @@ worker.onmessage = async (
       return;
     }
     if (!source) throw new Error("Quelle fehlt.");
+    if (e.data.analyze) {
+      worker.postMessage({ id, analysis: analyzeSnap(source) });
+      return;
+    }
     if (!e.data.edit) throw new Error("Bearbeitungsparameter fehlen.");
     const result = applyPixelEdit(
       source,
@@ -33,9 +40,10 @@ worker.onmessage = async (
     const sha256 = Array.from(new Uint8Array(hash), (v) =>
       v.toString(16).padStart(2, "0"),
     ).join("");
-    worker.postMessage({ id, result, sha256 }, [
-      result.data.buffer as ArrayBuffer,
-    ]);
+    worker.postMessage(
+      { id, result, sha256, review: pixelReview(source, result) },
+      [result.data.buffer as ArrayBuffer],
+    );
   } catch (error) {
     worker.postMessage({
       id,

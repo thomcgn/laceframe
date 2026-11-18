@@ -705,6 +705,7 @@ const { createHash } = require("node:crypto");
     await studioStep(page, "Freigeben");
     await field(page, "Master Identität bestätigt", { exact: true }).check();
     await field(page, "Master Silhouette geprüft", { exact: true }).check();
+    await field(page, "Master Rasterqualität geprüft", { exact: true }).check();
     await field(page, "Master Aktivierung bestätigen", { exact: true }).check();
     await field(page, "Master Prüfnotiz", { exact: true }).fill(
       "Synthetic silhouette and identity reviewed",
@@ -1010,7 +1011,7 @@ const { createHash } = require("node:crypto");
             sourceSha256: c.sha256,
             identityConfirmed: true,
             silhouetteConfirmed: true,
-            activationConfirmed: true,
+            activationConfirmed: true, rasterConfirmed: true,
             notes: "Direct IPC must still fail transparency",
           },
         }),
@@ -1112,6 +1113,7 @@ const { createHash } = require("node:crypto");
     await studioStep(page, "Freigeben");
     await field(page, "Master Identität bestätigt", { exact: true }).check();
     await field(page, "Master Silhouette geprüft", { exact: true }).check();
+    await field(page, "Master Rasterqualität geprüft", { exact: true }).check();
     await field(page, "Master Aktivierung bestätigen", { exact: true }).check();
     await field(page, "Master Prüfnotiz", { exact: true }).fill(
       "Synthetic rebuild identity, silhouette, outfit and alpha approved",

@@ -127,7 +127,7 @@ const { createHash } = require("node:crypto");
             sourceSha256: r.value.sha256,
             identityConfirmed: true,
             silhouetteConfirmed: true,
-            activationConfirmed: true,
+            activationConfirmed: true, rasterConfirmed: true,
             notes: "Synthetic silhouette and identity review",
           },
         });
@@ -144,7 +144,7 @@ const { createHash } = require("node:crypto");
           id: cut.value.project.qualityAssets.at(-1).id,
           status: "approved",
           notes: "Synthetic silhouette and alpha manually reviewed",
-          confirmStyleAndSilhouette: true,
+          confirmStyleAndSilhouette: true, rasterConfirmed: true,
         });
         if (!checked.ok) throw new Error(checked.error);
       },
@@ -321,7 +321,7 @@ const { createHash } = require("node:crypto");
       .fill("Manually checked fixture, alpha and identity unchanged");
     await quality
       .getByLabel(
-        "Identität, Outfit, Konturen, Stil und Alpha-Kanten visuell geprüft",
+        "Identität, Outfit, Konturen, Raster, Stil und Alpha-Kanten visuell geprüft",
         { exact: true },
       )
       .check();
@@ -546,7 +546,7 @@ const { createHash } = require("node:crypto");
             sourceSha256: r.value.sha256,
             identityConfirmed: true,
             silhouetteConfirmed: true,
-            activationConfirmed: true,
+            activationConfirmed: true, rasterConfirmed: true,
             notes: "Synthetic silhouette and identity review",
           },
         });
@@ -570,7 +570,7 @@ const { createHash } = require("node:crypto");
           id: cut.value.project.qualityAssets.at(-1).id,
           status: "approved",
           notes: "Large synthetic silhouette and alpha manually reviewed",
-          confirmStyleAndSilhouette: true,
+          confirmStyleAndSilhouette: true, rasterConfirmed: true,
         });
         if (!checked.ok) throw new Error(checked.error);
       },

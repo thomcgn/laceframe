@@ -1,3 +1,4 @@
+import { hasOtherAssetReference } from "../shared/asset-retention";
 import {
   applyPixelEdit,
   validateSnap,
@@ -317,7 +318,7 @@ export class ProjectService {
       ...project.identityAssets,
       ...project.masterCandidates,
       ...project.qualityAssets,
-    ]) {
+    ].filter((a) => !("discardedAt" in a && a.discardedAt))) {
       const contents = await readLimited(
         await safePath(root, image.file),
         MAX_IMAGE_BYTES,
@@ -346,7 +347,7 @@ export class ProjectService {
         await this.decode(contents, info.width, info.height, info.format);
       }
     }
-    for (const q of project.qualityAssets)
+    for (const q of project.qualityAssets.filter((q) => !q.discardedAt))
       if (q.mask) {
         const b = await readLimited(
           await safePath(root, q.mask.file),
@@ -359,7 +360,7 @@ export class ProjectService {
           throw new Error("Falsche Freistellungsmaske.");
         maskWeights(mask);
       }
-    for (const q of project.qualityAssets)
+    for (const q of project.qualityAssets.filter((q) => !q.discardedAt))
       if (q.smartCutout) {
         for (const role of ["manual", "protected", "forced"] as const) {
           const m = q.smartCutout.masks[role],
@@ -385,7 +386,7 @@ export class ProjectService {
         )
           throw new Error("Freistellungs-Pixelprovenienz verändert.");
       }
-    for (const q of project.qualityAssets)
+    for (const q of project.qualityAssets.filter((q) => !q.discardedAt))
       if (q.relighting) {
         const image = decodePixels(
           await readLimited(await safePath(root, q.file), MAX_IMAGE_BYTES),
@@ -465,7 +466,7 @@ export class ProjectService {
           throw new Error("Masterpalette verändert.");
       }
     }
-    for (const q of project.qualityAssets)
+    for (const q of project.qualityAssets.filter((q) => !q.discardedAt))
       if (q.colorCorrection) {
         for (const mask of [
           q.colorCorrection.protectedMask,
@@ -478,7 +479,7 @@ export class ProjectService {
         if (hashBytes(pixels.data) !== q.colorCorrection.pixelSha256)
           throw new Error("Farb-Pixelprovenienz verändert.");
       }
-    for (const q of project.qualityAssets)
+    for (const q of project.qualityAssets.filter((q) => !q.discardedAt))
       if (q.pixelEdit) {
         const source = [
           ...project.masters,
@@ -1615,6 +1616,7 @@ export class ProjectService {
                   identityConfirmed: true,
                   silhouetteConfirmed: true,
                   activationConfirmed: true,
+                  rasterConfirmed: cmd.rasterConfirmed,
                   notes: cmd.notes,
                 }),
                 qualitySourceId: q.id,
@@ -2275,6 +2277,62 @@ export class ProjectService {
           );
         p.assets[index] = review(p.assets[index], cmd.status);
         break;
+      }
+    }
+    if (
+      (cmd.type === "review" ||
+        cmd.type === "reviewMasterCandidate" ||
+        cmd.type === "reviewQuality") &&
+      cmd.status === "rejected"
+    ) {
+      const candidate = [
+        ...p.assets,
+        ...p.masterCandidates,
+        ...p.qualityAssets,
+      ].find((a) => a.id === cmd.id);
+      if (candidate && !hasOtherAssetReference(p, candidate.id)) {
+        // Mark metadata before deleting bytes; history prevents reusing an immutable attempt.
+        candidate.discardedAt = new Date().toISOString();
+        const otherFiles = [
+          ...p.masters,
+          ...p.assets,
+          ...p.masterCandidates,
+          ...p.qualityAssets,
+          ...p.identityAssets,
+          ...p.styleAssets,
+        ];
+        if (
+          !otherFiles.some(
+            (a) =>
+              a.id !== candidate.id &&
+              a.file === candidate.file &&
+              !("discardedAt" in a && a.discardedAt),
+          )
+        )
+          removeFile = candidate;
+      }
+    }
+    if (!this.legacyBytes) {
+      const before = this.snapshot().project;
+      const firstRaster =
+        p.masters.some((m) => m.masterReview?.rasterConfirmed) &&
+        !before.masters.some((m) => m.masterReview?.rasterConfirmed);
+      const candidates = (project: Project) => [
+        ...project.assets,
+        ...project.masterCandidates,
+        ...project.qualityAssets,
+      ];
+      const firstDiscard =
+        candidates(p).some((a) => a.discardedAt) &&
+        !candidates(before).some((a) => a.discardedAt);
+      if (firstRaster || firstDiscard) {
+        this.legacyBytes = await readLimited(
+          await safePath(this.directory, "laceframe.json"),
+          MAX_MANIFEST_BYTES,
+        );
+        this.legacyBackupName = firstDiscard
+          ? "laceframe.v2.pre-candidate-cleanup.backup.json"
+          : "laceframe.v2.pre-raster-review.backup.json";
       }
     }
     p.updatedAt = new Date().toISOString();
@@ -2998,6 +3056,12 @@ export class ProjectService {
     return this.verifyQualityChain(chain.reverse());
   }
   async relightEligibility(id: string) {
+    const selected = this.qualitySource(id);
+    if ("discardedAt" in selected && selected.discardedAt)
+      return {
+        allowed: false,
+        reason: "Abgelehnter Kandidat wurde verworfen.",
+      };
     try {
       const source = await this.checkedRelightSource(id);
       return {
@@ -3136,6 +3200,10 @@ export class ProjectService {
     review: MasterApprovalInput,
     report: import("../shared/asset-quality").QualityReport,
   ) {
+    if (!review.rasterConfirmed)
+      throw new Error(
+        "Vor der Masterfreigabe Rasterqualität bei 1:1 und Vergrößerung prüfen und ausdrücklich bestätigen. Pixel Snap ist optional; unsichere Konturen manuell beurteilen.",
+      );
     return {
       ...review,
       checkedAt: new Date().toISOString(),

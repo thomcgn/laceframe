@@ -59,7 +59,7 @@ export function promptRequirements(
 export function libraryAssets(p: Project, characterId: string) {
   return [
     ...p.masters
-      .filter((a) => a.characterId === characterId)
+      .filter((a) => a.characterId === characterId && !("discardedAt" in a && a.discardedAt))
       .map((a) => ({
         ...a,
         kind: "master" as const,
@@ -67,7 +67,7 @@ export function libraryAssets(p: Project, characterId: string) {
         state: "approved" as const,
       })),
     ...p.masterCandidates
-      .filter((a) => a.characterId === characterId)
+      .filter((a) => a.characterId === characterId && !("discardedAt" in a && a.discardedAt))
       .map((a, i) => ({
         ...a,
         kind: "master-candidate" as const,
@@ -75,7 +75,7 @@ export function libraryAssets(p: Project, characterId: string) {
         state: a.status,
       })),
     ...p.assets
-      .filter((a) => a.characterId === characterId)
+      .filter((a) => a.characterId === characterId && !("discardedAt" in a && a.discardedAt))
       .map((a) => ({
         ...a,
         kind: "expression" as const,
@@ -83,7 +83,7 @@ export function libraryAssets(p: Project, characterId: string) {
         state: a.status,
       })),
     ...p.qualityAssets
-      .filter((a) => a.characterId === characterId)
+      .filter((a) => a.characterId === characterId && !("discardedAt" in a && a.discardedAt))
       .map((a, i) => ({
         ...a,
         kind: "quality" as const,

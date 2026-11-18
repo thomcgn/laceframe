@@ -229,7 +229,7 @@ const { createHash } = require("node:crypto");
       );
     await q
       .getByLabel(
-        "Identität, Outfit, Konturen, Stil und Alpha-Kanten visuell geprüft",
+        "Identität, Outfit, Konturen, Raster, Stil und Alpha-Kanten visuell geprüft",
         { exact: true },
       )
       .check();

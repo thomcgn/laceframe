@@ -299,6 +299,7 @@ describe("safe project pixel pipeline", () => {
       status: "approved",
       notes: "Original engine geometry reviewed",
       confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
     });
     expect(s.snapshot().project.assets.at(-1)!.qualitySourceId).toBe(q.id);
     await s.open(dir);
@@ -425,6 +426,7 @@ describe("safe project pixel pipeline", () => {
       status: "approved",
       notes: "Synthetic new master checked",
       confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
     });
     expect(s.snapshot().project.masters.at(-1)?.qualitySourceId).toBe(q.id);
     await s.open(dir);
@@ -525,6 +527,7 @@ describe("safe project pixel pipeline", () => {
       status: "approved",
       notes: "Synthetic checked",
       confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
     });
     expect(s.snapshot().project.assets[1]).toMatchObject({
       masterId: old.masterId,
@@ -547,6 +550,7 @@ describe("safe project pixel pipeline", () => {
       status: "approved",
       notes: "Pixel master reviewed",
       confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
     });
     expect(s.snapshot().project.masters[0]).toEqual(before);
     expect(s.snapshot().project.masters[1].version).toBe(2);

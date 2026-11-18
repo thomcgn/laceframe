@@ -1050,7 +1050,7 @@ const fs = require("node:fs/promises"),
       .fill("Synthetic protected coat, frames, alpha and edges reviewed.");
     await quality
       .getByLabel(
-        /Identität, Outfit, Konturen, Stil und Alpha-Kanten visuell geprüft/,
+        /Identität, Outfit, Konturen, Raster, Stil und Alpha-Kanten visuell geprüft/,
       )
       .check();
     page.once("dialog", (d) => d.accept());

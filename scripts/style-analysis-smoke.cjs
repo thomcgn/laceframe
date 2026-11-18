@@ -110,7 +110,7 @@ const { nav } = require("./smoke-ui.cjs");
             sourceSha256: s.value.sha256,
             identityConfirmed: true,
             silhouetteConfirmed: true,
-            activationConfirmed: true,
+            activationConfirmed: true, rasterConfirmed: true,
             notes: "Synthetic silhouette and identity review",
           },
         });

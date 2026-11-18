@@ -1,3 +1,4 @@
+import type { PixelReview } from "../../shared/pixel-review";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project, Snapshot } from "../../shared/domain";
 import type { ColorPixels } from "../../shared/color-consistency";
@@ -84,11 +85,14 @@ export function PixelEditEditor({
   const [result, setResult] = useState<{
     result: ColorPixels & { changed?: number; ambiguous?: number };
     sha256: string;
+    review: PixelReview;
   }>();
   const [busy, setBusy] = useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const [region, setRegion] = useState<"selection" | "protect">();
+  const [analysis, setAnalysis] = useState<{ grid?: number }>();
+  const [difference, setDifference] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const worker = useRef<Worker | undefined>(undefined),
     serial = useRef(0),
@@ -155,7 +159,8 @@ export function PixelEditEditor({
         setError(e.data.error);
         return;
       }
-      setResult(e.data);
+      if (e.data.analysis) setAnalysis(e.data.analysis);
+      else setResult(e.data);
     };
     w.onerror = () => {
       w.terminate();
@@ -166,15 +171,16 @@ export function PixelEditEditor({
     w.postMessage({ id: 0, source });
     return w;
   }
-  function run() {
+  function run(analyze = false) {
     if (!source || !draft) return;
     const w = worker.current ?? startWorker();
     setBusy(true);
     setError("");
     setResult(undefined);
-    dirty.current = true;
+    if (!analyze) dirty.current = true;
     w?.postMessage({
       id: ++serial.current,
+      analyze,
       edit: draft.edit,
       protectedWeights: draft.protectedWeights,
     });
@@ -304,7 +310,10 @@ export function PixelEditEditor({
                 {[
                   { pixels: source, label: "Original" },
                   {
-                    pixels: result?.result ?? source,
+                    pixels:
+                      difference && result?.review.difference
+                        ? result.review.difference
+                        : (result?.result ?? source),
                     label: "Pixel-Snap-Vorschau",
                   },
                 ].map((v) => (
@@ -340,6 +349,19 @@ export function PixelEditEditor({
                       Rastererkennung und Quantisierung in Rust/WASM. Keine
                       separate Rasterdiagnose oder Confidence-Ausgabe.
                     </p>
+                    <button disabled={busy || saving} onClick={() => run(true)}>
+                      Zusätzlichen Rasterhinweis messen
+                    </button>
+                    {analysis && (
+                      <p>
+                        Separate Laceframe-Diagnose:{" "}
+                        {analysis.grid
+                          ? `${analysis.grid} Pixel Rasterhinweis`
+                          : "Kein eindeutiger Rasterhinweis"}
+                        . Kein Qualitätsnachweis; Sprite Fusion erkennt sein
+                        Raster unabhängig während der Transformation.
+                      </p>
+                    )}
                     <label>
                       <input
                         type="checkbox"
@@ -587,6 +609,39 @@ export function PixelEditEditor({
                       Expressions bereit.
                     </p>
                   </>
+                )}
+                {result && (
+                  <section aria-label="Pixelprüfung">
+                    <p>
+                      Transparente Pixel: {result.review.before.transparent} →{" "}
+                      {result.review.after.transparent}; Teilalpha:{" "}
+                      {result.review.before.partial} →{" "}
+                      {result.review.after.partial}.
+                    </p>
+                    {result.review.sameDimensions ? (
+                      <>
+                        <p>
+                          {result.review.changedPixels} veränderte RGBA-Pixel ·{" "}
+                          {result.review.alphaChanged} geänderte Alpha-Werte bei
+                          gleichen Koordinaten.
+                        </p>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={difference}
+                            onChange={(e) => setDifference(e.target.checked)}
+                          />
+                          Differenzansicht
+                        </label>
+                      </>
+                    ) : (
+                      <p>
+                        Neue Geometrie: Eine pixelgenaue Änderungszahl und
+                        registrierte Differenz sind ohne bestätigte Zuordnung
+                        nicht definiert.
+                      </p>
+                    )}
+                  </section>
                 )}
                 <button
                   disabled={busy || saving}

@@ -376,7 +376,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     );
     await page
       .getByLabel(
-        "Identität, Outfit, Konturen, Stil und Alpha-Kanten visuell geprüft",
+        "Identität, Outfit, Konturen, Raster, Stil und Alpha-Kanten visuell geprüft",
         { exact: true },
       )
       .check();
@@ -452,7 +452,7 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     );
     await page
       .getByLabel(
-        "Identität, Outfit, Konturen, Stil und Alpha-Kanten visuell geprüft",
+        "Identität, Outfit, Konturen, Raster, Stil und Alpha-Kanten visuell geprüft",
         { exact: true },
       )
       .check();

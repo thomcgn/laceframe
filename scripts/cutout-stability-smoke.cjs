@@ -409,7 +409,7 @@ const { nav, selectMaskTool } = require("./smoke-ui.cjs");
       .fill("Synthetic cutout silhouette manually checked");
     await quality
       .getByLabel(
-        "Identität, Outfit, Konturen, Stil und Alpha-Kanten visuell geprüft",
+        "Identität, Outfit, Konturen, Raster, Stil und Alpha-Kanten visuell geprüft",
         { exact: true },
       )
       .check();

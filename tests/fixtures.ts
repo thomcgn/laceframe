@@ -52,6 +52,7 @@ export function masterReview(sha256: string) {
     identityConfirmed: true as const,
     silhouetteConfirmed: true as const,
     activationConfirmed: true as const,
+    rasterConfirmed: true as const,
     notes: "Synthetic manual identity and silhouette review",
   };
 }

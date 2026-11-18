@@ -348,6 +348,7 @@ describe("immutable cutout provenance, persistence and human review", () => {
       status: "approved",
       notes: "Synthetic edges and identity reviewed",
       confirmStyleAndSilhouette: true,
+      rasterConfirmed: true,
     });
     expect(saved.project.masters).toHaveLength(2);
     expect(saved.project.masters[1].version).toBe(2);

@@ -543,10 +543,12 @@ export function AssetQuality({
                         checked={confirmed}
                         onChange={(e) => setConfirmed(e.target.checked)}
                       />
-                      Identität, Outfit, Konturen, Stil und Alpha-Kanten visuell
-                      geprüft
+                      Identität, Outfit, Konturen, Raster, Stil und Alpha-Kanten
+                      visuell geprüft
                     </label>
                     <small>
+                      Raster und Cluster bei 1:1 und Vergrößerung prüfen; die
+                      manuelle Rasterentscheidung in der Notiz dokumentieren.
                       Notiz und Sichtprüfung erforderlich. Deckende, leere oder
                       verdächtige Ergebnisse können nicht produktiv freigegeben
                       werden. Eine Masterfreigabe erzeugt eine neue Version;
@@ -568,6 +570,7 @@ export function AssetQuality({
                             status: "approved",
                             notes,
                             confirmStyleAndSilhouette: true,
+                            rasterConfirmed: true,
                           }).catch(() => {});
                         }}
                       >
@@ -582,6 +585,7 @@ export function AssetQuality({
                             status: "rejected",
                             notes,
                             confirmStyleAndSilhouette: true,
+                            rasterConfirmed: true,
                           }).catch(() => {});
                         }}
                       >

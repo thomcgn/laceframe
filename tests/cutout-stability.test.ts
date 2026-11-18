@@ -111,6 +111,7 @@ const review = (id: string, status: "approved" | "rejected" = "approved") =>
     status,
     notes: "Synthetic silhouette manually reviewed",
     confirmStyleAndSilhouette: true,
+    rasterConfirmed: true,
   });
 async function relight(id: string) {
   const p = await s.relightSource(id);
@@ -165,7 +166,13 @@ describe("trusted cutout-before-relighting guard", () => {
     "rejects %s cutout including direct command",
     async (status) => {
       const q = await cutout(false);
-      if (status === "rejected") await review(q.id, "rejected");
+      const originalPixelHash = hashBytes(
+        decodePixels(await fs.readFile(path.join(dir, q.file))).data,
+      );
+      if (status === "rejected") {
+        await review(q.id, "rejected");
+        await expect(fs.readFile(path.join(dir, q.file))).rejects.toThrow();
+      }
       expect((await s.relightEligibility(q.id)).allowed).toBe(false);
       await expect(
         s.command({
@@ -174,9 +181,7 @@ describe("trusted cutout-before-relighting guard", () => {
           sourceSha256: q.sha256,
           light: DEFAULT_LIGHT,
           regions: [],
-          previewPixelSha256: hashBytes(
-            decodePixels(await fs.readFile(path.join(dir, q.file))).data,
-          ),
+          previewPixelSha256: originalPixelHash,
         }),
       ).rejects.toThrow(/freigegeben/);
     },
