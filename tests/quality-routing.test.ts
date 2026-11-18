@@ -306,10 +306,14 @@ describe("explicit development and smoke profiles", () => {
   });
 });
 
-describe("single-job PR CI contract", () => {
-  it("keeps quality-gate and manual FULL, with desktop setup guarded by dispatch", async () => {
+describe("manual development CI contract", () => {
+  it("allows only explicit dev/full dispatch and keeps desktop setup exclusive to full", async () => {
     const workflow = await fs.readFile(".github/workflows/quality.yml", "utf8");
-    expect(workflow).toContain("  pull_request:\n    branches: [main]");
+    expect(workflow).not.toMatch(
+      /^ {2}(push|pull_request|pull_request_target|merge_group):/m,
+    );
+    expect(workflow).toContain("        default: full");
+    expect(workflow).toContain("          - dev\n          - full");
     expect(workflow).toContain("  workflow_dispatch:");
     expect(workflow).not.toMatch(/^ {2}push:/m);
     expect([...workflow.matchAll(/^ {2}[a-z-]+:\n {4}name:/gm)]).toHaveLength(
@@ -320,13 +324,13 @@ describe("single-job PR CI contract", () => {
       /classifier|REQUIRED_RISK|needs:|continue-on-error/,
     );
     expect(workflow).toContain(
-      "if: github.event_name == 'pull_request'\n        run: npm run check:dev",
+      "if: inputs.profile == 'dev'\n        run: npm run check:dev",
     );
     expect(workflow).toContain(
-      "name: Desktop dependencies (manual FULL only)\n        if: github.event_name == 'workflow_dispatch'",
+      "name: Desktop dependencies (manual FULL only)\n        if: inputs.profile == 'full'",
     );
     expect(workflow).toContain(
-      "name: Manual FULL regression\n        if: github.event_name == 'workflow_dispatch'",
+      "name: Manual FULL regression\n        if: inputs.profile == 'full'",
     );
     expect(workflow).toContain(
       "report.status !== 'passed' || report.profile !== profile",

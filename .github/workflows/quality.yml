@@ -1,15 +1,22 @@
 name: Quality
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Development checks or complete pre-alpha regression'
+        type: choice
+        required: true
+        default: full
+        options:
+          - dev
+          - full
 
 permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.event.pull_request.number || github.ref }}
+  group: quality-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,9 +26,9 @@ jobs:
     timeout-minutes: 45
     env:
       # Unit tests need neither Chromium browsers nor an Electron executable.
-      ELECTRON_SKIP_BINARY_DOWNLOAD: ${{ github.event_name == 'pull_request' && '1' || '' }}
+      ELECTRON_SKIP_BINARY_DOWNLOAD: ${{ inputs.profile == 'dev' && '1' || '' }}
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      QUALITY_DIFF_BASE: ${{ github.event.pull_request.base.sha || 'HEAD' }}
+      QUALITY_DIFF_BASE: HEAD
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -33,7 +40,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Desktop dependencies (manual FULL only)
-        if: github.event_name == 'workflow_dispatch'
+        if: inputs.profile == 'full'
         run: |
           set -euo pipefail
           npx --no-install playwright install-deps chromium
@@ -41,11 +48,11 @@ jobs:
           if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      - name: PR development checks
-        if: github.event_name == 'pull_request'
+      - name: Manual development checks
+        if: inputs.profile == 'dev'
         run: npm run check:dev
       - name: Manual FULL regression
-        if: github.event_name == 'workflow_dispatch'
+        if: inputs.profile == 'full'
         run: |
           set -euo pipefail
           xvfb-run -a -s '-screen 0 1920x1080x24 -nolisten tcp' dbus-run-session -- bash -euo pipefail -c '
@@ -56,7 +63,7 @@ jobs:
           '
       - name: Verify completed profile evidence
         env:
-          QUALITY_PROFILE: ${{ github.event_name == 'workflow_dispatch' && 'full' || 'dev' }}
+          QUALITY_PROFILE: ${{ inputs.profile }}
         run: |
           node <<'NODE'
           const fs = require('node:fs');
