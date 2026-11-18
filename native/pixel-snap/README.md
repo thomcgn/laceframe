@@ -1,4 +1,6 @@
-# Local raster library
+# Historical raster library
+
+This module is retained for historical `spritefusion-native-rgba-v1` recipe replay and compatibility tests. New Pixel Snap UI operations use the complete original engine in [`../spritefusion`](../spritefusion/README.md). The descriptions below explain the legacy behavior, not the current transformation UI.
 
 Source: [Hugo-Dz/spritefusion-pixel-snapper](https://github.com/Hugo-Dz/spritefusion-pixel-snapper/tree/02f9315d73d3219274d17767b36d9a231a6b1f4b), commit `02f9315d73d3219274d17767b36d9a231a6b1f4b`. MIT, Copyright (c) 2025 Hugo Duprez. Full permission/warranty notice in LICENSE; distributed Electron resources also contain `SpriteFusion-Pixel-Snapper-MIT.txt`.
 
@@ -10,7 +12,7 @@ This crate extracts/refactors the actual Rust code, rather than replacing it wit
 
 - `grid.rs`: upstream grayscale gradient profiles, peak-spacing estimate, elastic walker, cross-axis stabilization and cut sanitation; a borrowed RGBA view replaces the image codec. Plateau detection and comparable-peak preference avoid a one-pixel boundary shift and overreaction to isolated detail when quantization is absent. No quantized analysis image.
 - `lib.rs::clean`: adapts upstream `resample`'s histogram/deterministic dominant-color selection to the **existing native coordinates**. There is no smaller intermediate image, resize, upscaling, crop or palette mapping. Only close minority RGBs in strongly dominated cells with neighboring support may change. All alpha, partial-alpha RGB, zero-alpha RGB and protected pixels stay exact. Contrasting details and ambiguous cells stay unchanged. This conservative restriction is intentionally less aggressive than upstream whole-cell flattening.
-- `palette.rs`: upstream nearest-palette-color function and independent explicit palette mapping. Rust and WASM APIs expose this separately; `clean`/`clean_rgba` have no palette argument or quantization call. Laceframe's Pixel Snap UI **never calls it**. Automatic K-means reduction and upstream CLI/PNG/JPEG codecs are not bundled. Existing regional Lab color correction remains a separate step.
+- `palette.rs`: upstream nearest-palette-color function and independent explicit palette mapping. Rust and WASM APIs expose this separately; `clean`/`clean_rgba` have no palette argument or quantization call. The historical Pixel Snap path **never calls it**. Automatic K-means reduction and upstream CLI/PNG/JPEG codecs are not bundled. Existing regional Lab color correction remains a separate step.
 - `analyze` returns uncertainty if both axes do not support a similar 2–32 pixel spacing. Upstream's fallback-to-64-segments is not reported as a measured grid.
 
 Pure Rust, no crate dependencies, no randomization, file access, network, model or host imports. Raw owned-buffer WASM ABI is wrapped internally in `pixel-snap-runtime.ts`; no pointer API enters preload. Exported memory is capped at 128 MiB; inputs at 4,194,304 pixels. Main and worker instantiate the same committed module, and Main verifies preview pixel SHA and recomputes before storing.

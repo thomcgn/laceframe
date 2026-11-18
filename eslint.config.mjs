@@ -1,7 +1,7 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 export default tseslint.config(
-  { ignores: ["node_modules/**", "out/**", ".vite/**", "artifacts/**"] },
+  { ignores: ["node_modules/**", "out/**", ".vite/**", "artifacts/**", "src/shared/spritefusion-generated/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

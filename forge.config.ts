@@ -6,7 +6,10 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     executableName: "laceframe",
-    extraResource: ["licenses/SpriteFusion-Pixel-Snapper-MIT.txt"],
+    extraResource: [
+      "licenses/SpriteFusion-Pixel-Snapper-MIT.txt",
+      "licenses/SpriteFusion-WASM-Dependencies.txt",
+    ],
   },
   makers: [new MakerZIP({}, ["linux", "darwin", "win32"])],
   plugins: [

@@ -354,7 +354,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       q.pixelEdit
         ? !["pixel-snap", "color-adjustment"].includes(q.operation) ||
           (q.operation === "pixel-snap") !==
-            (q.pixelEdit.edit.kind === "snap") ||
+            ["snap", "spritefusion"].includes(q.pixelEdit.edit.kind) ||
           Boolean(
             q.mask ||
             q.profile ||
@@ -362,8 +362,8 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
             q.colorCorrection ||
             q.smartCutout,
           ) ||
-          source?.width !== q.width ||
-          source?.height !== q.height ||
+          (q.pixelEdit.edit.kind !== "spritefusion" &&
+            (source?.width !== q.width || source?.height !== q.height)) ||
           q.width * q.height > MAX_SNAP_PIXELS ||
           [
             q.pixelEdit.protectedMask,

@@ -1,6 +1,7 @@
 import {
   applyPixelEdit,
   validateSnap,
+  SPRITEFUSION_VERSION,
   type PixelEdit,
 } from "../shared/pixel-snap";
 import {
@@ -490,12 +491,12 @@ export class ProjectService {
         );
         const protection = await readColorMask(
           q.pixelEdit.protectedMask,
-          q.width,
-          q.height,
+          source.width,
+          source.height,
         );
         const e = q.pixelEdit.edit;
         const edit: PixelEdit =
-          e.kind === "snap"
+          e.kind !== "color"
             ? e
             : {
                 kind: "color",
@@ -507,6 +508,8 @@ export class ProjectService {
           await readLimited(await safePath(root, q.file), MAX_IMAGE_BYTES),
         );
         if (
+          expected.width !== q.width ||
+          expected.height !== q.height ||
           hashBytes(actual.data) !== q.pixelEdit.pixelSha256 ||
           !Buffer.from(expected.data).equals(actual.data)
         )
@@ -1190,6 +1193,19 @@ export class ProjectService {
         );
         if (hashBytes(output.data) !== cmd.previewPixelSha256)
           throw new Error("Pixelvorschau veraltet. Neu berechnen.");
+        if (
+          cmd.edit.kind === "spritefusion" &&
+          !p.qualityAssets.some(
+            (q) => q.pixelEdit?.algorithm === SPRITEFUSION_VERSION,
+          ) &&
+          !this.legacyBytes
+        ) {
+          this.legacyBytes = await readLimited(
+            await safePath(this.directory, "laceframe.json"),
+            MAX_MANIFEST_BYTES,
+          );
+          this.legacyBackupName = "laceframe.v2.pre-spritefusion.backup.json";
+        }
         if (!p.qualityAssets.some((q) => q.pixelEdit) && !this.legacyBytes) {
           this.legacyBytes = await readLimited(
             await safePath(this.directory, "laceframe.json"),
@@ -1203,7 +1219,7 @@ export class ProjectService {
           cmd.protectedWeights,
         );
         const edit =
-          cmd.edit.kind === "snap"
+          cmd.edit.kind !== "color"
             ? cmd.edit
             : {
                 kind: "color" as const,
@@ -1214,9 +1230,12 @@ export class ProjectService {
                   cmd.edit.weights,
                 ),
               };
-        const image = await this.stage(encodePixels(output), "pixel-edit.png");
+        const image = await this.stage(
+          output.png ?? encodePixels(output),
+          "pixel-edit.png",
+        );
         const operation =
-          cmd.edit.kind === "snap"
+          cmd.edit.kind !== "color"
             ? ("pixel-snap" as const)
             : ("color-adjustment" as const);
         try {
@@ -1232,7 +1251,10 @@ export class ProjectService {
             createdAt: new Date().toISOString(),
             status: "candidate",
             pixelEdit: {
-              algorithm: "spritefusion-native-rgba-v1",
+              algorithm:
+                cmd.edit.kind === "spritefusion"
+                  ? SPRITEFUSION_VERSION
+                  : "spritefusion-native-rgba-v1",
               revision:
                 p.qualityAssets.filter(
                   (q) => q.sourceId === source.id && q.operation === operation,
@@ -2730,6 +2752,7 @@ export class ProjectService {
   private async pixelRecipe(id: string) {
     const q = this.snapshot().project.qualityAssets.find((q) => q.id === id);
     if (!q?.pixelEdit) throw new Error("Pixelrezept fehlt.");
+    const source = this.qualitySource(q.sourceId);
     const load = async (m: { file: string; sha256: string }) => {
       const bytes = await readLimited(
         await safePath(this.directory, m.file),
@@ -2738,14 +2761,14 @@ export class ProjectService {
       if (hashBytes(bytes) !== m.sha256)
         throw new Error("Pixelmaske verändert.");
       const p = decodePixels(bytes);
-      if (p.width !== q.width || p.height !== q.height)
+      if (p.width !== source.width || p.height !== source.height)
         throw new Error("Pixelmaske hat falsche Maße.");
       return maskWeights(p);
     };
     const protectedWeights = await load(q.pixelEdit.protectedMask),
       e = q.pixelEdit.edit;
     const edit: PixelEdit =
-      e.kind === "snap"
+      e.kind !== "color"
         ? e
         : {
             kind: "color",

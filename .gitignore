@@ -28,3 +28,5 @@ artifacts/
 
 **/assets/color-masks/
 **/laceframe.v2.pre-color-consistency.backup.json
+
+native/spritefusion/target/

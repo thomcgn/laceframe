@@ -1,3 +1,4 @@
+import { spriteFusionPixels } from "./spritefusion-runtime";
 import { rasterGrid, rasterClean } from "./pixel-snap-runtime";
 import { z } from "zod";
 import {
@@ -18,6 +19,25 @@ export const snapSettingsSchema = z
   })
   .strict();
 export type SnapSettings = z.infer<typeof snapSettingsSchema>;
+export const SPRITEFUSION_VERSION = "spritefusion-original-wasm-v1" as const;
+export const spriteFusionSettingsSchema = z
+  .object({
+    colors: z.number().int().min(1).max(256),
+    pixelSize: z.number().min(1).max(8192).optional(),
+    palette: z
+      .array(z.string().regex(/^#[a-fA-F0-9]{6}$/))
+      .min(1)
+      .max(256)
+      .optional(),
+  })
+  .strict();
+export type SpriteFusionSettings = z.infer<typeof spriteFusionSettingsSchema>;
+const fusionEdit = z
+  .object({
+    kind: z.literal("spritefusion"),
+    settings: spriteFusionSettingsSchema,
+  })
+  .strict();
 const mask = z.object({ file: z.string(), sha256: sha }).strict();
 export const localColorSchema = colorRuleSchema.omit({
   paletteRegionId: true,
@@ -31,6 +51,7 @@ export const pixelEditInputSchema = z
     previewPixelSha256: sha,
     protectedWeights: weights,
     edit: z.discriminatedUnion("kind", [
+      fusionEdit,
       z
         .object({ kind: z.literal("snap"), settings: snapSettingsSchema })
         .strict(),
@@ -42,11 +63,12 @@ export const pixelEditInputSchema = z
   .strict();
 export const pixelEditRecordSchema = z
   .object({
-    algorithm: z.literal(SNAP_VERSION),
+    algorithm: z.enum([SNAP_VERSION, SPRITEFUSION_VERSION]),
     revision: z.number().int().positive(),
     pixelSha256: sha,
     protectedMask: mask,
     edit: z.discriminatedUnion("kind", [
+      fusionEdit,
       z
         .object({ kind: z.literal("snap"), settings: snapSettingsSchema })
         .strict(),
@@ -55,7 +77,13 @@ export const pixelEditRecordSchema = z
         .strict(),
     ]),
   })
-  .strict();
+  .strict()
+  .refine(
+    (r) =>
+      (r.algorithm === SPRITEFUSION_VERSION) ===
+      (r.edit.kind === "spritefusion"),
+    "Pixel algorithm/kind mismatch",
+  );
 export type PixelEdit = z.infer<typeof pixelEditInputSchema>["edit"];
 export type SnapAnalysis = {
   grid?: number;
@@ -150,8 +178,18 @@ export function applyPixelEdit(
   p: ColorPixels,
   edit: PixelEdit,
   protectedWeights: Uint8Array,
-): ColorPixels {
+): ColorPixels & { png?: Uint8Array } {
   validateSnap(p, protectedWeights);
+  if (edit.kind === "spritefusion") {
+    if (protectedWeights.some(Boolean))
+      throw new Error(
+        "Sprite Fusion verändert die Rastergeometrie. Mit Schutzmasken ist diese Transformation gesperrt; keine ungeprüfte Pixelkopie.",
+      );
+    return spriteFusionPixels(
+      p,
+      spriteFusionSettingsSchema.parse(edit.settings),
+    );
+  }
   if (edit.kind === "snap")
     return snapPixels(p, edit.settings, protectedWeights);
   return correctColorRegions(p, {

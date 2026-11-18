@@ -260,6 +260,69 @@ async function save(
   });
 }
 describe("safe project pixel pipeline", () => {
+  it("stores exact original-engine PNG at its new dimensions, preserves legacy recipes, reopens and approves explicitly", async () => {
+    const source = await s.pixelEditSource(sourceId),
+      original = await imageBytes(sourceId);
+    const edit: PixelEdit = {
+      kind: "spritefusion",
+      settings: { colors: 8, pixelSize: 4 },
+    };
+    const out = applyPixelEdit(source, edit, source.protectedWeights);
+    expect(out.width).not.toBe(source.width);
+    const previousManifest = await fs.readFile(
+      path.join(dir, "laceframe.json"),
+    );
+    await save(sourceId, edit);
+    expect(
+      await fs.readFile(
+        path.join(dir, "laceframe.v2.pre-spritefusion.backup.json"),
+      ),
+    ).toEqual(previousManifest);
+    const q = s.snapshot().project.qualityAssets.at(-1)!;
+    expect(q.pixelEdit!.algorithm).toBe("spritefusion-original-wasm-v1");
+    expect(q.width).toBe(out.width);
+    expect(q.height).toBe(out.height);
+    expect(await imageBytes(q.id)).toEqual(Buffer.from(out.png!));
+    expect(await imageBytes(sourceId)).toEqual(original);
+    const unchanged = await fs.readFile(path.join(dir, "laceframe.json"));
+    await s.open(dir);
+    expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(
+      unchanged,
+    );
+    // Source-sized zero masks must not be confused with the smaller output canvas.
+    expect((await s.pixelEditSource(q.id)).protectedWeights.length).toBe(
+      q.width * q.height,
+    );
+    await s.command({
+      type: "reviewQuality",
+      id: q.id,
+      status: "approved",
+      notes: "Original engine geometry reviewed",
+      confirmStyleAndSilhouette: true,
+    });
+    expect(s.snapshot().project.assets.at(-1)!.qualitySourceId).toBe(q.id);
+    await s.open(dir);
+    expect(await imageBytes(sourceId)).toEqual(original);
+  });
+  it("rejects original-engine jobs with explicit/inherited protection atomically and binds recipe versions", async () => {
+    const p = await s.pixelEditSource(sourceId),
+      mask = new Uint8Array(p.width * p.height);
+    mask[5 * p.width + 5] = 255;
+    await save(sourceId, snap, mask); // historical in-place algorithm remains reproducible
+    const q = s.snapshot().project.qualityAssets.at(-1)!;
+    const unchanged = await fs.readFile(path.join(dir, "laceframe.json"));
+    await expect(
+      save(q.id, { kind: "spritefusion", settings: { colors: 8 } }),
+    ).rejects.toThrow("Schutzmasken");
+    expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(
+      unchanged,
+    );
+    const bad = structuredClone(s.snapshot().project);
+    bad.qualityAssets.at(-1)!.pixelEdit!.algorithm =
+      "spritefusion-original-wasm-v1";
+    expect(projectSchema.safeParse(bad).success).toBe(false);
+  });
+
   it("also inherits existing Palette Lock color protection without reinterpreting foreground masks", async () => {
     const m = s.snapshot().project.masters[0],
       mp = await s.analysisSource(m.id),

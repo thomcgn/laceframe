@@ -1,0 +1,27 @@
+{
+  "synthetic-grid-auto": {
+    "png": "6bc742cb2c4e3dedb4dc0654a80a69c1f6f447d636d727170e5a0b6da3db2d74",
+    "width": 37,
+    "height": 49
+  },
+  "shifted-clusters": {
+    "png": "3b159d98ce645787b2c50374ecfad9ab4a8c75467c94b8c2b9b464b46304b8cc",
+    "width": 13,
+    "height": 17
+  },
+  "transparent-sprite": {
+    "png": "22ef56b6ce794f9746dd93de0a4dbbe09694eecc474d10925c1053f976de9e02",
+    "width": 13,
+    "height": 17
+  },
+  "custom-palette": {
+    "png": "9c00309e495631b0490835e09eb492954952f33e7fc391073bd0b8c645a3cd81",
+    "width": 13,
+    "height": 17
+  },
+  "clean-pixel-art": {
+    "png": "3b159d98ce645787b2c50374ecfad9ab4a8c75467c94b8c2b9b464b46304b8cc",
+    "width": 13,
+    "height": 17
+  }
+}
