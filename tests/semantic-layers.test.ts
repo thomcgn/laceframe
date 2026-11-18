@@ -191,6 +191,45 @@ it("maps Expression definitions but starts independent masks even with different
     master.layers[0].mask.sha256,
   );
 });
+it("rejects a historical Master disguised as an Expression of another Master", async () => {
+  await save([layer()]);
+  const weights = new Uint8Array(192).fill(255);
+  weights[21] = 0;
+  await s.command({
+    type: "createCutout",
+    sourceId: masterId,
+    name: "Reviewed next Master",
+    weights,
+  });
+  await s.command({
+    type: "reviewQuality",
+    id: s.snapshot().project.qualityAssets[0].id,
+    status: "approved",
+    notes: "Synthetic silhouette and identity reviewed",
+    confirmStyleAndSilhouette: true,
+    rasterConfirmed: true,
+  });
+  const before = s.snapshot().project;
+  const p = structuredClone(before);
+  const next = p.masters[1];
+  const template = {
+    ...structuredClone(p.semanticLayerSets[0]),
+    id: randomUUID(),
+    masterId: next.id,
+    masterSha256: next.sha256,
+    sourceId: next.id,
+    sourceSha256: next.sha256,
+  };
+  p.semanticLayerSets.push(template);
+  expect(projectSchema.safeParse(p).success).toBe(true);
+  p.semanticLayerSets[0].masterId = next.id;
+  p.semanticLayerSets[0].masterSha256 = next.sha256;
+  p.semanticLayerSets[0].templateSetId = template.id;
+  expect(projectSchema.safeParse(p).success).toBe(false);
+  await fs.writeFile(path.join(dir, "laceframe.json"), JSON.stringify(p));
+  await expect(s.open(dir)).rejects.toThrow();
+  expect(s.snapshot().project).toEqual(before);
+});
 it("rejects foreign master/template roles and source SHA", async () => {
   const hair = layer();
   await save([hair]);

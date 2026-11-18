@@ -338,6 +338,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       source.width !== set.width ||
       source.height !== set.height ||
       ("masterId" in source && source.masterId !== master.id) ||
+      (!("masterId" in source) && source.id !== master.id) ||
       new Set(revisions.map((r) => r.revision)).size !== revisions.length ||
       set.revision > revisions.length ||
       new Set(set.layers.map((l) => l.id)).size !== set.layers.length ||
