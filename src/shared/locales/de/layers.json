@@ -13,7 +13,7 @@
   "custom": "Eigene Region",
   "open": "Character Layers bearbeiten",
   "title": "Character Layers",
-  "masterOnly": "Für freigegebene Masterversionen verfügbar.",
+  "masterOnly": "Für Master und Expressions mit gespeicherten Master-Layern verfügbar.",
   "discard": "Ungespeicherte Layeränderungen verwerfen?",
   "workerError": "Regionenauswahl fehlgeschlagen.",
   "close": "Schließen / verwerfen",
@@ -56,5 +56,11 @@
   "clipImport": "Die Farbregion enthält transparente Pixel. Diese nur für den neuen Layer ausschließen? Die Originalmaske bleibt unverändert.",
   "importRegion": "Vorhandene Masterregion",
   "importButton": "Region ausdrücklich übernehmen",
-  "importHint": "Neue Layer-Maske mit Herkunft. Überlappungen anschließend prüfen."
+  "importHint": "Neue Layer-Maske mit Herkunft. Überlappungen anschließend prüfen.",
+  "needsTemplate": "Zuerst Character Layers für den gebundenen Master speichern.",
+  "template": "Master-Layerrevision als Vorlage",
+  "templateHint": "Nur Namen und Rollen werden übernommen. Expression-Masken bleiben eigenständig; keine automatische Pixelregistrierung.",
+  "changeTemplate": "Andere Master-Layerdefinitionen verwenden und die aktuellen Expression-Masken im Entwurf leeren? Gespeicherte Revisionen bleiben erhalten.",
+  "newDraft": "Neuer Layerentwurf",
+  "mapped": "Master-Layer: {{id}}"
 }

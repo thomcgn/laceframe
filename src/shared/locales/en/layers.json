@@ -13,7 +13,7 @@
   "custom": "Custom region",
   "open": "Edit Character Layers",
   "title": "Character Layers",
-  "masterOnly": "Available for approved master versions.",
+  "masterOnly": "Available for masters and expressions with saved master layers.",
   "discard": "Discard unsaved layer changes?",
   "workerError": "Region selection failed.",
   "close": "Close / discard",
@@ -56,5 +56,11 @@
   "clipImport": "The color region includes transparent pixels. Exclude these only for the new layer? The original mask stays unchanged.",
   "importRegion": "Existing master region",
   "importButton": "Explicitly import region",
-  "importHint": "New layer mask with provenance. Review overlaps afterwards."
+  "importHint": "New layer mask with provenance. Review overlaps afterwards.",
+  "needsTemplate": "First save Character Layers for the bound master.",
+  "template": "Master layer revision template",
+  "templateHint": "Only names and roles are reused. Expression masks are independent; no automatic pixel registration.",
+  "changeTemplate": "Use different master layer definitions and clear the draft expression masks? Saved revisions remain available.",
+  "newDraft": "New layer draft",
+  "mapped": "Master layer: {{id}}"
 }

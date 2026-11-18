@@ -370,7 +370,19 @@ export function AssetQuality({
           </button>
         )}
         <button
-          disabled={busy || !project.masters.some((m) => m.id === active.id)}
+          disabled={
+            busy ||
+            !(
+              project.masters.some((m) => m.id === active.id) ||
+              project.assets.some(
+                (a) =>
+                  a.id === active.id &&
+                  project.semanticLayerSets.some(
+                    (set) => set.sourceId === a.masterId,
+                  ),
+              )
+            )
+          }
           title={tr("layers.masterOnly")}
           onClick={() => setSemanticEditor(active.id)}
         >

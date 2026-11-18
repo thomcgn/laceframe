@@ -154,3 +154,26 @@ export function layerFromColorRegion(
     },
   };
 }
+/** Reuse meaning/identity only; Expression coordinates are never inferred from Master masks. */
+export function expressionLayerDraft(
+  template: CharacterLayerSet,
+  width: number,
+  height: number,
+  newId: () => string,
+): LayerDraft[] {
+  if (
+    width * height > MAX_LAYER_PIXELS ||
+    width * height * template.layers.length > 64 * 1024 * 1024
+  )
+    throw new Error(tr("layers.invalidMask"));
+  return template.layers.map((layer) => ({
+    id: newId(),
+    masterLayerId: layer.id,
+    name: layer.name,
+    role: layer.role,
+    visible: true,
+    locked: false,
+    order: layer.order,
+    weights: new Uint8Array(width * height),
+  }));
+}

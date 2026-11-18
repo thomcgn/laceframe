@@ -351,3 +351,63 @@ it("rechecks imported region hashes before saving instead of trusting renderer p
   await expect(save([imported])).rejects.toThrow();
   expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
 });
+it("creates empty Expression masks from exact Master definitions and keeps historical template bindings", async () => {
+  const { expressionLayerDraft } = await import(
+      "../src/shared/semantic-layers"
+    ),
+    hair = layer();
+  await save([hair]);
+  const template = s.snapshot().project.semanticLayerSets[0],
+    draft = expressionLayerDraft(template, 16, 12, randomUUID);
+  expect(draft[0].id).not.toBe(hair.id);
+  expect(draft[0].masterLayerId).toBe(hair.id);
+  expect(draft[0].name).toBe(hair.name);
+  expect(draft[0].weights.some(Boolean)).toBe(false);
+  draft[0].weights[21] = 255;
+  await save(draft, expressionId, undefined, template.id);
+  const expr = s.snapshot().project.semanticLayerSets[1];
+  const next = {
+    ...hair,
+    name: "New definition",
+    weights: new Uint8Array(hair.weights),
+  };
+  next.weights[22] = 255;
+  await save([next], masterId, template.id);
+  await s.open(dir);
+  const restored = await s.semanticLayers(expr.id);
+  expect(restored.set.templateSetId).toBe(template.id);
+  expect(restored.layers[0].weights[20]).toBe(0);
+  expect(restored.layers[0].weights[21]).toBe(255);
+  expect((await s.semanticLayers(template.id)).layers[0].weights[20]).toBe(255);
+  await save(restored.layers, expressionId, expr.id, template.id);
+  expect(s.snapshot().project.semanticLayerSets.at(-1)!.templateSetId).toBe(
+    template.id,
+  );
+});
+it("rejects Expression mapping to a different character's layer template", async () => {
+  const { expressionLayerDraft } = await import(
+    "../src/shared/semantic-layers"
+  );
+  await s.command({ type: "addCharacter", name: "Other identity" });
+  const pixels = image();
+  pixels.data[80] = 99;
+  const staged = await s.stage(encodePixels(pixels), "other.png");
+  await seedHistoricalMaster(
+    s,
+    staged,
+    s.snapshot().project.selectedCharacterId,
+  );
+  const other = s.snapshot().project.masters.at(-1)!;
+  await save([layer()], other.id);
+  const template = s.snapshot().project.semanticLayerSets.at(-1)!;
+  const before = await fs.readFile(path.join(dir, "laceframe.json"));
+  await expect(
+    save(
+      expressionLayerDraft(template, 16, 12, randomUUID),
+      expressionId,
+      undefined,
+      template.id,
+    ),
+  ).rejects.toThrow();
+  expect(await fs.readFile(path.join(dir, "laceframe.json"))).toEqual(before);
+});

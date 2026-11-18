@@ -7,6 +7,7 @@ import {
   validateLayerMasks,
   MAX_LAYERS,
   layerFromColorRegion,
+  expressionLayerDraft,
 } from "../../shared/semantic-layers";
 import {
   layerHistory,
@@ -65,10 +66,19 @@ export function SemanticLayerEditor({
   onSaved: (s: Snapshot) => void;
   onClose: () => void;
 }) {
+  const expression = project.assets.find((a) => a.id === sourceId);
+  const templates = expression
+    ? project.semanticLayerSets.filter(
+        (s) => s.sourceId === expression.masterId,
+      )
+    : [];
   const revisions = project.semanticLayerSets.filter(
       (s) => s.sourceId === sourceId,
     ),
     latest = revisions.at(-1);
+  const [templateId, setTemplateId] = useState(
+    expression ? (latest?.templateSetId ?? templates.at(-1)?.id ?? "") : "",
+  );
   const [importRegion, setImportRegion] = useState("");
   const paletteRegions = project.masterPalettes
     .filter((p) => p.masterId === sourceId)
@@ -196,6 +206,16 @@ export function SemanticLayerEditor({
           if (!saved.ok) throw new Error(saved.error);
           layers = saved.value.layers;
         }
+        if (expression && !latest) {
+          const template = templates.find((t) => t.id === templateId);
+          if (!template) throw new Error(tr("layers.needsTemplate"));
+          layers = expressionLayerDraft(
+            template,
+            r.value.width,
+            r.value.height,
+            () => crypto.randomUUID(),
+          );
+        }
         if (live) {
           original.current = new ImageData(r.value.width, r.value.height);
           setSource(r.value);
@@ -309,12 +329,38 @@ export function SemanticLayerEditor({
       setHistory(layerHistory(r.value.layers));
       setActive(r.value.layers[0]?.id ?? "");
       setRevision(id);
+      if (expression) setTemplateId(r.value.set.templateSetId!);
       dirty.current = id !== latest?.id;
       setError("");
     } catch (e) {
       setError(String(e));
     } finally {
       setBusy(false);
+    }
+  }
+  function changeTemplate(id: string) {
+    const template = templates.find((t) => t.id === id);
+    if (!source || !template) return;
+    if (
+      (dirty.current || latest) &&
+      !window.confirm(tr("layers.changeTemplate"))
+    )
+      return;
+    try {
+      const layers = expressionLayerDraft(
+        template,
+        source.width,
+        source.height,
+        () => crypto.randomUUID(),
+      );
+      setHistory(layerHistory(layers));
+      setActive(layers[0]?.id ?? "");
+      setTemplateId(id);
+      setRevision("");
+      dirty.current = true;
+      setError("");
+    } catch (error) {
+      setError(String(error));
     }
   }
   async function importPaletteRegion() {
@@ -359,6 +405,7 @@ export function SemanticLayerEditor({
         sourceId,
         sourceSha256: source.sha256,
         baseSetId: latest?.id,
+        templateSetId: expression ? templateId : undefined,
         layers: rows,
       });
       if (!r.ok) throw new Error(r.error);
@@ -425,6 +472,26 @@ export function SemanticLayerEditor({
         )}
         {source && history && (
           <>
+            {expression && (
+              <div className="semantic-template">
+                <label>
+                  {tr("layers.template")}
+                  <select
+                    aria-label={tr("layers.template")}
+                    value={templateId}
+                    disabled={busy || saving}
+                    onChange={(e) => changeTemplate(e.target.value)}
+                  >
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.revision}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span>{tr("layers.templateHint")}</span>
+              </div>
+            )}
             <div className="semantic-layout">
               <div className="semantic-image">
                 <div
@@ -650,6 +717,9 @@ export function SemanticLayerEditor({
                       value={revision}
                       onChange={(e) => void load(e.target.value)}
                     >
+                      <option value="" disabled>
+                        {tr("layers.newDraft")}
+                      </option>
                       {revisions.map((r) => (
                         <option key={r.id} value={r.id}>
                           {r.revision}
@@ -720,6 +790,13 @@ export function SemanticLayerEditor({
                           }
                         />
                       </label>
+                      {layer.masterLayerId && (
+                        <small title={layer.masterLayerId}>
+                          {tr("layers.mapped", {
+                            id: layer.masterLayerId.slice(0, 8),
+                          })}
+                        </small>
+                      )}
                       <select
                         aria-label={`${tr("layers.role")} ${index + 1}`}
                         disabled={layer.locked}
