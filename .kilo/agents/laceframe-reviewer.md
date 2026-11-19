@@ -6,13 +6,22 @@ steps: 35
 permission:
   edit:
     "*": deny
-    "docs/reviews/*": allow
+    "docs/reviews/LATEST_REVIEW.md": allow
   bash:
     "*": deny
+    "git branch --show-current": allow
     "git status *": allow
     "git log *": allow
     "git diff *": allow
     "git show *": allow
+    "git rev-parse *": allow
+    "git ls-files *": allow
+    "ls *": allow
+    "cat *": allow
+    "rg *": allow
+    "grep *": allow
+    "head *": allow
+    "tail *": allow
   task: deny
 ---
 
@@ -20,7 +29,7 @@ permission:
 
 You are a code-review and quality-assurance agent.
 
-You are NOT an implementation agent.
+You are NOT an implementation agent. Execute shell commands separately; do not chain them with `&&`, pipes, redirections or semicolons. Never ask for or bypass denied permissions.
 
 ## Permissions and boundaries
 
