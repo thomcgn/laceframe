@@ -1,0 +1,6 @@
+{
+  "invalid": "Ungültige Auswahl oder Bildmaße.",
+  "pathLimit": "Pfad zu komplex; Anzahl der Anker oder Krümmung reduzieren.",
+  "closeFirst": "Zuerst einen Pfad mit mindestens drei Ankern schließen.",
+  "cancelled": "Auswahlberechnung abgebrochen."
+}

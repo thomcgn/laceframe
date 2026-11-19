@@ -1,0 +1,6 @@
+{
+  "invalid": "Invalid selection or image dimensions.",
+  "pathLimit": "Path too complex; reduce anchors or curvature.",
+  "closeFirst": "Close a path with at least three anchors first.",
+  "cancelled": "Selection calculation cancelled."
+}
