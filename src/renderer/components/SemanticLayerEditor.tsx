@@ -43,19 +43,6 @@ const colors: Record<SemanticLayerRole, number[]> = {
   accessory: [160, 120, 220],
   custom: [220, 200, 100],
 };
-function defaults(n: number): LayerDraft[] {
-  return (Object.keys(layerRoleLabels) as SemanticLayerRole[]).map(
-    (role, order) => ({
-      id: crypto.randomUUID(),
-      role,
-      name: tr(layerRoleLabels[role]),
-      order,
-      visible: true,
-      locked: false,
-      weights: new Uint8Array(n),
-    }),
-  );
-}
 export function SemanticLayerEditor({
   sourceId,
   project,
@@ -213,13 +200,12 @@ export function SemanticLayerEditor({
         if (!r.ok) throw new Error(r.error);
         if (r.value.width * r.value.height > 4_194_304)
           throw new Error(tr("layers.invalidMask"));
-        let layers = defaults(r.value.width * r.value.height);
+        let layers: LayerDraft[] = [];
         if (latest) {
           const saved = await window.laceframe.semanticLayers(latest.id);
           if (!saved.ok) throw new Error(saved.error);
           layers = saved.value.layers;
-        }
-        if (expression && !latest) {
+        } else if (expression) {
           const template = templates.find((t) => t.id === templateId);
           if (!template) throw new Error(tr("layers.needsTemplate"));
           layers = expressionLayerDraft(
@@ -712,9 +698,14 @@ export function SemanticLayerEditor({
                         64 * 1024 * 1024
                     }
                     onClick={() => {
-                      const next = {
-                        ...defaults(source.width * source.height).at(-1)!,
+                      const next: LayerDraft = {
+                        id: crypto.randomUUID(),
+                        name: `Layer ${rows.length + 1}`,
+                        role: "custom",
                         order: rows.length,
+                        visible: true,
+                        locked: false,
+                        weights: new Uint8Array(source.width * source.height),
                       };
                       change([...rows, next]);
                       setActive(next.id);
@@ -780,8 +771,11 @@ export function SemanticLayerEditor({
                     <small>{tr("layers.importHint")}</small>
                   </section>
                 )}
-                <fieldset disabled={busy || saving}>
-                  {rows.map((layer, index) => (
+                {rows.length === 0 ? (
+                  <p className="semantic-empty">{tr("layers.emptyState")}</p>
+                ) : (
+                  <fieldset disabled={busy || saving}>
+                    {rows.map((layer, index) => (
                     <section
                       className="semantic-row"
                       key={layer.id}
@@ -901,6 +895,7 @@ export function SemanticLayerEditor({
                     </section>
                   ))}
                 </fieldset>
+              )}
               </aside>
             </div>
             <footer>

@@ -62,5 +62,6 @@
   "templateHint": "Only names and roles are reused. Expression masks are independent; no automatic pixel registration.",
   "changeTemplate": "Use different master layer definitions and clear the draft expression masks? Saved revisions remain available.",
   "newDraft": "New layer draft",
-  "mapped": "Master layer: {{id}}"
+  "mapped": "Master layer: {{id}}",
+  "emptyState": "No layers yet. Click \"Add layer\" to create a new layer."
 }

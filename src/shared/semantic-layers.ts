@@ -55,7 +55,7 @@ export const layerSetSchema = z
     width: z.number().int().positive().max(16384),
     height: z.number().int().positive().max(16384),
     createdAt: z.iso.datetime(),
-    layers: z.array(semanticLayerSchema).min(1).max(MAX_LAYERS),
+    layers: z.array(semanticLayerSchema).min(0).max(MAX_LAYERS),
   })
   .strict()
   .refine(
@@ -69,7 +69,7 @@ export const saveLayerSetSchema = z
     sourceSha256: sha,
     baseSetId: id.optional(),
     templateSetId: id.optional(),
-    layers: z.array(semanticLayerInputSchema).min(1).max(MAX_LAYERS),
+    layers: z.array(semanticLayerInputSchema).min(0).max(MAX_LAYERS),
   })
   .strict();
 export type SemanticLayer = z.infer<typeof semanticLayerSchema>;

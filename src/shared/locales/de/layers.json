@@ -62,5 +62,6 @@
   "templateHint": "Nur Namen und Rollen werden übernommen. Expression-Masken bleiben eigenständig; keine automatische Pixelregistrierung.",
   "changeTemplate": "Andere Master-Layerdefinitionen verwenden und die aktuellen Expression-Masken im Entwurf leeren? Gespeicherte Revisionen bleiben erhalten.",
   "newDraft": "Neuer Layerentwurf",
-  "mapped": "Master-Layer: {{id}}"
+  "mapped": "Master-Layer: {{id}}",
+  "emptyState": "Keine Layer vorhanden. Klicken Sie auf „Layer hinzufügen“, um einen neuen Layer zu erstellen."
 }
