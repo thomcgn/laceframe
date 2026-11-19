@@ -1,29 +1,39 @@
 #!/usr/bin/env node
 
-import { AutodevController, runAutodev } from "./controller.js";
+import { cliHelp, parseCliArgs } from "./cli-args.js";
 
-async function main() {
-  const args = process.argv.slice(2);
-  const dryRun = args.includes("--dry-run") || args.includes("-d");
-
-  if (args.includes("status")) {
-    const budget = new AutodevController(true).rateLimitStatus();
-    console.log(JSON.stringify(budget, null, 2));
+async function main(): Promise<void> {
+  let action;
+  try {
+    action = parseCliArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    console.error("Use --help to see safe command examples.");
+    process.exitCode = 2;
     return;
   }
 
-  if (dryRun) {
-    console.log("Running in DRY RUN mode - no commits, pushes, or issue mutations");
+  if (action === "help") {
+    process.stdout.write(cliHelp());
+    return;
   }
 
+  // Importing the controller is intentionally delayed until after argument
+  // validation, so --help and invalid arguments cannot initialize AutoDev.
   try {
+    const { AutodevController, runAutodev } = await import("./controller.js");
+    if (action === "status") {
+      console.log(JSON.stringify(new AutodevController(true).rateLimitStatus(), null, 2));
+      return;
+    }
+    const dryRun = action === "dry-run";
+    if (dryRun) console.log("[DRY RUN] No Kilo task, commit, push or GitHub issue mutation");
     await runAutodev(dryRun);
-    console.log("Autodev controller completed successfully");
-    process.exit(0);
+    console.log("AutoDev controller completed successfully");
   } catch (error) {
-    console.error("Autodev controller failed:", error);
-    process.exit(1);
+    console.error("AutoDev controller failed:", error);
+    process.exitCode = 1;
   }
 }
 
-main();
+void main();
