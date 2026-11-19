@@ -96,6 +96,7 @@ const { nav } = require("./smoke-ui.cjs");
       exact: true,
     });
     const imageCanvas = editor.getByLabel("Farbauswahlfläche", { exact: true });
+    await require("./shared-selection-handoff.cjs")(page,editor,imageCanvas,"Region rückgängig");
     const originalPixels = await imageCanvas.evaluate((c) => [
       ...c.getContext("2d").getImageData(0, 0, c.width, c.height).data,
     ]);

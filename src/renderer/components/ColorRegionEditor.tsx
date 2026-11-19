@@ -1,3 +1,4 @@
+import { SelectionEditor } from "../editing/SelectionEditor";
 import { displayMessage } from "../../shared/locales";
 import { tr } from "../../shared/locales/index";
 import { PixelViewport } from "./PixelViewport";
@@ -50,6 +51,7 @@ export function ColorRegionEditor({
     [connected, setConnected] = useState(false),
     [brush, setBrush] = useState(false),
     [error, setError] = useState("");
+  const [sharedSelection,setSharedSelection]=useState(false);
   const [mutating, setMutating] = useState(false);
   const mutation = useRef<Worker | undefined>(undefined);
   const cached = useRef<
@@ -225,6 +227,7 @@ export function ColorRegionEditor({
       >
         <div className="section-head">
           <h2>{tr("editing.mbe7ed3a938")}</h2>
+          <button disabled={!preview||mutating} onClick={()=>setSharedSelection(true)}>{tr("canvas.open")}</button>
           <button onClick={close}>{tr("editing.m945010968c")}</button>
         </div>
         <p>{tr("editing.m22803a458d")}</p>
@@ -438,6 +441,9 @@ export function ColorRegionEditor({
             }}
           />
         )}
+        {sharedSelection && preview && <SelectionEditor sourceId={assetId} initialMask={preview.weights}
+          references={[{id:"region",name,weights:preview.weights}]}
+          onApply={weights=>mutate({brushWeights:weights})} onClose={()=>setSharedSelection(false)} />}
       </section>
     </EditorWorkspace>
   );
