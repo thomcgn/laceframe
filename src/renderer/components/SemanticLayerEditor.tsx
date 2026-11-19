@@ -1,3 +1,4 @@
+import { SelectionEditor } from "../editing/SelectionEditor";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project, Snapshot } from "../../shared/domain";
 import { tr, displayMessage } from "../../shared/locales";
@@ -79,6 +80,7 @@ export function SemanticLayerEditor({
   const [templateId, setTemplateId] = useState(
     expression ? (latest?.templateSetId ?? templates.at(-1)?.id ?? "") : "",
   );
+  const [sharedSelection,setSharedSelection]=useState(false);
   const [importRegion, setImportRegion] = useState("");
   const paletteRegions = project.masterPalettes
     .filter((p) => p.masterId === sourceId)
@@ -460,6 +462,7 @@ export function SemanticLayerEditor({
       >
         <header>
           <h2>{tr("layers.title")}</h2>
+          <button disabled={!source||!current||current.locked||busy||saving} onClick={()=>setSharedSelection(true)}>{tr("canvas.open")}</button>
           <span>{source && `${source.width} × ${source.height}`}</span>
           <button onClick={close} disabled={saving}>
             {tr("layers.close")}
@@ -937,6 +940,12 @@ export function SemanticLayerEditor({
             </footer>
           </>
         )}
+        {sharedSelection && source && current && <SelectionEditor
+          sourceId={sourceId} initialMask={current.weights}
+          allowedMask={blockedPixels(rows,active,source.width*source.height).map(v=>v?0:255)}
+          references={rows.map(r=>({id:r.id,name:r.name,weights:r.weights}))}
+          onApply={weights=>change(rows.map(r=>r.id===active?{...r,weights:new Uint8Array(weights)}:r))}
+          onClose={()=>setSharedSelection(false)} />}
       </section>
     </EditorWorkspace>
   );
