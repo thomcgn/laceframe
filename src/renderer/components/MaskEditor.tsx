@@ -1,3 +1,4 @@
+import { SelectionEditor } from "../editing/SelectionEditor";
 import { tr } from "../../shared/locales/index";
 import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { EditorWorkspace } from "./EditorWorkspace";
@@ -64,6 +65,8 @@ export function MaskEditor({
   ) => Promise<void>;
   onClose: () => void;
 }) {
+  const [sharedSelection,setSharedSelection]=useState(false);
+  const [selectionTarget,setSelectionTarget]=useState<"manual"|"protected"|"forced">("protected");
   const [history, setHistory] = useState<MaskHistory>({
     past: [],
     present: new Uint8Array(master.width * master.height).fill(
@@ -614,6 +617,12 @@ export function MaskEditor({
               ? tr("editing.m46746f197e")
               : tr("editing.md1e9772fdb") + master.version)}
         </h2>
+        <div className="button-row">
+          {automatic && <label>{tr("canvas.maskTarget")}<select aria-label={tr("canvas.maskTarget")} value={selectionTarget} onChange={e=>setSelectionTarget(e.target.value as typeof selectionTarget)}>
+            <option value="protected">{tr("canvas.protected")}</option><option value="forced">{tr("canvas.forced")}</option><option value="manual">{tr("canvas.retained")}</option>
+          </select></label>}
+          <button disabled={!ready||saving||master.width*master.height>4_194_304||automatic&&!smart.ready} onClick={()=>setSharedSelection(true)}>{tr("canvas.open")}</button>
+        </div>
         <p className="editor-description">
           {contextLabel?.description ??
             (cutout
@@ -1597,6 +1606,10 @@ export function MaskEditor({
               (cutout ? tr("editing.m9b8dd6aa96") : tr("editing.m99b165f30e"))}
           </button>
         </div>
+        {sharedSelection && <SelectionEditor sourceId={master.id}
+          initialMask={automatic?smart.current.current.present[selectionTarget]:history.present}
+          onApply={weights=>{if(automatic)smart.update({...smart.current.current.present,[selectionTarget]:weights});else apply(commitMask(history,weights));}}
+          onClose={()=>setSharedSelection(false)} />}
       </section>
     </EditorWorkspace>
   );

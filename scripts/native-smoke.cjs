@@ -773,6 +773,7 @@ const path = require("node:path");
         exact: true,
       });
       await expect(editor.getByAltText("Masken-Master")).toBeVisible();
+      await require("./shared-selection-handoff.cjs")(page,editor,editor.locator("canvas").first(),"Rückgängig");
       if (
         (await editor.locator(".editor-advanced").getAttribute("open")) === null
       )

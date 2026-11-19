@@ -127,10 +127,10 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     await expect(editor.getByRole("button",{name:"Bézier-Pfad",exact:true})).toHaveAttribute("aria-pressed","true");
     for(const [width,height] of [[960,720],[1280,800],[1920,1080]]){
       await app.evaluate(({BrowserWindow},{width,height})=>BrowserWindow.getAllWindows()[0].setContentSize(width,height),{width,height});
-      await expect.poll(()=>page.evaluate(()=>innerWidth)).toBe(width);
+      await expect.poll(()=>page.evaluate(()=>window.innerWidth)).toBe(width);
       await expect(editor.getByRole("button",{name:"Auswahl als Maske übernehmen",exact:true})).toBeInViewport();
       const box=await canvas.boundingBox();expect(box.width).toBeGreaterThan(220);expect(box.height).toBeGreaterThan(250);
-      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
       await page.screenshot({path:path.join(screenshots,`professional-${width}.png`)});
     }
     // Actual shape and pixel-brush tools, then restore the saved curve before committing a layer.
