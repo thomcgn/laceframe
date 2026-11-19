@@ -115,11 +115,94 @@ const strokeGesture=gesture.current;
                 } v.fillStyle = i === selectedNode ? "#d9a77e" : "#f0e5d3"; v.fillRect(n.p.x - 4 / scale, n.p.y - 4 / scale, 8 / scale, 8 / scale); });
         }
         const g = gesture.current;
-        if (g && ["rectangle", "ellipse", "lasso"].includes(tool)) {
+        if (g && ["rectangle", "ellipse", "lasso", "polygon"].includes(tool)) {
             v.beginPath();
             if (tool === "lasso") {
                 g.points.forEach((p, i) => i ? v.lineTo(p.x, p.y) : v.moveTo(p.x, p.y));
                 v.closePath();
+            }
+            else if (tool === "polygon") {
+                // Draw committed vertices and edges
+                const path = g.working.path;
+                if (path.nodes.length > 0) {
+                    // Draw edges between committed vertices
+                    v.beginPath();
+                    v.moveTo(path.nodes[0].p.x, path.nodes[0].p.y);
+                    for (let i = 1; i < path.nodes.length; i++) {
+                        v.lineTo(path.nodes[i].p.x, path.nodes[i].p.y);
+                    }
+                    // Dual-tone stroke for edges
+                    v.strokeStyle = "#141820"; // Ink - dark
+                    v.lineWidth = 2 / Math.max(.01, scale);
+                    v.stroke();
+                    v.beginPath();
+                    v.moveTo(path.nodes[0].p.x, path.nodes[0].p.y);
+                    for (let i = 1; i < path.nodes.length; i++) {
+                        v.lineTo(path.nodes[i].p.x, path.nodes[i].p.y);
+                    }
+                    v.strokeStyle = "#f0e5d3"; // Ivory - light
+                    v.lineWidth = 1 / Math.max(.01, scale);
+                    v.stroke();
+                    
+                    // Draw vertex markers
+                    const markerSize = 4 / Math.max(.01, scale);
+                    path.nodes.forEach((node, i) => {
+                        const px = node.p.x;
+                        const py = node.p.y;
+                        
+                        // Dark outer ring
+                        v.beginPath();
+                        v.arc(px, py, markerSize * 1.5, 0, Math.PI * 2);
+                        v.fillStyle = "#141820"; // Ink
+                        v.fill();
+                        
+                        // Light inner fill
+                        v.beginPath();
+                        v.arc(px, py, markerSize, 0, Math.PI * 2);
+                        v.fillStyle = i === path.nodes.length - 1 ? "#d9a77e" : "#f0e5d3"; // Copper for last vertex, Ivory for others
+                        v.fill();
+                    });
+                    
+                    // Draw rubber-band line from last vertex to cursor
+                    if (cursor.current) {
+                        const lastVertex = path.nodes[path.nodes.length - 1];
+                        v.beginPath();
+                        v.moveTo(lastVertex.p.x, lastVertex.p.y);
+                        v.lineTo(cursor.current.x, cursor.current.y);
+                        // Dashed dual-tone line for rubber-band
+                        v.setLineDash([4 / Math.max(.01, scale), 4 / Math.max(.01, scale)]);
+                        v.strokeStyle = "#141820"; // Ink - dark
+                        v.lineWidth = 2 / Math.max(.01, scale);
+                        v.stroke();
+                        v.beginPath();
+                        v.moveTo(lastVertex.p.x, lastVertex.p.y);
+                        v.lineTo(cursor.current.x, cursor.current.y);
+                        v.setLineDash([4 / Math.max(.01, scale), 4 / Math.max(.01, scale)]);
+                        v.strokeStyle = "#f0e5d3"; // Ivory - light
+                        v.lineWidth = 1 / Math.max(.01, scale);
+                        v.stroke();
+                        v.setLineDash([]);
+                        
+                        // Show close indicator when near first vertex and have 3+ vertices
+                        if (path.nodes.length >= 3) {
+                            const firstVertex = path.nodes[0];
+                            const dx = cursor.current.x - firstVertex.p.x;
+                            const dy = cursor.current.y - firstVertex.p.y;
+                            const dist = Math.hypot(dx, dy);
+                            const closeThreshold = 15 / Math.max(.01, scale); // 15 CSS pixels
+                            if (dist < closeThreshold) {
+                                // Draw close indicator (circle around first vertex)
+                                v.beginPath();
+                                v.arc(firstVertex.p.x, firstVertex.p.y, markerSize * 3, 0, Math.PI * 2);
+                                v.strokeStyle = "#d9a77e"; // Copper
+                                v.lineWidth = 2 / Math.max(.01, scale);
+                                v.setLineDash([6 / Math.max(.01, scale), 4 / Math.max(.01, scale)]);
+                                v.stroke();
+                                v.setLineDash([]);
+                            }
+                        }
+                    }
+                }
             }
             else {
                 const p = g.points.at(-1)!;
@@ -128,15 +211,41 @@ const strokeGesture=gesture.current;
                 else
                     v.ellipse((g.start.x + p.x) / 2, (g.start.y + p.y) / 2, Math.abs(p.x - g.start.x) / 2, Math.abs(p.y - g.start.y) / 2, 0, 0, 2 * Math.PI);
             }
-            v.stroke();
+            if (tool !== "polygon") {
+                // Dual-tone stroke for rectangle/ellipse/lasso
+                v.strokeStyle = "#141820"; // Ink - dark
+                v.lineWidth = 2 / Math.max(.01, scale);
+                v.stroke();
+                v.strokeStyle = "#f0e5d3"; // Ivory - light
+                v.lineWidth = 1 / Math.max(.01, scale);
+                v.stroke();
+            }
         }
         if (cursor.current && ["brush", "eraser"].includes(tool)) {
             const p = cursor.current;
+            const radius = size / 2;
+            const cursorX = p.x;
+            const cursorY = p.y;
+            
+            // Draw dual-tone cursor outline for visibility on any background
+            // Outer stroke (dark)
             v.beginPath();
             if (square)
-                v.rect(p.x - size / 2, p.y - size / 2, size, size);
+                v.rect(cursorX - radius, cursorY - radius, size, size);
             else
-                v.arc(p.x, p.y, size / 2, 0, Math.PI * 2);
+                v.arc(cursorX, cursorY, radius, 0, Math.PI * 2);
+            v.strokeStyle = "#141820"; // Ink - dark
+            v.lineWidth = 2 / Math.max(.01, scale);
+            v.stroke();
+            
+            // Inner stroke (light)
+            v.beginPath();
+            if (square)
+                v.rect(cursorX - radius, cursorY - radius, size, size);
+            else
+                v.arc(cursorX, cursorY, radius, 0, Math.PI * 2);
+            v.strokeStyle = "#f0e5d3"; // Ivory - light
+            v.lineWidth = 1 / Math.max(.01, scale);
             v.stroke();
         }
     }
@@ -320,6 +429,21 @@ const strokeGesture=gesture.current;
                 working.path = emptyPath();
             if (working.path.nodes.length >= 128)
                 return;
+            
+            // Check if clicking near first vertex to close polygon (when 3+ vertices)
+            if (working.path.nodes.length >= 3) {
+                const firstVertex = working.path.nodes[0];
+                const dx = p.x - firstVertex.p.x;
+                const dy = p.y - firstVertex.p.y;
+                const dist = Math.hypot(dx, dy);
+                // 15 CSS pixels converted to image coordinates (matches visual indicator)
+                const closeThreshold = 15 / Math.max(.01, (vectors.current?.getBoundingClientRect().width ?? source.width) / source.width);
+                if (dist < closeThreshold) {
+                    closePath();
+                    return;
+                }
+            }
+            
             working.path.nodes.push({ p, in: p, out: p, symmetric: true });
             commit(working);
             return;
@@ -456,7 +580,17 @@ const strokeGesture=gesture.current;
     return <EditorWorkspace title={tr("canvas.title")} className=""><section ref={section} tabIndex={-1} role="dialog" aria-modal="true" aria-label={tr("canvas.title")} className={`selection-editor ${collapsed ? "panel-collapsed" : ""}`} onKeyDownCapture={e => { if (e.code === "Space" && !(e.target as HTMLElement).matches("input,textarea,select,button"))
         space.current = true; if((e.code==="Space"||e.key==="Alt")&&!(e.target as HTMLElement).closest("input,textarea,select,button"))setTemporaryPan(true); }} onKeyUp={e => { if (e.code === "Space")
         space.current = false; if(e.code==="Space"||e.key==="Alt")setTemporaryPan(false); }} onKeyDown={e => { if (e.defaultPrevented)
-        return; const a = editorShortcut(e, Boolean((e.target as HTMLElement).closest("input,textarea,select,[contenteditable=true]"))); if (a) {
+        return; 
+        // Handle Escape for polygon tool - cancel unfinished polygon without modifying mask
+        if (e.key === "Escape" && tool === "polygon" && history && history.present.path.nodes.length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!saving && (!busy) && history) {
+                commit({ ...history.present, path: emptyPath() });
+            }
+            return;
+        }
+        const a = editorShortcut(e, Boolean((e.target as HTMLElement).closest("input,textarea,select,[contenteditable=true]"))); if (a) {
         e.preventDefault();
         e.stopPropagation();
         if (!saving && (!busy || a === "cancel"))
