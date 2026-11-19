@@ -91,6 +91,13 @@ const CONFIG_FILE = path.join(__dirname, "..", "..", ".autodev-config.json");
 const LOG_DIR = path.join(__dirname, "..", "..", "logs", "autodev");
 const CONTROLLER_LOCK = path.join(__dirname, "..", "..", ".autodev-controller.lock");
 
+class KiloExecutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KiloExecutionError";
+  }
+}
+
 export class AutodevController {
   private state: ControllerState;
   private config: AutodevConfig;
@@ -237,7 +244,7 @@ export class AutodevController {
         }
         if (!success) {
           this.log("Issue was not finalized. Stop instead of starting another task with potentially dirty files.", "warn");
-          break;
+          throw new Error(`AutoDev did not finish issue #${issue.number}; inspect the issue and working tree`);
         }
       }
     } catch (error) {
@@ -514,7 +521,7 @@ export class AutodevController {
       const testResults = await this.runQualityGates(issue);
       return { success: true, commitHash: null, testResults };
     } catch (error) {
-      if (error instanceof RateLimitPause) throw error;
+      if (error instanceof RateLimitPause || error instanceof KiloExecutionError) throw error;
       return { success: false, commitHash: null, testResults: "", error: String(error) };
     }
   }
@@ -555,15 +562,24 @@ Return a summary of what was implemented, files changed, and test results.`;
     try {
       // Use argument array: issue bodies may contain shell metacharacters.
       const { execFileSync } = await import("node:child_process");
-      return execFileSync("npx", ["kilo", "task", "--agent", agent, "--prompt", prompt], {
+      const output = execFileSync("kilo", ["run", "--auto", "--agent", agent, prompt], {
         encoding: "utf-8", timeout: this.config.kilo?.taskTimeoutMs ?? 30 * 60 * 1000,
       });
+      if (/run ended with an auto-rejected permission|user rejected permission/i.test(output)) {
+        throw new KiloExecutionError("Kilo refused a required permission; review agent permissions before retrying");
+      }
+      return output;
     } catch (error) {
       if (isFreeQuotaError(error)) {
         const until = this.freeBudget.pauseForLimit("Kilo free-model quota exceeded");
         throw new RateLimitPause(until, "Kilo rejected the session with free-model rate limit");
       }
-      throw error;
+      if (error instanceof KiloExecutionError) throw error;
+      const failure = error as Error & { stderr?: string; stdout?: string; code?: string; status?: number };
+      const outputText = [failure.stderr, failure.stdout].filter(Boolean).join("\n");
+      const clean = outputText.replace(/\s+/g, " ").slice(0, 450);
+      throw new KiloExecutionError(`Kilo ${agent} failed${failure.status != null ? ` (exit ${failure.status})` : ""}: ${clean || failure.code || "unknown error"}`);
+
     }
   }
 
