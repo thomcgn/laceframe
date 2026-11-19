@@ -1,36 +1,37 @@
-# Laceframe
+# LaceFrame AutoDev – Controller/Test-Integration Fix
 
-Laceframe ist ein lokales Desktop-Studio für konsistente Charakterportraits und Expressions. Bilder importieren, vergleichen, korrigieren, freigeben und exportieren funktioniert offline. Optionale Bildgenerierung verwendet den lokal installierten offiziellen Codex App Server mit bestehender ChatGPT-Anmeldung; sie startet nur auf ausdrücklichen Klick und verbraucht Codex-Kontingent.
+Diese Dateien ersetzen im Projekt die gleichnamigen Dateien; der bestehende Rate-Limit-Schutz bleibt unverändert:
 
-## Starten
+- `src/autodev/controller.ts`: entfernt unbenutzte `getLastCommitHash()`-Methode; repariert das Parsen der Issue-Metadaten (z.B. `Dependencies: #1, #2`, getrennte Sections).
+- `tests/autodev-controller.test.ts`: kompatible `node:fs`-Default-/Named-Exports in Vitest-Mocks; `execFileSync`-Mock für den aktuellen gestagten Reviewer-Diff; aktualisierte Erwartungen.
+- `tests/autodev-integration.test.ts`: echte Prozess-Orchestrierung mit isolierten Builder/Reviewer/Finalize-Seams statt veralteter `execSync`-Kilo-Simulation; kein `any`.
 
-Node.js **22.13+**, npm und ein grafischer Desktop mit Electron-Systembibliotheken sind erforderlich. Linux x64 ist die validierte Plattform; Windows/macOS sind noch nicht validiert. Chromium-Sandbox eingeschaltet lassen.
+## Einspielen
 
-```sh
-npm ci
-npm run start
+ZIP in `~/Projekte/laceframe` entpacken (Dateipfade im ZIP entsprechen dem Repo):
+
+```bash
+cd ~/Projekte/laceframe
+unzip -o /pfad/zum/laceframe-autodev-tests-fix.zip
 ```
 
-`npm run build` erstellt das entpackte Anwendungspaket unter `out/`. `npm run make` erstellt ein ZIP und benötigt auf Linux/macOS das Systemprogramm `zip`. Installer, Signierung und automatische Updates sind noch nicht umgesetzt.
+**Alte doppelte Datei** `src/autodev/rate-limit.test.ts`: Falls sie dort noch liegt, ist sie überflüssig. Nur `tests/rate-limit.test.ts` behalten. Vor dem Entfernen prüfen, dass `tests/rate-limit.test.ts` existiert.
 
-## Arbeiten mit Laceframe
+Danach:
 
-Die Bereiche sind **Characters → Art Direction → Expressions → Studio → Library → Motion**. Projekte außerhalb dieses öffentlichen Repositorys speichern und als vollständiges Verzeichnis sichern. Master und Originale bleiben unverändert; neue Bearbeitungen werden separate Entwürfe mit manueller Freigabe.
-
-Vorhanden sind unter anderem Mehrfachimport von Identitätsbildern, versionierte Stile, Character Creator, Master-Rebuild, native Generierung oder manueller Ergebnisimport, Bildvergleich, Freistellung, Masken/Originalpixelschutz, 2D-Relighting und regionale Farbkorrektur. Motion zeigt bislang einen Planungshinweis. Studio führt durch **Auswählen → Erzeugen → Bearbeiten → Freigeben**. Die Expertenansicht erhält vollständige Anweisungen und Diagnosen. Bildeditoren nutzen eine große gemeinsame Arbeitsfläche; Unterwerkzeuge erhalten den bisherigen Entwurf.
-
-## Dokumentation
-
-- [ROADMAP](docs/ROADMAP.md): verbindlicher Produktstand, Prioritäten und Abnahmekriterien.
-- [ARCHITECTURE](docs/ARCHITECTURE.md): Datenmodell, Sicherheit, Herkunft, Formate und Grenzen.
-- [WORKFLOWS](docs/WORKFLOWS.md): aktuelle Bedienwege und ausdrücklich geplante Abläufe.
-- [TESTING](docs/TESTING.md): gezielte Entwicklungstests, optionale Smokes und manuelle FULL-Regression.
-- [AGENTS](AGENTS.md): Regeln für Arbeiten am Repository.
-
-```sh
-npx vitest run tests/<betroffene-datei>.test.ts
-# Optionaler breiterer Check:
-npm run check:dev
+```bash
+npm run typecheck
+npx vitest run tests/rate-limit.test.ts tests/autodev-controller.test.ts tests/autodev-integration.test.ts --maxWorkers=2
+npm run lint
+git status --short
+git diff --cached --stat
+git diff --stat
 ```
 
-Normale Entwicklung direkt auf `develop`, kleine lokale Commits und gezielte Tests; kein täglicher PR-Zwang. Push und Integration nach `main` nur auf ausdrücklichen Auftrag. Desktop-Smokes gezielt mit `npm run check:smoke -- <workflow>` auswählen. Keine CI bei Develop-Commits; optionale PRs gegen main erhalten schnelle Checks, zusätzliche CI manuell (`workflow_dispatch`, Profil `dev` oder `full`); vollständige Regression vor Alpha. Testresultate im Abschlussbericht und gegebenenfalls im optionalen PR dokumentieren. Historische Aufträge, Prüfberichte und Screenshots sind über Git und gemergte PRs rekonstruierbar; es gibt kein Dokumentationsarchiv im Repository.
+**Achtung:** Du hast vorher `git add -A` ausgeführt. Entpacken ändert deine Arbeitskopie, aber nicht automatisch die bereits gestagte Version. Vor dem manuellen Commit Index und Arbeitskopie prüfen; keine automatischen Commits/Pushes.
+
+## Validierung
+
+Die drei korrigierten TypeScript-Dateien wurden lokal mit dem TypeScript-Transpiler syntaktisch überprüft (0 Fehler). Die vollständige Vitest-Suite konnte hier ohne dein LaceFrame-Projekt und dessen Node-Dependencies nicht ausgeführt werden. Falls Tests noch fehlschlagen, die konkrete Fehlermeldung beachten; keinen autonomen AutoDev-Lauf starten, bevor Typecheck, Lint und Tests vollständig grün sind.
+
+Hinweis: Die neuen Integrationstests prüfen die Zustandsmaschine, **keine** echte GitHub/Kilo-/Git-Push-Integration. CLI-Aufruf und vollständigen Workflow vor unbeaufsichtigtem Betrieb separat validieren.

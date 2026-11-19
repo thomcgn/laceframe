@@ -1,0 +1,46 @@
+{
+  "repo": "thomcgn/laceframe",
+  "branch": "develop",
+  "labels": {
+    "approved": "autodev:approved",
+    "inProgress": "autodev:in-progress",
+    "review": "autodev:review",
+    "blocked": "autodev:blocked",
+    "implemented": "autodev:implemented"
+  },
+  "maxReviewIterations": 3,
+  "qualityGates": [
+    "typecheck",
+    "test",
+    "lint"
+  ],
+  "smokeTests": [],
+  "github": {
+    "apiTimeout": 30000,
+    "retryAttempts": 3,
+    "retryBackoffMs": 1000
+  },
+  "kilo": {
+    "builderAgent": "laceframe-builder",
+    "reviewerAgent": "laceframe-reviewer",
+    "taskTimeoutMs": 1800000
+  },
+  "git": {
+    "protectedBranches": [
+      "main"
+    ],
+    "allowForcePush": false,
+    "requireCleanWorkingTree": true
+  },
+  "logging": {
+    "level": "info",
+    "retentionDays": 30
+  },
+  "freeBudget": {
+    "windowMinutes": 60,
+    "limit": 200,
+    "pauseAt": 190,
+    "estimatedRequestsPerTask": 50,
+    "cooldownMinutes": 60
+  }
+}
