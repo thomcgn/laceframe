@@ -1,3 +1,4 @@
+import { savedSelectionInputSchema, savedSelectionSchema } from "./editing";
 import { layerSetSchema, saveLayerSetSchema } from "./semantic-layers";
 import { stylePresetInputSchema } from "./style-creator";
 import { tr } from "./locales/index";
@@ -180,6 +181,7 @@ const projectObject = z
     qualityAssets: z.array(qualityDerivativeSchema).max(10000).default([]),
     masterPalettes: z.array(paletteSchema).max(1000).default([]),
     semanticLayerSets: z.array(layerSetSchema).max(1000).default([]),
+    editorSelections: z.array(savedSelectionSchema).max(256).default([]),
     id: idSchema,
     name: label,
     createdAt: z.iso.datetime(),
@@ -285,6 +287,7 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       ...p.qualityAssets,
       ...p.masterPalettes,
       ...p.semanticLayerSets,
+      ...p.editorSelections,
       ...p.families,
       ...p.variants,
       ...p.assets,
@@ -321,6 +324,11 @@ export const projectSchema = projectObject.superRefine((p, ctx) => {
       fail("Invalid locked master selection");
   }
 
+  for (const selection of p.editorSelections) {
+    const source = [...p.masters, ...p.assets, ...p.masterCandidates, ...p.qualityAssets, ...p.styleAssets].find(a => a.id === selection.sourceId);
+    const revisions = p.editorSelections.filter(s => s.sourceId === selection.sourceId);
+    if (!source || ("discardedAt" in source && source.discardedAt) || source.sha256 !== selection.sourceSha256 || source.width !== selection.width || source.height !== selection.height || selection.mask.file !== assetFile("color-masks", selection.mask.sha256, "png") || revisions.some((s,i)=>s.revision!==i+1)) fail("Invalid editor selection source");
+  }
   for (const set of p.semanticLayerSets) {
     const master = p.masters.find((m) => m.id === set.masterId),
       source = [...p.masters, ...p.assets].find((a) => a.id === set.sourceId);
@@ -1181,6 +1189,7 @@ export const commandSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   saveLayerSetSchema.extend({ type: z.literal("saveSemanticLayers") }),
+  savedSelectionInputSchema.extend({ type: z.literal("saveEditorSelection") }),
   paletteInputSchema.extend({ type: z.literal("saveMasterPalette") }),
   correctionInputSchema.extend({ type: z.literal("createColorCorrection") }),
   relightInputSchema.extend({ type: z.literal("createRelighting") }),

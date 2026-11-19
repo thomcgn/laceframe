@@ -279,6 +279,8 @@ function registerIPC(preferences: AppPreferences) {
   handle("image:smart-cutout-recipe", (input) =>
     service.smartCutoutRecipe(idSchema.parse(input)),
   );
+  handle("image:editor-selections", (input) => service.editorSelections(idSchema.parse(input)));
+  handle("image:editor-selection", (input) => service.editorSelection(idSchema.parse(input)));
   handle("image:semantic-layers", (input) =>
     service.semanticLayers(idSchema.parse(input)),
   );

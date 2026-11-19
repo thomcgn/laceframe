@@ -1,3 +1,4 @@
+import type { SavedSelection } from "./editing";
 import type { CharacterLayerSet, LayerDraft } from "./semantic-layers";
 import type {
   StyleDraftImage,
@@ -30,6 +31,8 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  editorSelections(sourceId:string):Promise<Result<SavedSelection[]>>;
+  editorSelection(id: string): Promise<Result<{record: SavedSelection; weights: Uint8Array}>>;
   semanticLayers(
     id: string,
   ): Promise<Result<{ set: CharacterLayerSet; layers: LayerDraft[] }>>;

@@ -1,3 +1,4 @@
+import { checkMask } from "../shared/editing";
 import {
   validateLayerMasks,
   type LayerSetInput,
@@ -537,6 +538,12 @@ export class ProjectService {
         )
           throw new Error(tr("errors.mee293dfecc"));
       }
+    for (const selection of project.editorSelections) {
+      await readColorMask(selection.mask, selection.width, selection.height);
+      const source = [...project.masters, ...project.assets, ...project.masterCandidates, ...project.qualityAssets, ...project.styleAssets].find(a=>a.id===selection.sourceId)!;
+      const bytes = await readLimited(await safePath(root, source.file), MAX_IMAGE_BYTES);
+      if (hashBytes(bytes)!==selection.sourceSha256) throw new Error(tr("canvas.invalid"));
+    }
     for (const set of project.semanticLayerSets) {
       const source = [...project.masters, ...project.assets].find(
         (a) => a.id === set.sourceId,
@@ -573,7 +580,8 @@ export class ProjectService {
       source.smartCutoutVersion !== 1 ||
       source.portablePacksVersion !== 1 ||
       !Object.hasOwn(source, "masterPalettes") ||
-      !Object.hasOwn(source, "semanticLayerSets")
+      !Object.hasOwn(source, "semanticLayerSets") ||
+      !Object.hasOwn(source, "editorSelections")
         ? bytes
         : undefined;
     this.legacyBackupName = versionOne
@@ -596,7 +604,9 @@ export class ProjectService {
                       ? "laceframe.v2.pre-portable-packs.backup.json"
                       : !Object.hasOwn(source, "masterPalettes")
                         ? "laceframe.v2.pre-color-consistency.backup.json"
-                        : "laceframe.v2.pre-semantic-layers.backup.json";
+                        : !Object.hasOwn(source, "semanticLayerSets")
+                          ? "laceframe.v2.pre-semantic-layers.backup.json"
+                          : "laceframe.v2.pre-editor-selections.backup.json";
     this.styleDrafts.clear();
     this.styleSemantics.clear();
     this.directory = root;
@@ -1217,6 +1227,16 @@ export class ProjectService {
         break;
       }
 
+      case "saveEditorSelection": {
+        if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
+        const source = await this.analysisSource(cmd.sourceId);
+        if (source.sha256 !== cmd.sourceSha256) throw new Error(tr("canvas.invalid"));
+        checkMask(cmd.weights, source.width * source.height);
+        if (p.editorSelections.length >= 256) throw new Error(tr("canvas.invalid"));
+        await this.prepareFeatureBackup("laceframe.v2.pre-editor-selections.backup.json", before=>!before.editorSelections.length);
+        p.editorSelections.push({ id: randomUUID(), sourceId:cmd.sourceId, sourceSha256:cmd.sourceSha256, name:cmd.name, path:cmd.path, width:source.width, height:source.height, revision:p.editorSelections.filter(r=>r.sourceId===cmd.sourceId).length+1, createdAt:new Date().toISOString(), mask:await this.storeColorMask(source.width,source.height,cmd.weights) });
+        break;
+      }
       case "saveSemanticLayers": {
         if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const set = await this.createLayerSet(cmd, p);
@@ -2932,6 +2952,17 @@ export class ProjectService {
         : source;
     if (!master) throw new Error(tr("layers.source"));
     return { source, master };
+  }
+  editorSelections(sourceId: string) {
+    this.qualitySourceOrStyle(sourceId);
+    return this.snapshot().project.editorSelections.filter(s=>s.sourceId===sourceId);
+  }
+  async editorSelection(id: string) {
+    const record=this.snapshot().project.editorSelections.find(s=>s.id===id);
+    if(!record) throw new Error(tr("canvas.invalid"));
+    const source=await this.analysisSource(record.sourceId);
+    if(source.sha256!==record.sourceSha256) throw new Error(tr("canvas.invalid"));
+    return {record,weights:await this.colorMask(record.mask,record.width,record.height)};
   }
   async semanticLayers(id: string) {
     const set = this.snapshot().project.semanticLayerSets.find(
