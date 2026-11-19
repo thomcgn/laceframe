@@ -131,6 +131,8 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
         name: "Character Layers",
         exact: true,
       });
+      // Start with empty layers, create first layer
+      await editor.getByRole("button", { name: "Layer hinzufügen", exact: true }).click();
       await expect(
         editor.getByLabel("Layername 1", { exact: true }),
       ).toBeVisible();
@@ -164,6 +166,8 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       await page.mouse.click(p.x, p.y);
     };
     const before = await fs.readFile(path.join(dir, "laceframe.json"));
+    // Rename first layer to "Haare" to match test expectations
+    await editor.getByLabel("Layername 1", { exact: true }).fill("Haare");
     expect(await count()).toBe(0);
     await editor.getByLabel("Pinselgröße", { exact: true }).fill("5");
     await click(150, 100);
@@ -195,6 +199,9 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     await editor.getByLabel("Sichtbar 1", { exact: true }).uncheck();
     await editor.getByLabel("Sichtbar 1", { exact: true }).check();
     await editor.getByLabel("Gesperrt 1", { exact: true }).uncheck();
+    // Add second layer "Haut"
+    await editor.getByRole("button", { name: "Layer hinzufügen", exact: true }).click();
+    await editor.getByLabel("Layername 2", { exact: true }).fill("Haut");
     await editor.getByRole("button", { name: "Haut", exact: true }).click();
     await editor
       .getByRole("button", { name: "Farbauswahl", exact: true })
@@ -231,6 +238,9 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       .click();
     await expect.poll(count).toBeGreaterThan(hairCount);
     const baseline = await count();
+    // Add third layer "Kleidung"
+    await editor.getByRole("button", { name: "Layer hinzufügen", exact: true }).click();
+    await editor.getByLabel("Layername 3", { exact: true }).fill("Kleidung");
     await editor.getByRole("button", { name: "Kleidung", exact: true }).click();
     await editor.getByRole("button", { name: "Pinsel", exact: true }).click();
     await editor.getByLabel("Pinselgröße", { exact: true }).fill("1");
@@ -250,35 +260,35 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       .getByRole("button", { name: "Layer hinzufügen", exact: true })
       .click();
     await editor
-      .getByLabel("Layername 8", { exact: true })
+      .getByLabel("Layername 4", { exact: true })
       .fill("Bart separat");
     await editor
-      .getByLabel("Layerkategorie 8", { exact: true })
+      .getByLabel("Layerkategorie 4", { exact: true })
       .selectOption("hair");
     await editor
-      .getByRole("button", { name: "Layer nach oben 8", exact: true })
+      .getByRole("button", { name: "Layer nach oben 4", exact: true })
       .click();
-    await expect(editor.getByLabel("Layername 7", { exact: true })).toHaveValue(
+    await expect(editor.getByLabel("Layername 3", { exact: true })).toHaveValue(
       "Bart separat",
     );
     await editor
-      .getByRole("button", { name: "Layer nach unten 7", exact: true })
+      .getByRole("button", { name: "Layer nach unten 3", exact: true })
       .click();
     page.once("dialog", (d) => d.accept());
     await editor
-      .getByRole("button", { name: "Layer entfernen 8", exact: true })
+      .getByRole("button", { name: "Layer entfernen 4", exact: true })
       .click();
-    await expect(editor.locator(".semantic-row")).toHaveCount(7);
+    await expect(editor.locator(".semantic-row")).toHaveCount(3);
     await editor
       .getByRole("button", { name: "Rückgängig", exact: true })
       .click();
-    await expect(editor.locator(".semantic-row")).toHaveCount(8);
+    await expect(editor.locator(".semantic-row")).toHaveCount(4);
     await editor
       .getByRole("button", { name: "Wiederholen", exact: true })
       .click();
-    await expect(editor.locator(".semantic-row")).toHaveCount(7);
+    await expect(editor.locator(".semantic-row")).toHaveCount(3);
     await editor
-      .getByRole("button", { name: "Haare / Bart", exact: true })
+      .getByRole("button", { name: "Haare", exact: true })
       .click();
     await editor
       .getByLabel("Layeransicht", { exact: true })
