@@ -30,3 +30,8 @@ artifacts/
 **/laceframe.v2.pre-color-consistency.backup.json
 
 native/spritefusion/target/
+
+# AutoDev runtime state
+.autodev-state.json
+.autodev-free-budget.json
+.autodev-free-budget.json.lock/
