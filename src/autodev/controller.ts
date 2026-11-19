@@ -555,7 +555,7 @@ Return a summary of what was implemented, files changed, and test results.`;
     try {
       // Use argument array: issue bodies may contain shell metacharacters.
       const { execFileSync } = await import("node:child_process");
-      return execFileSync("npx", ["kilo", "task", "--agent", agent, "--prompt", prompt], {
+      return execFileSync("kilo", ["run", "--agent", agent, prompt], {
         encoding: "utf-8", timeout: this.config.kilo?.taskTimeoutMs ?? 30 * 60 * 1000,
       });
     } catch (error) {
