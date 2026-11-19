@@ -111,6 +111,18 @@ Rezepte/Masks bleiben quellgebunden: Schutzmasken haben Quellmaße, Ergebnisasse
 
 ## Character Semantic Layers v1
 
+### Professional-Canvas-Migrationsmatrix (lokaler Ausgangsstand 19.11.2026)
+
+| Host | Vorhandener Kern / Tests | Integration / fachliche Grenze |
+| --- | --- | --- |
+| SemanticLayerEditor | PixelViewport, geteilte Pinsel, Lab-Seeds/Polygon, gepackte LayerHistory; semantic-layers/layer-editor | Erster gemeinsamer Auswahl-Host; Ergebnis explizit auf aktiven ungesperrten Layer anwenden, Konfliktprüfung bleibt. |
+| ColorRegionEditor / ColorConsistency | PixelViewport, RegionHistory, rekonstruierbare Farbseeds; color-consistency | Gemeinsame Auswahl als neue manuelle Basis; Farbalgorithmus unverändert. Master und Expression behalten eigene Quellkoordinaten. |
+| MaskEditor / Master / Expressions | Spezialkamera, Smart-Cutout mit separaten Schutz-/Entfernenrollen, MaskHistory; masking/smart-cutout | Gemeinsame Auswahl für manuelle Masken; automatische Freistellung und ihre Schutzrollen separat erhalten. Keine automatische Gleichsetzung der Maskenbedeutung. |
+| PixelEditEditor / Pixel Snap | PixelViewport-Paar, ColorRegionEditor, echte Rust-WASM; pixel-snap/raster-snap | Gemeinsame Auswahl über Schutz-/Farbregionen; Resampling mit Schutzmasken bleibt gesperrt. |
+| Relighting / Vergleich / Identität | PixelViewport beziehungsweise registrierte/unabhängige Vergleichskameras; relighting/identity-comparison | Gemeinsame Auswahl über bestehende Maskenadapter; spezialisierte Vergleichsregistrierung erhalten. |
+
+Persistenz gehört weiterhin ausschließlich ProjectService/typisierter Preload-IPC. MaskEditor, Regionen und Semantic Layers haben unterschiedliche Historien; Auswahlhistorie wird im gemeinsamen Kern isoliert, Hostübernahme bleibt eine fachliche Aktion. Bestehende Generierungs-, Freigabe- und Quantisierungspfade werden nicht ersetzt. Baseline: 61 betroffene Tests in vier Dateien bestanden; keine Desktop-/Live-Generierung in Phase 0.
+
 `semantic-layers.ts` definiert `semanticLayerSets` (SchemaVersion 2, leere Standardcollection für Altprojekte). Jedes Set bindet konkrete Quelle (`sourceId`, SHA, Maße), Figur und freigegebene Masterversion samt SHA. Neue Sets haben eigene UUID, fortlaufende Revision je Quelle und unveränderliche Maskenreferenzen. Masterquellen sind freigegebene `masters`, Expressions konkrete `assets`, einschließlich ungeprüfter nicht verworfener Kandidaten. Noch nicht freigegebene Masterkandidaten/Qualitätsableitungen erhalten keine irreführende Masterbindung; erst nach ihrer regulären Aktivierung als Master/Expression bearbeiten.
 
 Layer: stabile UUID innerhalb der Quellenrevisionen, eigener Name, Rolle `hair/skin/eyes/mouth/clothing/accessory/custom`, Sichtbarkeit, Sperre, Reihenfolge und PNG-Maske. Mehrere gleiche Rollen sind erlaubt. Masken liegen content-addressed/read-only im vorhandenen `assets/color-masks`-Store; keine zusätzlichen RGBA-Layerbilder und keine Rekonstruktion verdeckter Teile. Hauptnavigation, Generierung, Auth und Farbkorrekturalgorithmen bleiben unverändert.
