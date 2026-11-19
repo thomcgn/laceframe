@@ -155,7 +155,18 @@ export function SemanticLayerEditor({
       pixels = original.current,
       area = pendingRect.current;
     pendingRect.current = undefined;
-    if (!source || !ctx || !pixels || !area) return;
+    if (!source) {
+      return;
+    }
+    if (!ctx) {
+      return;
+    }
+    if (!pixels) {
+      return;
+    }
+    if (!area) {
+      return;
+    }
     const layers = working.current ?? rows,
       x0 = Math.max(0, Math.floor(area.x0)),
       y0 = Math.max(0, Math.floor(area.y0)),
@@ -231,7 +242,8 @@ export function SemanticLayerEditor({
     return () => {
       live = false;
       worker.current?.terminate();
-      cancelAnimationFrame(frame.current);
+      if (frame.current) cancelAnimationFrame(frame.current);
+      frame.current = 0;
     };
   }, [sourceId]);
   useEffect(() => {
