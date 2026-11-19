@@ -1,7 +1,7 @@
 import { tr } from "../../shared/locales/index";
 import { useCanvasFocus, canvasOwnsFocus } from "./canvas-focus";
 import { anchoredPan, fitScale } from "./editor-geometry";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, type Ref, type ReactNode } from "react";
 /** Camera only: native canvas pixels and export calculations are never changed. */
 export function PixelViewport({
   width,
@@ -17,7 +17,11 @@ export function PixelViewport({
   cameraHeight = height,
   panMode = false,
   showHandTool = true,
+  controls,
+  onScale,
 }: {
+  controls?: Ref<{ fit: () => void; zoom: (scale: number) => void }>;
+  onScale?: (scale: number) => void;
   panMode?: boolean;
   showHandTool?: boolean;
   hideTools?: boolean;
@@ -62,6 +66,7 @@ export function PixelViewport({
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+  useEffect(()=>{const blur=()=>{held.current=false;const d=drag.current;drag.current=null;if(d&&ref.current?.hasPointerCapture(d.id))ref.current.releasePointerCapture(d.id);};window.addEventListener("blur",blur);return()=>window.removeEventListener("blur",blur);},[]);
   const fit = fitScale(size, { width: cameraWidth, height: cameraHeight });
   const scale = zoom ?? localZoom ?? fit;
   const setZoom = (
@@ -82,6 +87,12 @@ export function PixelViewport({
     if (onZoom) onZoom(next);
     else setLocalZoom(next);
   };
+  const reset = () => {
+    if (onFit) onFit(); else if (onZoom) onZoom(fit); else setLocalZoom(undefined);
+    setPan({x:0,y:0});
+  };
+  useImperativeHandle(controls,()=>({fit:reset,zoom:setZoom}));
+  useEffect(()=>{onScale?.(scale);},[scale]);
   const wheel = useRef<(event: WheelEvent) => void>(() => {});
   wheel.current = (event) => {
     if (!canvasOwnsFocus(ref.current)) return;
@@ -222,6 +233,7 @@ export function PixelViewport({
         onPointerUp={() => {
           drag.current = null;
         }}
+        onLostPointerCapture={() => { drag.current = null; }}
         onPointerCancel={() => {
           drag.current = null;
         }}
