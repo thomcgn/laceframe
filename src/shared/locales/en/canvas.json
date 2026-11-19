@@ -58,6 +58,7 @@
   "save": "Save selection revision",
   "saved": "Saved selections",
   "load": "Load selection and path",
+  "delete": "Delete selection revision",
   "cancel": "Cancel calculation",
   "undo": "Undo",
   "redo": "Redo",
@@ -76,5 +77,6 @@
   "anchorCoordinates": "Edit anchor and handle coordinates",
   "anchor": "Anchor",
   "inHandle": "Incoming handle",
-  "outHandle": "Outgoing handle"
+  "outHandle": "Outgoing handle",
+  "limit": "Shared selection supports up to 4,194,304 pixels; existing mask tools remain available."
 }

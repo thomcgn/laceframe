@@ -538,11 +538,15 @@ export class ProjectService {
         )
           throw new Error(tr("errors.mee293dfecc"));
       }
+    const verifiedSelectionSources=new Set<string>();
     for (const selection of project.editorSelections) {
       await readColorMask(selection.mask, selection.width, selection.height);
       const source = [...project.masters, ...project.assets, ...project.masterCandidates, ...project.qualityAssets, ...project.styleAssets].find(a=>a.id===selection.sourceId)!;
-      const bytes = await readLimited(await safePath(root, source.file), MAX_IMAGE_BYTES);
-      if (hashBytes(bytes)!==selection.sourceSha256) throw new Error(tr("canvas.invalid"));
+      if(!verifiedSelectionSources.has(source.id)){
+        const bytes = await readLimited(await safePath(root, source.file), MAX_IMAGE_BYTES);
+        if (hashBytes(bytes)!==selection.sourceSha256) throw new Error(tr("canvas.invalid"));
+        verifiedSelectionSources.add(source.id);
+      }
     }
     for (const set of project.semanticLayerSets) {
       const source = [...project.masters, ...project.assets].find(
@@ -1227,6 +1231,23 @@ export class ProjectService {
         break;
       }
 
+      case "deleteEditorSelection": {
+        if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
+        const index = p.editorSelections.findIndex(s => s.id === cmd.id);
+        if (index < 0) throw new Error(tr("canvas.invalid"));
+        const [removed] = p.editorSelections.splice(index, 1);
+        const other = p.editorSelections.some(s => s.mask.file === removed.mask.file);
+        if (!other) {
+          const file = await safePath(this.directory, removed.mask.file);
+          if ((await fs.lstat(file)).isFile() && !(await fs.lstat(file)).isSymbolicLink()) {
+            if (hashBytes(await readLimited(file, MAX_IMAGE_BYTES)) === removed.mask.sha256) {
+              if (process.platform === "win32") await fs.chmod(file, 0o600);
+              await fs.unlink(file);
+            }
+          }
+        }
+        break;
+      }
       case "saveEditorSelection": {
         if (this.staged) throw new Error(tr("errors.mf47c9d482e"));
         const source = await this.analysisSource(cmd.sourceId);
@@ -2952,6 +2973,13 @@ export class ProjectService {
         : source;
     if (!master) throw new Error(tr("layers.source"));
     return { source, master };
+  }
+  async selectionReferences(sourceId:string){
+    this.qualitySourceOrStyle(sourceId);
+    const latest=this.snapshot().project.semanticLayerSets.filter(s=>s.sourceId===sourceId).at(-1);
+    if(!latest)return [];
+    const loaded=await this.semanticLayers(latest.id);
+    return loaded.layers.map(({id,name,weights})=>({id,name,weights}));
   }
   editorSelections(sourceId: string) {
     this.qualitySourceOrStyle(sourceId);

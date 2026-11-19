@@ -121,9 +121,24 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
     const selectedCount=PNG.sync.read(savedBytes).data.filter((_,i)=>i%4===0).filter(Boolean).length;
     expect(selectedCount).toBeGreaterThan(1000);expect(selectedCount).toBeLessThan(40000);
     await canvas.click({position:{x:20,y:20}});await page.keyboard.press("Control+d");await selected(0);
+    await editor.getByLabel("Symmetrische Tangenten",{exact:true}).uncheck();
     await editor.getByLabel("Gespeicherte Auswahlen",{exact:true}).selectOption(saved.id);await tool("Auswahl und Pfad laden");await selected(selectedCount);
+    await expect(editor.getByLabel("Symmetrische Tangenten",{exact:true})).toBeChecked();
+    // Delete the saved revision: the mask file must be removed and the list must drop.
+    await tool("Auswahlrevision löschen");
+    await expect.poll(async()=>(await manifest()).editorSelections.length).toBe(0);
+    await expect(editor.getByLabel("Gespeicherte Auswahlen",{exact:true}).locator("option").count()).toBe(1);
+    // Native hidden-menu accelerators must yield to the focused editor without opening DevTools.
+    await canvas.click({position:{x:20,y:20}});
+    await page.keyboard.press("Control+Shift+i");await selected(221184-selectedCount);
+    expect(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.isDevToolsOpened())).toBe(false);
+    await page.keyboard.press("Control+z");await selected(selectedCount);
+    await page.keyboard.press("Control+Shift+z");await selected(221184-selectedCount);
+    await page.keyboard.press("Control+z");await selected(selectedCount);
+    const invalidContext=await page.evaluate(()=>window.laceframe.editingContext("invalid"));expect(invalidContext.ok).toBe(false);
     // Text input never activates tool shortcuts. Wheel focus belongs to the viewport only.
-    await editor.getByLabel("Name der Auswahl",{exact:true}).fill("brush");await page.keyboard.press("b");
+    const nameField=editor.getByLabel("Name der Auswahl",{exact:true});
+    await nameField.fill("brush");await page.keyboard.press("End");await page.keyboard.type("X");await page.keyboard.press("Control+z");await expect(nameField).toHaveValue("brush");await page.keyboard.press("b");
     await expect(editor.getByRole("button",{name:"Bézier-Pfad",exact:true})).toHaveAttribute("aria-pressed","true");
     for(const [width,height] of [[960,720],[1280,800],[1920,1080]]){
       await app.evaluate(({BrowserWindow},{width,height})=>BrowserWindow.getAllWindows()[0].setContentSize(width,height),{width,height});
@@ -133,15 +148,38 @@ const { reviewImport } = require("./historical-master-fixture.cjs");
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
       await page.screenshot({path:path.join(screenshots,`professional-${width}.png`)});
     }
+    // Canvas-only wheel, cursor anchoring and temporary pan never alter selection pixels.
+    await tool("Pinsel");const view=editor.getByLabel("Bildfläche · Alt ziehen zum Verschieben",{exact:true});
+    await editor.getByLabel("Name der Auswahl",{exact:true}).click();
+    let zoomBefore=await editor.getByLabel("Bildzoom",{exact:true}).innerText();
+    let frameBox=await view.boundingBox();await page.mouse.move(frameBox.x+frameBox.width/2,frameBox.y+frameBox.height/2);await page.mouse.wheel(0,-120);await expect(editor.getByLabel("Bildzoom",{exact:true})).toHaveText(zoomBefore);
+    await view.focus();await page.mouse.wheel(0,-120);await expect(editor.getByLabel("Bildzoom",{exact:true})).not.toHaveText(zoomBefore);
+    const stage=editor.locator(".pixel-camera-stage"),beforePan=await stage.getAttribute("style");
+    await page.keyboard.down("Space");await expect(canvas).toHaveCSS("cursor","grab");await drag(200,110,225,120);await page.keyboard.up("Space");await expect(stage).not.toHaveAttribute("style",beforePan);await selected(selectedCount);
+    await view.focus();await page.keyboard.press("f");await selected(selectedCount);
+    // Cancel an actual captured pointer gesture: preview bytes and committed selection must return unchanged.
+    const overlay=editor.locator("canvas.selection-overlay");
+    const overlayHash=()=>overlay.evaluate(async c=>Array.from(new Uint8Array(await window.crypto.subtle.digest("SHA-256",c.getContext("2d").getImageData(0,0,c.width,c.height).data))).join(","));
+    const beforeCancelledStroke=await overlayHash();await operation("add");
+    await canvas.evaluate(c=>c.addEventListener("pointerdown",e=>{window.__selectionPointer=e.pointerId;},{once:true}));
+    {const b=await canvas.boundingBox();await page.mouse.move(b.x+90/512*b.width,b.y+180/640*b.height);await page.mouse.down();await page.mouse.move(b.x+110/512*b.width,b.y+180/640*b.height,{steps:4});}
+    await canvas.dispatchEvent("pointercancel",{pointerId:await page.evaluate(()=>window.__selectionPointer)});await page.mouse.up();
+    await selected(selectedCount);await expect.poll(overlayHash).toBe(beforeCancelledStroke);
     // Actual shape and pixel-brush tools, then restore the saved curve before committing a layer.
     await tool("Ellipse");await operation("replace");await drag(120,70,220,150);await expect(editor.locator("footer")).toContainText(/[1-9]\d* Pixel ausgewählt/);
-    await tool("Freihand-Lasso");await drag(120,70,220,150);await page.keyboard.press("Control+z");
+    await tool("Freihand-Lasso");
+    {const box=await canvas.boundingBox();const to=async(x,y)=>page.mouse.move(box.x+x/512*box.width,box.y+y/640*box.height,{steps:6});await to(120,70);await page.mouse.down();await to(220,70);await to(220,150);await to(120,150);await page.mouse.up();}
+    await expect(editor.locator("footer")).toContainText(/[1-9]\d* Pixel ausgewählt/);await page.keyboard.press("Control+z");
     await tool("Polygon-Lasso");await click(120,70);await click(220,70);await click(220,150);await click(120,150);await page.keyboard.press("Backspace");await click(120,150);await page.keyboard.press("Enter");await tool("Pfad als Auswahl übernehmen");
-    await tool("Auswahl aufheben");await tool("Pinsel");await editor.getByLabel("Quadratische Spitze",{exact:true}).check();
+    await tool("Auswahl aufheben");await tool("Pinsel");await operation("add");await editor.getByLabel("Quadratische Spitze",{exact:true}).check();
     for(let i=0;i<20;i++)await click(150.5+i,100.5);await selected(20);
     for(let i=0;i<20;i++)await tool("Rückgängig");await selected(0);
     for(let i=0;i<20;i++)await tool("Wiederholen");await selected(20);
     await tool("Radierer");await editor.getByLabel("Quadratische Spitze",{exact:true}).check();await click(150.5,100.5);await selected(19);
+    await tool("Pinsel");await operation("replace");await click(150.5,105.5);await selected(1);
+    await operation("intersect");await click(151.5,105.5);await selected(0);
+    await operation("add");await click(150.5,105.5);await selected(1);
+    await operation("subtract");await click(150.5,105.5);await selected(0);
     await tool("Pipette");await click(100,100);await expect(editor.getByText(/#503c32/)).toBeVisible();
     await tool("Auswahl und Pfad laden");await selected(selectedCount);
     await tool("Auswahl als Maske übernehmen");await expect(editor).not.toBeVisible();

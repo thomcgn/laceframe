@@ -31,8 +31,11 @@ import type {
 } from "./domain";
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface LaceframeBridge {
+  selectionReferences(sourceId:string):Promise<Result<{id:string;name:string;weights:Uint8Array}[]>>;
+  editingContext(active:boolean):Promise<Result<null>>;
   editorSelections(sourceId:string):Promise<Result<SavedSelection[]>>;
   editorSelection(id: string): Promise<Result<{record: SavedSelection; weights: Uint8Array}>>;
+  deleteEditorSelection(id: string): Promise<Result<Snapshot>>;
   semanticLayers(
     id: string,
   ): Promise<Result<{ set: CharacterLayerSet; layers: LayerDraft[] }>>;

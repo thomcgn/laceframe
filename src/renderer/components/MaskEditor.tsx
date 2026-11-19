@@ -34,6 +34,7 @@ import {
   type MaskHistory,
   type Point,
 } from "../../shared/masking";
+import { EDITING_MAX_PIXELS } from "../../shared/editing";
 type Mask = Project["masks"][number];
 export function MaskEditor({
   master,
@@ -621,7 +622,8 @@ export function MaskEditor({
           {automatic && <label>{tr("canvas.maskTarget")}<select aria-label={tr("canvas.maskTarget")} value={selectionTarget} onChange={e=>setSelectionTarget(e.target.value as typeof selectionTarget)}>
             <option value="protected">{tr("canvas.protected")}</option><option value="forced">{tr("canvas.forced")}</option><option value="manual">{tr("canvas.retained")}</option>
           </select></label>}
-          <button disabled={!ready||saving||master.width*master.height>4_194_304||automatic&&!smart.ready} onClick={()=>setSharedSelection(true)}>{tr("canvas.open")}</button>
+          {master.width*master.height>EDITING_MAX_PIXELS&&<small>{tr("canvas.limit")}</small>}
+          <button disabled={!ready||saving||master.width*master.height>EDITING_MAX_PIXELS||automatic&&!smart.ready} onClick={()=>setSharedSelection(true)}>{tr("canvas.open")}</button>
         </div>
         <p className="editor-description">
           {contextLabel?.description ??

@@ -1,3 +1,4 @@
+import { editingAccelerator } from "../shared/editing";
 import { CodexStyleAnalysisProvider } from "./services/providers/codexStyleAnalysis";
 import {
   styleDraftImportSchema,
@@ -50,6 +51,7 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 let window: BrowserWindow;
+let editingShortcuts=false;
 const service = new ProjectService(decodeImage, decodeAssetPixels);
 const generation = new GenerationController(
   service,
@@ -91,6 +93,7 @@ function handle<T>(
               "style:cancel",
               "generation:cancel",
               "generation:providers",
+              "editor:shortcuts",
               "image:preview",
               "image:quality",
             ].includes(channel)
@@ -120,6 +123,7 @@ function rendererURL() {
     : "laceframe://app/index.html";
 }
 function registerIPC(preferences: AppPreferences) {
+  handle("editor:shortcuts", input=>{editingShortcuts=z.boolean().parse(input);return null;});
   handle("app:preferences", (input) => {
     z.undefined().parse(input);
     return preferences.get();
@@ -279,8 +283,10 @@ function registerIPC(preferences: AppPreferences) {
   handle("image:smart-cutout-recipe", (input) =>
     service.smartCutoutRecipe(idSchema.parse(input)),
   );
+  handle("image:selection-references", (input)=>service.selectionReferences(idSchema.parse(input)));
   handle("image:editor-selections", (input) => service.editorSelections(idSchema.parse(input)));
   handle("image:editor-selection", (input) => service.editorSelection(idSchema.parse(input)));
+  handle("image:delete-editor-selection", (input) => service.command({ type: "deleteEditorSelection", id: idSchema.parse(input) }));
   handle("image:semantic-layers", (input) =>
     service.semanticLayers(idSchema.parse(input)),
   );
@@ -444,6 +450,7 @@ function registerIPC(preferences: AppPreferences) {
   handle("image:preview", (input) => service.preview(idSchema.parse(input)));
 }
 function createWindow() {
+  editingShortcuts=false;
   window = new BrowserWindow({
     width: 1440,
     height: 960,
@@ -461,6 +468,9 @@ function createWindow() {
     },
   });
   window.setMenuBarVisibility(false);
+  window.webContents.on("before-input-event", (_event,input)=>window.webContents.setIgnoreMenuShortcuts(editingAccelerator(editingShortcuts,input)));
+  window.webContents.on("render-process-gone",()=>{editingShortcuts=false;});
+  window.webContents.on("did-start-navigation",()=>{editingShortcuts=false;window.webContents.setIgnoreMenuShortcuts(false);});
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event) => {
     // Vite can navigate to its own entry URL while preparing dependencies.

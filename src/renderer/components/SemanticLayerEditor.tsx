@@ -941,7 +941,7 @@ export function SemanticLayerEditor({
           </>
         )}
         {sharedSelection && source && current && <SelectionEditor
-          sourceId={sourceId} initialMask={current.weights}
+          sourceId={sourceId} initialMask={current.weights} includeStoredReferences={false}
           allowedMask={blockedPixels(rows,active,source.width*source.height).map(v=>v?0:255)}
           references={rows.map(r=>({id:r.id,name:r.name,weights:r.weights}))}
           onApply={weights=>change(rows.map(r=>r.id===active?{...r,weights:new Uint8Array(weights)}:r))}

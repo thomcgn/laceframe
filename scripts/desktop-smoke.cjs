@@ -106,6 +106,9 @@ const { createHash } = require("node:crypto");
         "cutoutSource",
         "discardImage",
         "discardStyleImage",
+        "editingContext",
+        "editorSelection",
+        "editorSelections",
         "exportAsset",
         "exportPack",
         "generationStatus",
@@ -123,6 +126,8 @@ const { createHash } = require("node:crypto");
         "relightRecipe",
         "relightSource",
         "revealMaster",
+        "selectionReferences",
+        "semanticLayers",
         "setLanguage",
         "smartCutoutRecipe",
         "stageImage",
@@ -291,7 +296,7 @@ const { createHash } = require("node:crypto");
     await page
       .getByRole("button", { name: "Figur erstellen", exact: true })
       .click();
-    await page.getByRole("button", { name: /Characters$/ }).click();
+    await nav(page, "Characters");
     await expect(
       page.getByRole("heading", { name: "WebP Probe", exact: true }),
     ).toBeVisible();
@@ -334,11 +339,11 @@ const { createHash } = require("node:crypto");
     await nav(page, "Studio");
     await require("./smoke-ui.cjs").studioMode(page, "expression");
     await studioStep(page, "Erzeugen");
-    await expect(image(page, "Create · Masterreferenz")).toBeVisible();
+    await expect(image(page, "Ada Voss · Master V1", {exact:true})).toBeVisible();
     await studioStep(page, "Auswählen");
     await expect(field(page, "Studio Anbieter", { exact: true })).toBeVisible();
     await studioStep(page, "Erzeugen");
-    await expect(image(page, "Create · Ergebnisvorschau")).toHaveCount(0);
+    await expect(image(page, "Neuer Expressionentwurf · ungeprüft")).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Ergebnis importieren …", exact: true }),
     ).toBeEnabled();
@@ -526,7 +531,7 @@ const { createHash } = require("node:crypto");
       );
     };
     await dropResult();
-    await expect(image(page, "Create · Ergebnisvorschau")).toBeVisible();
+    await expect(image(page, "Neuer Expressionentwurf · ungeprüft")).toBeVisible();
     await studioStep(page, "Freigeben");
     await page
       .getByRole("button", { name: "Als Expression freigeben", exact: true })
@@ -664,7 +669,7 @@ const { createHash } = require("node:crypto");
     ).toEqual(before);
     await nav(page, "Studio");
     await studioExpert(page);
-    await expect(image(page, "Create · Ergebnisvorschau")).toBeVisible();
+    await expect(image(page, "Neuer Expressionentwurf · ungeprüft")).toBeVisible();
     await expect(field(page, "Arbeits-Prompt", { exact: true })).toHaveValue(
       /VOCAL ACTION .*: shouting/,
     );

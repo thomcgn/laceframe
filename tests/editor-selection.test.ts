@@ -78,3 +78,33 @@ it.each(["path", "hash", "dimensions", "symlink", "foreign-source"])("rejects %s
     await expect(s.open(root)).rejects.toThrow();
     expect(s.snapshot().project).toEqual(before);
 });
+it("offers only exact-source committed semantic masks to other editors, with verified immutable bytes",async()=>{
+  const weights=new Uint8Array(64);weights[20]=255;const layerId=randomUUID();
+  await s.command({type:"saveSemanticLayers",sourceId:id,sourceSha256:sha,layers:[{id:layerId,name:"Hair source",role:"hair",weights,visible:true,locked:false,order:0}]});
+  const refs=await s.selectionReferences(id);expect(refs).toHaveLength(1);expect(refs[0]).toEqual({id:layerId,name:"Hair source",weights});
+  const project=s.snapshot().project,staged=await s.stage(encodePixels(pixels),"expression.png");
+  await s.command({type:"importCandidate",characterId:project.selectedCharacterId!,variantId:project.variants[0].id,action:"silent",token:staged.token});
+  expect(await s.selectionReferences(s.snapshot().project.assets[0].id)).toEqual([]);
+  const file=path.join(root,project.semanticLayerSets[0].layers[0].mask.file);await fs.chmod(file,0o600);await fs.writeFile(file,"corrupt");
+  await expect(s.selectionReferences(id)).rejects.toThrow();await expect(s.selectionReferences(randomUUID())).rejects.toThrow();
+});
+it("deletes saved selection revisions and removes orphaned mask bytes",async()=>{
+  await save();
+  const before=s.snapshot().project.editorSelections;
+  expect(before).toHaveLength(1);
+  const maskPath=path.join(root,before[0].mask.file);
+  expect(await fs.readFile(maskPath)).toBeInstanceOf(Buffer);
+  await s.command({type:"deleteEditorSelection",id:before[0].id});
+  expect(s.snapshot().project.editorSelections).toHaveLength(0);
+  await expect(fs.readFile(maskPath)).rejects.toThrow();
+  // Reload from disk: the manifest no longer references the deleted mask, so open succeeds.
+  await s.open(root);
+  expect(s.snapshot().project.editorSelections).toHaveLength(0);
+});
+it("rejects delete of unknown or already-deleted selection ids",async()=>{
+  await save();
+  await expect(s.command({type:"deleteEditorSelection",id:randomUUID()})).rejects.toThrow();
+  const before=s.snapshot().project.editorSelections[0];
+  await s.command({type:"deleteEditorSelection",id:before.id});
+  await expect(s.command({type:"deleteEditorSelection",id:before.id})).rejects.toThrow();
+});

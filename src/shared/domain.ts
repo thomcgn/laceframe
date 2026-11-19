@@ -1190,6 +1190,7 @@ export const commandSchema = z.discriminatedUnion("type", [
     .strict(),
   saveLayerSetSchema.extend({ type: z.literal("saveSemanticLayers") }),
   savedSelectionInputSchema.extend({ type: z.literal("saveEditorSelection") }),
+  z.object({ type: z.literal("deleteEditorSelection"), id: idSchema }).strict(),
   paletteInputSchema.extend({ type: z.literal("saveMasterPalette") }),
   correctionInputSchema.extend({ type: z.literal("createColorCorrection") }),
   relightInputSchema.extend({ type: z.literal("createRelighting") }),

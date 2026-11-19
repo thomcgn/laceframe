@@ -121,3 +121,22 @@ it("central shortcuts honor text inputs, modifiers and platform command keys",as
  expect(editorShortcut(event("a",mod),false)).toBe("all");expect(editorShortcut(event("i",{...mod,shiftKey:true}),false)).toBe("invert");
  }
 });
+it("only the active editor's selection/undo keys bypass native menus; copy, quit and close keep native behavior",async()=>{
+  const {editingAccelerator}=await import("../src/shared/editing");
+  for(const flags of [{control:true},{meta:true}]){
+   expect(editingAccelerator(true,{key:"I",shift:true,...flags})).toBe(true);
+   expect(editingAccelerator(true,{key:"Z",...flags})).toBe(true);
+   expect(editingAccelerator(false,{key:"I",shift:true,...flags})).toBe(false);
+   for(const key of ["c","v","q","w","r"])expect(editingAccelerator(true,{key,...flags})).toBe(false);
+  }
+  expect(editingAccelerator(true,{key:"z",alt:true,control:true})).toBe(false);
+});
+it("builds an alpha mask from source pixels and merges committed semantic layers by role",async()=>{
+  const {alphaMask,semanticRegionMask}=await import("../src/shared/editing");
+  const p=pixels(2,2);
+  p.data.set([0,0,0,255,255,255,255,128,255,0,0,0,0,255,0,255]);
+  expect(alphaMask(p)).toEqual(m(255,255,0,255));
+  const layers=[{role:"hair",weights:m(255,0,0,0)},{role:"hair",weights:m(0,255,0,0)},{role:"skin",weights:m(0,0,255,0)}];
+  expect(semanticRegionMask(layers,"hair")).toEqual(m(255,255,0,0));
+  expect(semanticRegionMask(layers,"skin")).toEqual(m(0,0,255,0));
+});

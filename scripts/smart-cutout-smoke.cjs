@@ -54,9 +54,7 @@ const fs = require("node:fs/promises"),
     page.on("worker", (w) => {
       if (w.url().includes("smart-cutout.worker")) workerUrl = w.url();
     });
-    await expect(
-      page.getByRole("button", { name: "Neues Projekt", exact: true }),
-    ).toBeVisible({ timeout: 25000 });
+    await require("./smoke-ui.cjs").projectSelection(page);
   };
   const dialog = () =>
     page.getByRole("dialog", { name: "Freistellungsmaske", exact: true });
@@ -146,6 +144,8 @@ const fs = require("node:fs/promises"),
     await expect(
       page.getByRole("heading", { name: "Protected portrait", exact: true }),
     ).toBeVisible();
+    await require("./smoke-ui.cjs").nav(page,"Library");
+    await page.getByLabel("Bibliothek Asset",{exact:true}).selectOption((await manifest()).masters[0].id);
     let quality = page.locator('[data-testid="asset-quality"]:visible').first();
     await expect(
       quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),
@@ -986,6 +986,8 @@ const fs = require("node:fs/promises"),
     await expect(
       page.getByRole("heading", { name: "Protected portrait", exact: true }),
     ).toBeVisible();
+    await require("./smoke-ui.cjs").nav(page,"Library");
+    await page.getByLabel("Bibliothek Asset",{exact:true}).selectOption(first.id);
     quality = page.locator('[data-testid="asset-quality"]:visible').first();
     await expect(
       quality.getByRole("heading", { name: "Bild bearbeiten", exact: true }),

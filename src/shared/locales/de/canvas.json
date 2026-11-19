@@ -58,6 +58,7 @@
   "save": "Auswahlrevision speichern",
   "saved": "Gespeicherte Auswahlen",
   "load": "Auswahl und Pfad laden",
+  "delete": "Auswahlrevision löschen",
   "cancel": "Berechnung abbrechen",
   "undo": "Rückgängig",
   "redo": "Wiederholen",
@@ -76,5 +77,6 @@
   "anchorCoordinates": "Anker und Tangenten präzise bearbeiten",
   "anchor": "Ankerpunkt",
   "inHandle": "Eingehende Tangente",
-  "outHandle": "Ausgehende Tangente"
+  "outHandle": "Ausgehende Tangente",
+  "limit": "Gemeinsame Auswahl bis 4.194.304 Pixel; die vorhandenen Maskenwerkzeuge bleiben verfügbar."
 }

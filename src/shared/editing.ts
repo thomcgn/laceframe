@@ -235,3 +235,43 @@ export function redoEditing(h: EditingHistory): EditingHistory { return h.future
 export const savedSelectionInputSchema = z.object({ sourceId: z.uuid(), sourceSha256: z.string().regex(/^[a-f0-9]{64}$/), name: z.string().trim().min(1).max(120), weights: z.instanceof(Uint8Array).refine(v => v.length <= EDITING_MAX_PIXELS), path: vectorPathSchema }).strict();
 export const savedSelectionSchema = savedSelectionInputSchema.omit({ weights: true }).extend({ id: z.uuid(), width: z.number().int().positive(), height: z.number().int().positive(), revision: z.number().int().positive(), createdAt: z.iso.datetime(), mask: z.object({ file: z.string(), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict() }).strict().refine(v => v.width * v.height <= EDITING_MAX_PIXELS);
 export type SavedSelection = z.infer<typeof savedSelectionSchema>;
+/** Forward these accelerators to the active editor DOM instead of Electron's hidden menu. */
+export function editingAccelerator(active:boolean,input:{key:string;control?:boolean;meta?:boolean;shift?:boolean;alt?:boolean}) {
+ const key=input.key.toLowerCase();
+ return active&&!input.alt&&!!(input.control||input.meta)&&(["z","a","d"].includes(key)||key==="i"&&!!input.shift);
+}
+/** Build a full-alpha selection mask from source pixels (alpha >= 128). */
+export function alphaMask(source: ColorPixels): Uint8Array {
+    const n = selectionSize(source.width, source.height);
+    if (source.data.length !== n * 4)
+        throw new Error(tr("canvas.invalid"));
+    const out = new Uint8Array(n);
+    for (let i = 0; i < n; i++)
+        out[i] = source.data[i * 4 + 3] >= 128 ? 255 : 0;
+    return out;
+}
+/** Maximum-merge of committed semantic layer masks for a given role. */
+export function semanticRegionMask(layers: { role: string; weights: Uint8Array }[], role: string): Uint8Array {
+    if (!layers.length)
+        throw new Error(tr("canvas.invalid"));
+    const n = layers[0].weights.length;
+    const out = new Uint8Array(n);
+    for (const layer of layers) {
+        if (layer.role !== role)
+            continue;
+        checkMask(layer.weights, n);
+        for (let i = 0; i < n; i++)
+            if (layer.weights[i] > out[i])
+                out[i] = layer.weights[i];
+    }
+    return out;
+}
+/** Select pixels covered by an existing layer mask, optionally constrained to alpha. */
+export function layerMaskSelection(weights: Uint8Array, source?: ColorPixels): Uint8Array {
+    if (source) {
+        const n = selectionSize(source.width, source.height);
+        checkMask(weights, n);
+        return constrainSelection(weights, source);
+    }
+    return new Uint8Array(weights);
+}
