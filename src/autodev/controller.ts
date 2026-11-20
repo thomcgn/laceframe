@@ -193,11 +193,7 @@ export class AutodevController {
       return;
     }
 
-    // A persisted directory lock prevents concurrent controllers from racing
-    // on the Git index and the same GitHub issue. Stale locks require inspection.
-    try { fs.mkdirSync(CONTROLLER_LOCK); } catch {
-      throw new Error("AutoDev controller already running or stale lock present; inspect before retrying");
-    }
+    this.acquireControllerLock();
     this.isRunning = true;
     this.log("Starting autodev controller");
 
@@ -209,7 +205,17 @@ export class AutodevController {
       }
 
       while (true) {
-        // Pause before issue selection, avoiding mutations when a cooldown is active.
+        // Do not wait for quota when all approved issues are already failed/blocked.
+        const eligible = (await this.fetchApprovedIssues()).some(issue =>
+          !issue.labels.includes(this.config.labels.blocked) &&
+          !issue.labels.includes(this.config.labels.implemented) &&
+          !this.state.processedIssues.includes(issue.number) &&
+          !this.state.failedIssues.includes(issue.number) &&
+          this.areDependenciesSatisfied(issue));
+        if (!eligible) {
+          this.log("No eligible approved issues available; not waiting for model budget");
+          break;
+        }
         await this.waitForFreeBudget();
         const issue = await this.selectNextIssue();
         if (!issue) {
@@ -255,12 +261,91 @@ export class AutodevController {
         this.log(`RATE LIMIT PAUSE until ${new Date(error.until).toISOString()}. Inspect working tree before resuming interrupted issue.`, "warn");
         return;
       }
-      this.log(`Controller error: ${error}. State and working tree preserved; manual reconciliation required.`, "error");
+      if (error instanceof KiloExecutionError && this.state.currentIssue !== null) {
+        // Infrastructure failure is not an issue failure. Requeue only if we can
+        // prove the builder did not alter the tree or HEAD.
+        const clean = execFileSync("git", ["status", "--porcelain"], { encoding: "utf-8" }).trim() === "";
+        const sameHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8" }).trim() === this.initialHead;
+        if (clean && sameHead) {
+          const issueNumber = this.state.currentIssue;
+          execFileSync("gh", ["issue", "edit", String(issueNumber), "--repo", this.config.repo,
+            "--remove-label", this.config.labels.inProgress], { encoding: "utf-8" });
+          this.state.currentIssue = null;
+          this.state.reviewIteration = 0;
+          this.saveState();
+          this.log(`Kilo infrastructure failure; issue #${issueNumber} released for a later retry`, "warn");
+        } else {
+          this.log("Kilo failed after possible file modifications; state retained for manual review", "warn");
+        }
+      }
+      this.log(`Controller error: ${error}. State and working tree preserved if reconciliation is needed.`, "error");
       throw error;
     } finally {
       this.isRunning = false;
-      fs.rmdirSync(CONTROLLER_LOCK);
+      this.releaseControllerLock();
       this.log("Controller stopped");
+    }
+  }
+
+  private acquireControllerLock(): void {
+    const ownerFile = path.join(CONTROLLER_LOCK, "pid");
+    try {
+      fs.mkdirSync(CONTROLLER_LOCK);
+    } catch {
+      // Only reclaim locks with a trustworthy PID. An old-format empty lock
+      // cannot prove whether its owner is alive and must be inspected manually.
+      if (!fs.existsSync(ownerFile)) {
+        throw new Error(`AutoDev lock ${CONTROLLER_LOCK} has no owner PID; inspect running processes before removing it`);
+      }
+      const owner = Number(fs.readFileSync(ownerFile, "utf-8").trim());
+      if (!Number.isSafeInteger(owner) || owner <= 0) {
+        throw new Error("Invalid AutoDev lock owner; manual inspection required");
+      }
+      try {
+        process.kill(owner, 0);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+        // The recorded owner no longer exists. Do not delete unknown files.
+        fs.unlinkSync(ownerFile);
+        fs.rmdirSync(CONTROLLER_LOCK);
+        fs.mkdirSync(CONTROLLER_LOCK);
+        fs.writeFileSync(ownerFile, String(process.pid));
+        return;
+      }
+      throw new Error(`AutoDev controller already running (PID ${owner})`);
+    }
+    fs.writeFileSync(ownerFile, String(process.pid));
+  }
+
+  private releaseControllerLock(): void {
+    const ownerFile = path.join(CONTROLLER_LOCK, "pid");
+    if (fs.existsSync(ownerFile)) fs.unlinkSync(ownerFile);
+    fs.rmdirSync(CONTROLLER_LOCK);
+  }
+
+  /** Requeue a previously failed issue without resetting unrelated issue history. */
+  retryIssue(issueNumber: number): void {
+    if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) throw new Error("Invalid issue number");
+    this.acquireControllerLock();
+    try {
+      if (this.state.currentIssue !== null) throw new Error("An interrupted issue requires manual reconciliation");
+      if (!this.state.failedIssues.includes(issueNumber)) throw new Error(`Issue #${issueNumber} is not marked failed`);
+      const status = execFileSync("git", ["status", "--porcelain"], { encoding: "utf-8" }).trim();
+      if (status) throw new Error("Working tree not clean; cannot retry");
+      const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8" }).trim();
+      if (branch !== this.config.branch) throw new Error(`Not on ${this.config.branch}`);
+      const issue = JSON.parse(execFileSync("gh", ["issue", "view", String(issueNumber), "--repo", this.config.repo,
+        "--json", "state,labels"], { encoding: "utf-8" })) as { state: string; labels: {name:string}[] };
+      if (issue.state !== "OPEN") throw new Error("Issue is not open");
+      if (!issue.labels.some(label => label.name === this.config.labels.approved)) throw new Error("Issue is not approved");
+      execFileSync("gh", ["issue", "edit", String(issueNumber), "--repo", this.config.repo,
+        "--remove-label", this.config.labels.blocked, "--remove-label", this.config.labels.inProgress], { encoding: "utf-8" });
+      this.state.failedIssues = this.state.failedIssues.filter(n => n !== issueNumber);
+      this.state.reviewIteration = 0;
+      this.saveState();
+      this.log(`Issue #${issueNumber} requeued. Existing quota history remains untouched.`);
+    } finally {
+      this.releaseControllerLock();
     }
   }
 
@@ -558,7 +643,7 @@ Return a summary of what was implemented, files changed, and test results.`;
   private async executeKiloTask(agent: string, prompt: string): Promise<string> {
     // Preflight is conservative: Kilo's CLI does not expose each inner model request.
     // Fail closed instead of guessing the remaining shared account quota.
-    this.freeBudget.reserve();
+    const receipt = this.freeBudget.reserve();
     try {
       // Use argument array: issue bodies may contain shell metacharacters.
       const { execFileSync } = await import("node:child_process");
@@ -574,8 +659,15 @@ Return a summary of what was implemented, files changed, and test results.`;
         const until = this.freeBudget.pauseForLimit("Kilo free-model quota exceeded");
         throw new RateLimitPause(until, "Kilo rejected the session with free-model rate limit");
       }
-      if (error instanceof KiloExecutionError) throw error;
       const failure = error as Error & { stderr?: string; stdout?: string; code?: string; status?: number };
+      const diagnostics = [failure.message, failure.stderr, failure.stdout].filter(Boolean).join("\n");
+      // Only refund known startup/permission failures. Ambiguous failures
+      // retain their reservation because model requests may have occurred.
+      if (failure.code === "ENOENT" || /auto-rejected permission|user rejected permission|run ended with an auto-rejected permission/i.test(diagnostics)) {
+        this.freeBudget.release(receipt);
+        throw new KiloExecutionError("Kilo startup/tool permission failure: " + diagnostics.replace(/\s+/g, " ").slice(0, 400));
+      }
+      if (error instanceof KiloExecutionError) throw error;
       const outputText = [failure.stderr, failure.stdout].filter(Boolean).join("\n");
       const clean = outputText.replace(/\s+/g, " ").slice(0, 450);
       throw new KiloExecutionError(`Kilo ${agent} failed${failure.status != null ? ` (exit ${failure.status})` : ""}: ${clean || failure.code || "unknown error"}`);
