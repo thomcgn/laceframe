@@ -321,18 +321,18 @@ export class AutodevController {
         const raw = fs.readFileSync(ownerFile, "utf-8").trim();
         const owner = Number(raw);
         if (!Number.isSafeInteger(owner) || owner <= 0) {
-          throw new Error("Controller lock has an invalid PID; manual inspection required");
+          throw new Error("Controller lock has an invalid PID; manual inspection required", { cause: error });
         }
         try {
           process.kill(owner, 0);
-          throw new Error(`AutoDev is already running (PID ${owner}); not starting another instance`);
+          throw new Error(`AutoDev is already running (PID ${owner}); not starting another instance`, { cause: error });
         } catch (probeError) {
           if ((probeError as NodeJS.ErrnoException).code !== "ESRCH") throw probeError;
         }
         // The owner is gone. A new contender may win the race; in that
         // case fail safely rather than removing the new owner's lock.
         if (fs.readFileSync(ownerFile, "utf-8").trim() !== raw) {
-          throw new Error("AutoDev lock owner changed during recovery; retry");
+          throw new Error("AutoDev lock owner changed during recovery; retry", { cause: error });
         }
         fs.unlinkSync(ownerFile);
       } else {
@@ -340,10 +340,10 @@ export class AutodevController {
         // a concurrent controller can finish writing its PID.
         const ageMs = Date.now() - fs.statSync(CONTROLLER_LOCK).mtimeMs;
         if (ageMs < 5000) {
-          throw new Error("AutoDev lock is being initialized; retry in a few seconds");
+          throw new Error("AutoDev lock is being initialized; retry in a few seconds", { cause: error });
         }
         if (fs.readdirSync(CONTROLLER_LOCK).length !== 0) {
-          throw new Error("Unknown files in AutoDev lock; refusing to delete them");
+          throw new Error("Unknown files in AutoDev lock; refusing to delete them", { cause: error });
         }
       }
       fs.rmdirSync(CONTROLLER_LOCK);
