@@ -288,14 +288,17 @@ export class AutodevController {
   }
 
   /** Only the owner removes the temporary lock; SIGINT/SIGTERM clean up as well. */
-  private readonly onControllerSignal = (signal: "SIGINT" | "SIGTERM"): void => {
+  private readonly onControllerSigint = (): void => this.onControllerSignal("SIGINT");
+  private readonly onControllerSigterm = (): void => this.onControllerSignal("SIGTERM");
+
+  private onControllerSignal(signal: "SIGINT" | "SIGTERM"): void {
     try {
       this.releaseControllerLock();
     } catch (error) {
       this.log(`Could not release AutoDev lock on ${signal}: ${String(error)}`, "warn");
     }
     process.exit(signal === "SIGINT" ? 130 : 143);
-  };
+  }
 
   private acquireControllerLock(): void {
     const ownerFile = path.join(CONTROLLER_LOCK, "pid");
@@ -348,13 +351,13 @@ export class AutodevController {
       this.log("Recovered an abandoned AutoDev controller lock", "warn");
     }
 
-    process.once("SIGINT", this.onControllerSignal);
-    process.once("SIGTERM", this.onControllerSignal);
+    process.once("SIGINT", this.onControllerSigint);
+    process.once("SIGTERM", this.onControllerSigterm);
   }
 
   private releaseControllerLock(): void {
-    process.removeListener("SIGINT", this.onControllerSignal);
-    process.removeListener("SIGTERM", this.onControllerSignal);
+    process.removeListener("SIGINT", this.onControllerSigint);
+    process.removeListener("SIGTERM", this.onControllerSigterm);
     const ownerFile = path.join(CONTROLLER_LOCK, "pid");
     if (!fs.existsSync(ownerFile)) return;
     if (fs.readFileSync(ownerFile, "utf-8").trim() !== String(process.pid)) {
