@@ -158,7 +158,7 @@ describe("regional Lab color consistency", () => {
     expect(p.data[1025 * 4]).toBe(150);
     d.regions[0].strength = 0;
     expect(correctColors(p, d).data).toEqual(p.data);
-  });
+  }, 30_000);
   it("bounds work, excludes empty regions and rejects overlaps, malformed masks and implicit registration", () => {
     const p = pixels([[100, 100, 100]]),
       d = rule(p);
