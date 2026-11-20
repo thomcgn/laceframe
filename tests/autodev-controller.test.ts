@@ -380,6 +380,24 @@ BLOCKERS: 2
       await expect(controllerAny.finalizeIssue(issue, buildResult)).resolves.toBe(true);
     });
   });
+  describe("interrupted issue recovery", () => {
+    it("requeues interrupted #36 only when Git is clean and issue is approved", () => {
+      controllerAny.state.currentIssue = 36;
+      controllerAny.state.failedIssues = [];
+      mockExecFileSync.mockImplementation((file, args) => {
+        if (file === "git" && args?.includes("--porcelain")) return "";
+        if (file === "git" && args?.includes("--show-current")) return "develop\n";
+        if (file === "gh" && args?.includes("view")) {
+          return JSON.stringify({ state: "OPEN", labels: [{ name: "autodev:approved" }] });
+        }
+        return "";
+      });
+      expect(() => controllerAny.retryIssue(36)).not.toThrow();
+      expect(controllerAny.state.currentIssue).toBeNull();
+      expect(controllerAny.state.failedIssues).toEqual([]);
+    });
+  });
+
   describe("controller lock recovery", () => {
     it("automatically recovers an old empty legacy lock", () => {
       const exists = Object.assign(new Error("already exists"), { code: "EEXIST" });
