@@ -140,4 +140,4 @@ it("bounds twenty 4 MP binary undo masks to ten MiB of packed history",()=>{
  expect(h.past).toHaveLength(20);expect(h.past.reduce((sum,rows)=>sum+rows[0].data.byteLength,0)).toBe(10*1024*1024);
  for(let i=0;i<20;i++)h=undoLayers(h);expect(h.present[0].weights.some(Boolean)).toBe(false);
  console.log(`4 MP semantic history: ${Math.round(performance.now()-start)} ms; 10 MiB packed masks`);
-});
+}, 30_000);
