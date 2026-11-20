@@ -89,3 +89,16 @@ test('reservations receive unique receipts even in the same millisecond', () => 
     assert.equal(a.status(1002).used, 50);
   } finally { x.clean(); }
 });
+
+test('budget automatically recovers an abandoned pre-PID lock directory', () => {
+  const x = setup();
+  try {
+    const lock = x.file + '.lock';
+    fs.mkdirSync(lock);
+    const old = new Date(Date.now() - 10_000);
+    fs.utimesSync(lock, old, old);
+    const a = new SharedFreeBudget(x.file, config);
+    assert.doesNotThrow(() => a.reserve());
+    assert.equal(fs.existsSync(lock), false);
+  } finally { x.clean(); }
+});
