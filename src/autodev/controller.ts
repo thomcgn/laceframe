@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SharedFreeBudget, RateLimitPause, isFreeQuotaError, type FreeBudgetConfig } from "./rate-limit.js";
+import { runKiloStreaming } from "./kilo-runner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,6 +66,7 @@ export interface AutodevConfig {
     builderAgent: string;
     reviewerAgent: string;
     taskTimeoutMs: number;
+    model?: string;
   };
   git?: {
     protectedBranches: string[];
@@ -106,6 +108,7 @@ export class AutodevController {
   private taskDiffHash = "";
   private initialHead = "";
   private readonly freeBudget: SharedFreeBudget;
+  private terminateKilo: (() => void) | null = null;
 
   constructor(dryRun = false) {
     this.state = this.loadState();
@@ -293,6 +296,7 @@ export class AutodevController {
 
   private onControllerSignal(signal: "SIGINT" | "SIGTERM"): void {
     try {
+      this.terminateKilo?.();
       this.releaseControllerLock();
     } catch (error) {
       this.log(`Could not release AutoDev lock on ${signal}: ${String(error)}`, "warn");
@@ -690,37 +694,36 @@ Return a summary of what was implemented, files changed, and test results.`;
   }
 
   private async executeKiloTask(agent: string, prompt: string): Promise<string> {
-    // Preflight is conservative: Kilo's CLI does not expose each inner model request.
-    // Fail closed instead of guessing the remaining shared account quota.
     const receipt = this.freeBudget.reserve();
+    const model = this.config.kilo?.model ?? "nvidia/nemotron-3-ultra-550b-a55b:free";
+    const started = Date.now();
+    const logPath = path.join(LOG_DIR, `kilo-${this.state.currentIssue ?? "manual"}-${agent}-${Date.now()}.log`);
+    this.log(`Kilo session: agent=${agent}, model=${model}, log=${logPath}`);
     try {
-      // Use argument array: issue bodies may contain shell metacharacters.
-      const { execFileSync } = await import("node:child_process");
-      const output = execFileSync("kilo", ["run", "--auto", "--agent", agent, prompt], {
-        encoding: "utf-8", timeout: this.config.kilo?.taskTimeoutMs ?? 30 * 60 * 1000,
+      const output = await runKiloStreaming({
+        agent, model, prompt, logPath,
+        timeoutMs: this.config.kilo?.taskTimeoutMs ?? 30 * 60 * 1000,
+        onOutput: (stream, chunk) => {
+          (stream === "stdout" ? process.stdout : process.stderr).write(chunk);
+        },
+        onHeartbeat: (silenceMs) => {
+          this.log(`Kilo ${agent}: elapsed ${Math.round((Date.now() - started) / 1000)}s; silence ${Math.round(silenceMs / 1000)}s (not proof of progress)`);
+        },
+        registerCancel: (cancel) => { this.terminateKilo = cancel; },
       });
-      if (/run ended with an auto-rejected permission|user rejected permission/i.test(output)) {
-        throw new KiloExecutionError("Kilo refused a required permission; review agent permissions before retrying");
-      }
+      this.log(`Kilo ${agent} completed in ${Math.round((Date.now() - started) / 1000)}s`);
       return output;
     } catch (error) {
+      const failure = error as Error & { code?: string };
       if (isFreeQuotaError(error)) {
         const until = this.freeBudget.pauseForLimit("Kilo free-model quota exceeded");
         throw new RateLimitPause(until, "Kilo rejected the session with free-model rate limit");
       }
-      const failure = error as Error & { stderr?: string; stdout?: string; code?: string; status?: number };
-      const diagnostics = [failure.message, failure.stderr, failure.stdout].filter(Boolean).join("\n");
-      // Only refund known startup/permission failures. Ambiguous failures
-      // retain their reservation because model requests may have occurred.
-      if (failure.code === "ENOENT" || /auto-rejected permission|user rejected permission|run ended with an auto-rejected permission/i.test(diagnostics)) {
-        this.freeBudget.release(receipt);
-        throw new KiloExecutionError("Kilo startup/tool permission failure: " + diagnostics.replace(/\s+/g, " ").slice(0, 400));
-      }
-      if (error instanceof KiloExecutionError) throw error;
-      const outputText = [failure.stderr, failure.stdout].filter(Boolean).join("\n");
-      const clean = outputText.replace(/\s+/g, " ").slice(0, 450);
-      throw new KiloExecutionError(`Kilo ${agent} failed${failure.status != null ? ` (exit ${failure.status})` : ""}: ${clean || failure.code || "unknown error"}`);
-
+      // A spawned process may already have spent quota; only ENOENT is provably unused.
+      if (failure.code === "ENOENT") this.freeBudget.release(receipt);
+      throw new KiloExecutionError(`Kilo ${agent} (${model}) failed: ${failure.message.slice(0, 450)}; log: ${logPath}`);
+    } finally {
+      this.terminateKilo = null;
     }
   }
 
