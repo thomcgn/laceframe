@@ -18,6 +18,8 @@ vi.mock("node:fs", async (importOriginal) => {
     renameSync: vi.fn(),
     statSync: vi.fn(),
     rmdirSync: vi.fn(),
+    readdirSync: vi.fn(),
+    unlinkSync: vi.fn(),
   };
   return { ...mocked, default: mocked };
 });
@@ -378,4 +380,48 @@ BLOCKERS: 2
       await expect(controllerAny.finalizeIssue(issue, buildResult)).resolves.toBe(true);
     });
   });
+  describe("controller lock recovery", () => {
+    it("automatically recovers an old empty legacy lock", () => {
+      const exists = Object.assign(new Error("already exists"), { code: "EEXIST" });
+      mockFs.mkdirSync.mockImplementationOnce(() => { throw exists; }).mockImplementation(() => undefined);
+      mockFs.existsSync.mockReturnValue(false);
+      mockFs.statSync.mockReturnValue({ mtimeMs: Date.now() - 10_000 } as fs.Stats);
+      mockFs.readdirSync.mockReturnValue([] as never);
+
+      expect(() => controllerAny.acquireControllerLock()).not.toThrow();
+      expect(mockFs.rmdirSync).toHaveBeenCalled();
+      expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+        expect.stringContaining("pid"),
+        String(process.pid),
+        { flag: "wx" },
+      );
+      controllerAny.releaseControllerLock();
+    });
+
+    it("does not remove a lock owned by a running controller", () => {
+      const exists = Object.assign(new Error("already exists"), { code: "EEXIST" });
+      mockFs.mkdirSync.mockImplementationOnce(() => { throw exists; });
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(String(process.pid));
+
+      expect(() => controllerAny.acquireControllerLock()).toThrow("already running");
+      expect(mockFs.unlinkSync).not.toHaveBeenCalled();
+      expect(mockFs.rmdirSync).not.toHaveBeenCalled();
+    });
+
+    it("releases the current owner's lock and removes signal listeners", () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(String(process.pid));
+      const count = process.listenerCount("SIGINT");
+
+      controllerAny.acquireControllerLock();
+      expect(process.listenerCount("SIGINT")).toBe(count + 1);
+      controllerAny.releaseControllerLock();
+
+      expect(process.listenerCount("SIGINT")).toBe(count);
+      expect(mockFs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining("pid"));
+      expect(mockFs.rmdirSync).toHaveBeenCalled();
+    });
+  });
+
 });
