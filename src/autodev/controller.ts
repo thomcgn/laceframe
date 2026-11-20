@@ -384,8 +384,13 @@ export class AutodevController {
     if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) throw new Error("Invalid issue number");
     this.acquireControllerLock();
     try {
-      if (this.state.currentIssue !== null) throw new Error("An interrupted issue requires manual reconciliation");
-      if (!this.state.failedIssues.includes(issueNumber)) throw new Error(`Issue #${issueNumber} is not marked failed`);
+      if (this.state.currentIssue !== null && this.state.currentIssue !== issueNumber) {
+        throw new Error(`Another issue #${this.state.currentIssue} is interrupted; reconcile it first`);
+      }
+      const interrupted = this.state.currentIssue === issueNumber;
+      if (!interrupted && !this.state.failedIssues.includes(issueNumber)) {
+        throw new Error(`Issue #${issueNumber} is neither failed nor interrupted`);
+      }
       const status = execFileSync("git", ["status", "--porcelain"], { encoding: "utf-8" }).trim();
       if (status) throw new Error("Working tree not clean; cannot retry");
       const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8" }).trim();
@@ -401,6 +406,7 @@ export class AutodevController {
           ...staleLabels.flatMap(label => ["--remove-label", label])], { encoding: "utf-8" });
       }
       this.state.failedIssues = this.state.failedIssues.filter(n => n !== issueNumber);
+      this.state.currentIssue = null;
       this.state.reviewIteration = 0;
       this.saveState();
       this.log(`Issue #${issueNumber} requeued. Existing quota history remains untouched.`);
