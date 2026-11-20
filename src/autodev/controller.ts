@@ -287,39 +287,81 @@ export class AutodevController {
     }
   }
 
+  /** Only the owner removes the temporary lock; SIGINT/SIGTERM clean up as well. */
+  private readonly onControllerSignal = (signal: "SIGINT" | "SIGTERM"): void => {
+    try {
+      this.releaseControllerLock();
+    } catch (error) {
+      this.log(`Could not release AutoDev lock on ${signal}: ${String(error)}`, "warn");
+    }
+    process.exit(signal === "SIGINT" ? 130 : 143);
+  };
+
   private acquireControllerLock(): void {
     const ownerFile = path.join(CONTROLLER_LOCK, "pid");
-    try {
+    const claim = (): void => {
       fs.mkdirSync(CONTROLLER_LOCK);
-    } catch {
-      // Only reclaim locks with a trustworthy PID. An old-format empty lock
-      // cannot prove whether its owner is alive and must be inspected manually.
-      if (!fs.existsSync(ownerFile)) {
-        throw new Error(`AutoDev lock ${CONTROLLER_LOCK} has no owner PID; inspect running processes before removing it`);
-      }
-      const owner = Number(fs.readFileSync(ownerFile, "utf-8").trim());
-      if (!Number.isSafeInteger(owner) || owner <= 0) {
-        throw new Error("Invalid AutoDev lock owner; manual inspection required");
-      }
       try {
-        process.kill(owner, 0);
+        fs.writeFileSync(ownerFile, String(process.pid), { flag: "wx" });
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-        // The recorded owner no longer exists. Do not delete unknown files.
-        fs.unlinkSync(ownerFile);
         fs.rmdirSync(CONTROLLER_LOCK);
-        fs.mkdirSync(CONTROLLER_LOCK);
-        fs.writeFileSync(ownerFile, String(process.pid));
-        return;
+        throw error;
       }
-      throw new Error(`AutoDev controller already running (PID ${owner})`);
+    };
+
+    try {
+      claim();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+
+      if (fs.existsSync(ownerFile)) {
+        const raw = fs.readFileSync(ownerFile, "utf-8").trim();
+        const owner = Number(raw);
+        if (!Number.isSafeInteger(owner) || owner <= 0) {
+          throw new Error("Controller lock has an invalid PID; manual inspection required");
+        }
+        try {
+          process.kill(owner, 0);
+          throw new Error(`AutoDev is already running (PID ${owner}); not starting another instance`);
+        } catch (probeError) {
+          if ((probeError as NodeJS.ErrnoException).code !== "ESRCH") throw probeError;
+        }
+        // The owner is gone. A new contender may win the race; in that
+        // case fail safely rather than removing the new owner's lock.
+        if (fs.readFileSync(ownerFile, "utf-8").trim() !== raw) {
+          throw new Error("AutoDev lock owner changed during recovery; retry");
+        }
+        fs.unlinkSync(ownerFile);
+      } else {
+        // Legacy locks predate PID recording. Allow a short grace period so
+        // a concurrent controller can finish writing its PID.
+        const ageMs = Date.now() - fs.statSync(CONTROLLER_LOCK).mtimeMs;
+        if (ageMs < 5000) {
+          throw new Error("AutoDev lock is being initialized; retry in a few seconds");
+        }
+        if (fs.readdirSync(CONTROLLER_LOCK).length !== 0) {
+          throw new Error("Unknown files in AutoDev lock; refusing to delete them");
+        }
+      }
+      fs.rmdirSync(CONTROLLER_LOCK);
+      claim();
+      this.log("Recovered an abandoned AutoDev controller lock", "warn");
     }
-    fs.writeFileSync(ownerFile, String(process.pid));
+
+    process.once("SIGINT", this.onControllerSignal);
+    process.once("SIGTERM", this.onControllerSignal);
   }
 
   private releaseControllerLock(): void {
+    process.removeListener("SIGINT", this.onControllerSignal);
+    process.removeListener("SIGTERM", this.onControllerSignal);
     const ownerFile = path.join(CONTROLLER_LOCK, "pid");
-    if (fs.existsSync(ownerFile)) fs.unlinkSync(ownerFile);
+    if (!fs.existsSync(ownerFile)) return;
+    if (fs.readFileSync(ownerFile, "utf-8").trim() !== String(process.pid)) {
+      // A different controller owns the lock now.
+      return;
+    }
+    fs.unlinkSync(ownerFile);
     fs.rmdirSync(CONTROLLER_LOCK);
   }
 
