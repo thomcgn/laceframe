@@ -35,3 +35,4 @@ native/spritefusion/target/
 .autodev-state.json
 .autodev-free-budget.json
 .autodev-free-budget.json.lock/
+.autodev-controller.lock/
