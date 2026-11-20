@@ -8,12 +8,14 @@ Usage:
   npx tsx src/autodev/cli.ts status
   npx tsx src/autodev/cli.ts run --dry-run
   npx tsx src/autodev/cli.ts run --execute
+  npx tsx src/autodev/cli.ts retry 36
 
 Commands:
   --help, -h       Show this help without starting the controller
   status           Show current estimated free-model budget
   run --dry-run    Select one approved issue and simulate the workflow; no Kilo tasks, commits, pushes or issue mutations
   run --execute    Run the real issue workflow (Kilo, Git changes and GitHub actions)
+  retry <number>  Requeue a failed approved issue after a clean-tree check; no model usage
 
 Safety: Running without an explicit mode never starts production work.
 `;
