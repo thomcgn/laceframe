@@ -9,6 +9,8 @@ export interface KiloStreamingOptions {
   logPath: string;
   inactivityTimeoutMs: number;
   sessionId?: string;
+  /** Heartbeat interval for inactivity monitoring. Default 30000ms. Override for testing. */
+  heartbeatIntervalMs?: number;
   onOutput: (stream: "stdout" | "stderr", chunk: string) => void;
   onHeartbeat: (silenceMs: number, elapsedMs: number) => void;
   onInactivityWarning: (silenceMs: number) => void;
@@ -84,6 +86,7 @@ export function runKiloStreaming(options: KiloStreamingOptions): Promise<KiloRes
     });
 
     // Heartbeat interval for inactivity monitoring
+    const heartbeatInterval = options.heartbeatIntervalMs ?? 30_000;
     const heartbeat = setInterval(() => {
       if (!finished) {
         const silenceMs = Date.now() - lastOutput;
@@ -103,7 +106,7 @@ export function runKiloStreaming(options: KiloStreamingOptions): Promise<KiloRes
           stop();
         }
       }
-    }, 30_000);
+    }, heartbeatInterval);
     heartbeat.unref();
 
     child.on("close", (code, signal) => {

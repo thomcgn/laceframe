@@ -8,6 +8,35 @@ import { runKiloStreaming, type KiloResult } from "./kilo-runner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Base directory for AutoDev files. Can be overridden via AUTODEV_BASE_DIR env var for testing. */
+function getBaseDir(): string {
+  return process.env.AUTODEV_BASE_DIR ?? path.join(__dirname, "..", "..");
+}
+
+function getStateFile(): string {
+  return path.join(getBaseDir(), ".autodev-state.json");
+}
+
+function getConfigFile(): string {
+  return path.join(getBaseDir(), ".autodev-config.json");
+}
+
+function getLogDir(): string {
+  return path.join(getBaseDir(), "logs", "autodev");
+}
+
+function getControllerLockPath(): string {
+  return path.join(getBaseDir(), ".autodev-controller.lock");
+}
+
+function getCheckpointFile(): string {
+  return path.join(getBaseDir(), ".autodev-checkpoint.json");
+}
+
+function getBudgetFile(): string {
+  return path.join(getBaseDir(), ".autodev-free-budget.json");
+}
+
 export interface GitHubIssue {
   number: number;
   title: string;
@@ -104,12 +133,6 @@ interface GitHubIssueRaw {
   state: "open" | "closed";
 }
 
-const STATE_FILE = path.join(__dirname, "..", "..", ".autodev-state.json");
-const CONFIG_FILE = path.join(__dirname, "..", "..", ".autodev-config.json");
-const LOG_DIR = path.join(__dirname, "..", "..", "logs", "autodev");
-const CONTROLLER_LOCK = path.join(__dirname, "..", "..", ".autodev-controller.lock");
-const CHECKPOINT_FILE = path.join(__dirname, "..", "..", ".autodev-checkpoint.json");
-
 class KiloExecutionError extends Error {
   constructor(message: string) {
     super(message);
@@ -134,21 +157,21 @@ export class AutodevController {
     this.state.dryRun = dryRun;
     this.ensureLogDir();
     this.freeBudget = new SharedFreeBudget(
-      path.join(__dirname, "..", "..", ".autodev-free-budget.json"),
+      getBudgetFile(),
       this.config.freeBudget ?? { windowMinutes: 60, limit: 200, warningAt: 160, pauseAt: 190, estimatedRequestsPerTask: 50, cooldownMinutes: 60 },
     );
   }
 
   private ensureLogDir(): void {
-    if (!fs.existsSync(LOG_DIR)) {
-      fs.mkdirSync(LOG_DIR, { recursive: true });
+    if (!fs.existsSync(getLogDir())) {
+      fs.mkdirSync(getLogDir(), { recursive: true });
     }
   }
 
   private loadState(): ControllerState {
-    if (fs.existsSync(STATE_FILE)) {
+    if (fs.existsSync(getStateFile())) {
       // Corrupt checkpoints must stop AutoDev rather than restart a task.
-      return JSON.parse(fs.readFileSync(STATE_FILE, "utf-8"));
+      return JSON.parse(fs.readFileSync(getStateFile(), "utf-8"));
     }
     return this.defaultState();
   }
@@ -167,15 +190,15 @@ export class AutodevController {
   }
 
   private saveState(): void {
-    const temp = `${STATE_FILE}.${process.pid}.tmp`;
+    const temp = `${getStateFile()}.${process.pid}.tmp`;
     fs.writeFileSync(temp, JSON.stringify(this.state, null, 2));
-    fs.renameSync(temp, STATE_FILE);
+    fs.renameSync(temp, getStateFile());
   }
 
   private loadConfig(): AutodevConfig {
-    if (fs.existsSync(CONFIG_FILE)) {
+    if (fs.existsSync(getConfigFile())) {
       try {
-        return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+        return JSON.parse(fs.readFileSync(getConfigFile(), "utf-8"));
       } catch {
         return this.defaultConfig();
       }
@@ -212,7 +235,7 @@ export class AutodevController {
     const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
     console.log(logMessage);
 
-    const logFile = path.join(LOG_DIR, `autodev-${new Date().toISOString().split("T")[0]}.log`);
+    const logFile = path.join(getLogDir(), `autodev-${new Date().toISOString().split("T")[0]}.log`);
     fs.appendFileSync(logFile, logMessage + "\n");
   }
 
@@ -244,6 +267,7 @@ export class AutodevController {
           !issue.labels.includes(this.config.labels.implemented) &&
           !this.state.processedIssues.includes(issue.number) &&
           !this.state.failedIssues.includes(issue.number) &&
+          (!this.state.checkpoint || issue.number === this.state.checkpoint.issueNumber) &&
           this.areDependenciesSatisfied(issue));
         if (!eligible) {
           this.log("No eligible approved issues available; not waiting for model budget");
@@ -268,14 +292,18 @@ export class AutodevController {
           if (success) {
             this.state.processedIssues.push(issue.number);
             this.state.lastProcessedIssue = issue.number;
-          } else {
+          } else if (!this.state.checkpoint) {
             this.state.failedIssues.push(issue.number);
           }
-          this.state.currentIssue = null;
+          this.state.currentIssue = this.state.checkpoint ? issue.number : null;
           this.state.reviewIteration = 0;
-          this.state.checkpoint = null;
+          // A completed Kilo session has already cleared its own checkpoint.
+          // Preserve any unresolved checkpoint on unsuccessful processing.
+          if (success) {
+            this.state.checkpoint = null;
+            this.clearCheckpointFile();
+          }
           this.saveState();
-          this.clearCheckpointFile();
         }
 
         if (this.state.dryRun) {
@@ -300,7 +328,7 @@ export class AutodevController {
         // prove the builder did not alter the tree or HEAD.
         const clean = execFileSync("git", ["status", "--porcelain"], { encoding: "utf-8" }).trim() === "";
         const sameHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8" }).trim() === this.initialHead;
-        if (clean && sameHead) {
+        if (clean && sameHead && !this.state.checkpoint?.sessionId) {
           const issueNumber = this.state.currentIssue;
           execFileSync("gh", ["issue", "edit", String(issueNumber), "--repo", this.config.repo,
             "--remove-label", this.config.labels.inProgress], { encoding: "utf-8" });
@@ -345,13 +373,14 @@ export class AutodevController {
   }
 
   private acquireControllerLock(): void {
-    const ownerFile = path.join(CONTROLLER_LOCK, "pid");
+    const lockPath = getControllerLockPath();
+    const ownerFile = path.join(lockPath, "pid");
     const claim = (): void => {
-      fs.mkdirSync(CONTROLLER_LOCK);
+      fs.mkdirSync(lockPath);
       try {
         fs.writeFileSync(ownerFile, String(process.pid), { flag: "wx" });
       } catch (error) {
-        fs.rmdirSync(CONTROLLER_LOCK);
+        fs.rmdirSync(lockPath);
         throw error;
       }
     };
@@ -382,15 +411,15 @@ export class AutodevController {
       } else {
         // Legacy locks predate PID recording. Allow a short grace period so
         // a concurrent controller can finish writing its PID.
-        const ageMs = Date.now() - fs.statSync(CONTROLLER_LOCK).mtimeMs;
+        const ageMs = Date.now() - fs.statSync(lockPath).mtimeMs;
         if (ageMs < 5000) {
           throw new Error("AutoDev lock is being initialized; retry in a few seconds", { cause: error });
         }
-        if (fs.readdirSync(CONTROLLER_LOCK).length !== 0) {
+        if (fs.readdirSync(lockPath).length !== 0) {
           throw new Error("Unknown files in AutoDev lock; refusing to delete them", { cause: error });
         }
       }
-      fs.rmdirSync(CONTROLLER_LOCK);
+      fs.rmdirSync(lockPath);
       claim();
       this.log("Recovered an abandoned AutoDev controller lock", "warn");
     }
@@ -402,14 +431,15 @@ export class AutodevController {
   private releaseControllerLock(): void {
     process.removeListener("SIGINT", this.onControllerSigint);
     process.removeListener("SIGTERM", this.onControllerSigterm);
-    const ownerFile = path.join(CONTROLLER_LOCK, "pid");
+    const lockPath = getControllerLockPath();
+    const ownerFile = path.join(lockPath, "pid");
     if (!fs.existsSync(ownerFile)) return;
     if (fs.readFileSync(ownerFile, "utf-8").trim() !== String(process.pid)) {
       // A different controller owns the lock now.
       return;
     }
     fs.unlinkSync(ownerFile);
-    fs.rmdirSync(CONTROLLER_LOCK);
+    fs.rmdirSync(lockPath);
   }
 
   /** Requeue a previously failed issue without resetting unrelated issue history. */
@@ -470,7 +500,8 @@ export class AutodevController {
     this.log("Verifying prerequisites...");
 
     const gitStatus = execSync("git status --porcelain", { encoding: "utf-8" }).trim();
-    if (gitStatus && !this.state.dryRun) {
+    const skipCleanCheck = process.env.AUTODEV_SKIP_CLEAN_CHECK === "true";
+    if (gitStatus && !this.state.dryRun && !skipCleanCheck && !this.state.checkpoint) {
       throw new Error("Working tree not clean. Commit or stash changes before running.");
     }
 
@@ -501,7 +532,8 @@ export class AutodevController {
       !issue.labels.includes(this.config.labels.blocked) &&
       !issue.labels.includes(this.config.labels.implemented) &&
       !this.state.processedIssues.includes(issue.number) &&
-      !this.state.failedIssues.includes(issue.number));
+      !this.state.failedIssues.includes(issue.number) &&
+      (!this.state.checkpoint || issue.number === this.state.checkpoint.issueNumber));
     if (issues.length === 0) {
       return null;
     }
@@ -756,9 +788,10 @@ Return a summary of what was implemented, files changed, and test results.`;
     const inactivityTimeoutMs = this.config.kilo?.inactivityTimeoutMs ?? 30 * 60 * 1000;
     const sessionResume = this.config.kilo?.sessionResume ?? true;
     const started = Date.now();
-    const logPath = path.join(LOG_DIR, `kilo-${this.state.currentIssue ?? "manual"}-${agentName}-${Date.now()}.log`);
+    const logPath = path.join(getLogDir(), `kilo-${this.state.currentIssue ?? "manual"}-${agentName}-${Date.now()}.log`);
     this.log(`Kilo session: agent=${agentName}, model=${model}, inactivityTimeout=${inactivityTimeoutMs}ms, sessionResume=${sessionResume}, log=${logPath}`);
 
+    let completedSuccessfully = false;
     try {
       // Build checkpoint for safe pause/resume
       const checkpoint: SessionCheckpoint = {
@@ -777,6 +810,9 @@ Return a summary of what was implemented, files changed, and test results.`;
       this.saveState();
       this.writeCheckpointFile(checkpoint);
 
+      // Persist session identity as soon as Kilo reports it, not only after success.
+      // Kilo may fail with 429 or be interrupted after modifying the worktree.
+      let sessionOutputTail = "";
       const result = await runKiloStreaming({
         agent: agentName,
         model,
@@ -785,6 +821,15 @@ Return a summary of what was implemented, files changed, and test results.`;
         inactivityTimeoutMs,
         sessionId: sessionResume ? this.currentKiloSessionId ?? undefined : undefined,
         onOutput: (stream, chunk) => {
+          sessionOutputTail = (sessionOutputTail + chunk).slice(-4096);
+          const match = sessionOutputTail.match(/session[:\s]+([a-zA-Z0-9-]+)/i);
+          if (match && match[1] !== checkpoint.sessionId) {
+            checkpoint.sessionId = match[1];
+            this.currentKiloSessionId = match[1];
+            this.state.checkpoint = checkpoint;
+            this.saveState();
+            this.writeCheckpointFile(checkpoint);
+          }
           (stream === "stdout" ? process.stdout : process.stderr).write(chunk);
         },
         onHeartbeat: (silenceMs, elapsedMs) => {
@@ -796,38 +841,55 @@ Return a summary of what was implemented, files changed, and test results.`;
         registerCancel: (cancel) => { this.terminateKilo = cancel; },
       });
 
-      this.currentKiloSessionId = result.sessionId;
+      this.currentKiloSessionId = result.sessionId ?? this.currentKiloSessionId;
+      completedSuccessfully = true;
       this.log(`Kilo ${agentName} completed in ${Math.round((Date.now() - started) / 1000)}s${result.sessionId ? `, sessionId=${result.sessionId}` : ""}`);
       return result;
     } catch (error) {
       const failure = error as Error & { code?: string };
       if (isFreeQuotaError(error)) {
+        if (this.state.checkpoint) {
+          this.state.checkpoint.reason = "rate-limit";
+          this.saveState();
+          this.writeCheckpointFile(this.state.checkpoint);
+        }
         // Try to extract Retry-After from error message
         const retryAfterMatch = String(error).match(/retry.after[:\s]+(\d+)/i);
         const retryAfterMs = retryAfterMatch ? parseRetryAfter(retryAfterMatch[1]) : undefined;
         const until = this.freeBudget.pauseForLimit("Kilo free-model quota exceeded", Date.now(), retryAfterMs ?? undefined);
         throw new RateLimitPause(until, "Kilo rejected the session with free-model rate limit", retryAfterMs ?? undefined);
       }
+      if (this.state.checkpoint && /terminated by inactivity/i.test(failure.message)) {
+        this.state.checkpoint.reason = "inactivity";
+        this.saveState();
+        this.writeCheckpointFile(this.state.checkpoint);
+      }
       // A spawned process may already have spent quota; only ENOENT is provably unused.
       if (failure.code === "ENOENT") this.freeBudget.release(receipt);
       throw new KiloExecutionError(`Kilo ${agentName} (${model}) failed: ${failure.message.slice(0, 450)}; log: ${logPath}`);
     } finally {
       this.terminateKilo = null;
-      this.state.checkpoint = null;
-      this.saveState();
-      this.clearCheckpointFile();
+      // On failure preserve the checkpoint for explicit reconciliation/resume.
+      // Clearing it here discards the only durable session identity.
+      if (completedSuccessfully) {
+        this.state.checkpoint = null;
+        this.saveState();
+        this.clearCheckpointFile();
+      }
     }
   }
 
   private writeCheckpointFile(checkpoint: SessionCheckpoint): void {
-    const temp = `${CHECKPOINT_FILE}.${process.pid}.tmp`;
+    const checkpointFile = getCheckpointFile();
+    const temp = `${checkpointFile}.${process.pid}.tmp`;
     fs.writeFileSync(temp, JSON.stringify(checkpoint, null, 2));
-    fs.renameSync(temp, CHECKPOINT_FILE);
+    fs.renameSync(temp, checkpointFile);
   }
 
   private clearCheckpointFile(): void {
-    if (fs.existsSync(CHECKPOINT_FILE)) {
-      fs.unlinkSync(CHECKPOINT_FILE);
+    const checkpointFile = getCheckpointFile();
+    if (fs.existsSync(checkpointFile)) {
+      fs.unlinkSync(checkpointFile);
     }
   }
 
@@ -851,7 +913,7 @@ Return a summary of what was implemented, files changed, and test results.`;
     }
 
     // Verify no parallel children running
-    const controllerLock = path.join(__dirname, "..", "..", ".autodev-controller.lock");
+    const controllerLock = getControllerLockPath();
     if (fs.existsSync(controllerLock)) {
       const ownerFile = path.join(controllerLock, "pid");
       if (fs.existsSync(ownerFile)) {
@@ -871,9 +933,7 @@ Return a summary of what was implemented, files changed, and test results.`;
 
     // Verify Kilo session can be resumed
     if (!this.config.kilo?.sessionResume || !checkpoint.sessionId) {
-      this.log("Session resumption not configured or no session ID in checkpoint; starting fresh", "warn");
-      this.currentKiloSessionId = null;
-      return;
+      throw new Error("NEEDS_RECONCILIATION: Safe session resume is unavailable (disabled or missing session ID). Refusing to restart the Builder with the old prompt.");
     }
 
     this.currentKiloSessionId = checkpoint.sessionId;
@@ -1079,7 +1139,7 @@ See learning report for implementation details.`;
   }
 
   private async generateLearningReport(issue: GitHubIssue, buildResult: BuildResult): Promise<void> {
-    const reportDir = path.join(__dirname, "..", "..", "docs", "learning");
+    const reportDir = path.join(getBaseDir(), "docs", "learning");
     if (!fs.existsSync(reportDir)) {
       fs.mkdirSync(reportDir, { recursive: true });
     }
