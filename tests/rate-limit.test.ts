@@ -61,3 +61,31 @@ test('quota error recognition is specific', () => {
   assert.equal(isFreeQuotaError(new Error('status code 429')),true);
   assert.equal(isFreeQuotaError(new Error('TypeError: missing key')),false);
 });
+
+test('failed tool-permission startup can release only its own reservation', () => {
+  const x = setup();
+  try {
+    const a = new SharedFreeBudget(x.file, config);
+    const receiptA = a.reserve(1000);
+    const receiptB = a.reserve(1001);
+    assert.equal(a.status(1002).used, 100);
+    assert.equal(a.release(receiptA), true);
+    assert.equal(a.status(1002).used, 50);
+    assert.equal(a.release(receiptA), false);
+    assert.equal(a.status(1002).used, 50);
+    assert.equal(a.release(receiptB), true);
+    assert.equal(a.status(1002).used, 0);
+  } finally { x.clean(); }
+});
+
+test('reservations receive unique receipts even in the same millisecond', () => {
+  const x = setup();
+  try {
+    const a = new SharedFreeBudget(x.file, config);
+    const first = a.reserve(1000);
+    const second = a.reserve(1000);
+    assert.notEqual(first, second);
+    assert.equal(a.release(second), true);
+    assert.equal(a.status(1002).used, 50);
+  } finally { x.clean(); }
+});
