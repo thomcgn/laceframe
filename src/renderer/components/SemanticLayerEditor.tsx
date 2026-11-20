@@ -79,23 +79,28 @@ export function SemanticLayerEditor({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [saving, setSaving] = useState(false);
+  const [polygonCount, setPolygonCount] = useState(0);
   const [tool, setTool] = useState("paint"),
     [diameter, setDiameter] = useState(5),
     [tolerance, setTolerance] = useState(8),
     [connected, setConnected] = useState(true),
-    [view, setView] = useState("all"),
-    [polygon, setPolygon] = useState<Point[]>([]);
+    [view, setView] = useState("all");
   const canvas = useRef<HTMLCanvasElement>(null),
+    vectors = useRef<HTMLCanvasElement>(null),
     original = useRef<ImageData | undefined>(undefined),
     worker = useRef<Worker | undefined>(undefined),
     dirty = useRef(false),
     space = useRef(false),
     frame = useRef(0),
     draw = useRef<() => void>(() => {}),
+    drawOverlay = useRef<() => void>(() => {}),
+    overlayFrame = useRef(0),
     working = useRef<LayerDraft[] | undefined>(undefined),
     gesture = useRef<
       { id: number; point: Point; blocked: Uint8Array } | undefined
     >(undefined),
+    polygonGesture = useRef<{ points: Point[]; cursor: Point | undefined } | undefined>(undefined),
+    cursor = useRef<Point | undefined>(undefined),
     pendingRect = useRef<
       { x0: number; y0: number; x1: number; y1: number } | undefined
     >(undefined);
@@ -191,7 +196,127 @@ export function SemanticLayerEditor({
         }
       }
     ctx.putImageData(pixels, 0, 0, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+
+    drawOverlay.current();
   };
+  drawOverlay.current = () => {
+    if (!source) return;
+    // Draw vectors overlay (brush cursor, polygon preview)
+    const vctx = vectors.current?.getContext("2d");
+    if (!vctx) return;
+    vctx.clearRect(0, 0, source.width, source.height);
+    const scale = (vectors.current?.getBoundingClientRect().width ?? source.width) / source.width;
+
+    // Brush/eraser cursor preview (when not drawing, just hovering)
+    if (cursor.current && ["paint", "erase"].includes(tool) && !gesture.current) {
+      const p = cursor.current;
+      const radius = diameter / 2;
+      // Outer stroke (dark - Ink)
+      vctx.beginPath();
+      vctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      vctx.strokeStyle = "#141820"; // Ink
+      vctx.lineWidth = Math.max(2, 2 / Math.max(0.01, scale));
+      vctx.stroke();
+      // Inner stroke (light - Ivory)
+      vctx.beginPath();
+      vctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      vctx.strokeStyle = "#f0e5d3"; // Ivory
+      vctx.lineWidth = Math.max(1, 1 / Math.max(0.01, scale));
+      vctx.stroke();
+    }
+
+    // Polygon preview (committed vertices, edges, and rubber-band line to cursor)
+    const pg = polygonGesture.current;
+    if (pg && pg.points.length > 0) {
+      // Draw edges between committed vertices
+      if (pg.points.length >= 2) {
+        vctx.beginPath();
+        vctx.moveTo(pg.points[0].x, pg.points[0].y);
+        for (let i = 1; i < pg.points.length; i++) {
+          vctx.lineTo(pg.points[i].x, pg.points[i].y);
+        }
+        // Dual-tone stroke for edges
+        vctx.strokeStyle = "#141820"; // Ink - dark
+        vctx.lineWidth = Math.max(2, 2 / Math.max(0.01, scale));
+        vctx.stroke();
+        vctx.beginPath();
+        vctx.moveTo(pg.points[0].x, pg.points[0].y);
+        for (let i = 1; i < pg.points.length; i++) {
+          vctx.lineTo(pg.points[i].x, pg.points[i].y);
+        }
+        vctx.strokeStyle = "#f0e5d3"; // Ivory - light
+        vctx.lineWidth = Math.max(1, 1 / Math.max(0.01, scale));
+        vctx.stroke();
+      }
+
+      // Draw vertex markers
+      const markerSize = Math.max(4, 4 / Math.max(0.01, scale));
+      pg.points.forEach((node, i) => {
+        const px = node.x;
+        const py = node.y;
+
+        // Dark outer ring
+        vctx.beginPath();
+        vctx.arc(px, py, markerSize * 1.5, 0, Math.PI * 2);
+        vctx.fillStyle = "#141820"; // Ink
+        vctx.fill();
+
+        // Light inner fill (Copper for last vertex, Ivory for others)
+        vctx.beginPath();
+        vctx.arc(px, py, markerSize, 0, Math.PI * 2);
+        vctx.fillStyle = i === pg.points.length - 1 ? "#d9a77e" : "#f0e5d3"; // Copper for last, Ivory for others
+        vctx.fill();
+      });
+
+      // Draw rubber-band line from last vertex to cursor
+      if (pg.cursor) {
+        const lastVertex = pg.points[pg.points.length - 1];
+        vctx.beginPath();
+        vctx.moveTo(lastVertex.x, lastVertex.y);
+        vctx.lineTo(pg.cursor.x, pg.cursor.y);
+        // Dashed dual-tone line for rubber-band
+        vctx.setLineDash([Math.max(4, 4 / Math.max(0.01, scale)), Math.max(4, 4 / Math.max(0.01, scale))]);
+        vctx.strokeStyle = "#141820"; // Ink - dark
+        vctx.lineWidth = Math.max(2, 2 / Math.max(0.01, scale));
+        vctx.stroke();
+        vctx.beginPath();
+        vctx.moveTo(lastVertex.x, lastVertex.y);
+        vctx.lineTo(pg.cursor.x, pg.cursor.y);
+        vctx.setLineDash([Math.max(4, 4 / Math.max(0.01, scale)), Math.max(4, 4 / Math.max(0.01, scale))]);
+        vctx.strokeStyle = "#f0e5d3"; // Ivory - light
+        vctx.lineWidth = Math.max(1, 1 / Math.max(0.01, scale));
+        vctx.stroke();
+        vctx.setLineDash([]);
+
+        // Show close indicator when near first vertex and have 3+ vertices
+        if (pg.points.length >= 3) {
+          const firstVertex = pg.points[0];
+          const dx = pg.cursor.x - firstVertex.x;
+          const dy = pg.cursor.y - firstVertex.y;
+          const dist = Math.hypot(dx, dy);
+          const closeThreshold = Math.max(15, 15 / Math.max(0.01, scale)); // 15 CSS pixels
+          if (dist < closeThreshold) {
+            // Draw close indicator (circle around first vertex)
+            vctx.beginPath();
+            vctx.arc(firstVertex.x, firstVertex.y, markerSize * 3, 0, Math.PI * 2);
+            vctx.strokeStyle = "#d9a77e"; // Copper
+            vctx.lineWidth = Math.max(2, 2 / Math.max(0.01, scale));
+            vctx.setLineDash([Math.max(6, 6 / Math.max(0.01, scale)), Math.max(4, 4 / Math.max(0.01, scale))]);
+            vctx.stroke();
+            vctx.setLineDash([]);
+          }
+        }
+      }
+    }
+  };
+  function requestOverlayDraw() {
+    if (!overlayFrame.current) {
+      overlayFrame.current = requestAnimationFrame(() => {
+        overlayFrame.current = 0;
+        drawOverlay.current();
+      });
+    }
+  }
   useEffect(() => {
     let live = true;
     void window.laceframe
@@ -229,12 +354,14 @@ export function SemanticLayerEditor({
       live = false;
       worker.current?.terminate();
       if (frame.current) cancelAnimationFrame(frame.current);
+      if (overlayFrame.current) cancelAnimationFrame(overlayFrame.current);
       frame.current = 0;
+      overlayFrame.current = 0;
     };
   }, [sourceId]);
   useEffect(() => {
     requestDraw();
-  }, [source, history, active, view]);
+  }, [source, history, active, view, tool, diameter]);
   function change(next: LayerDraft[]) {
     if (!history) return;
     dirty.current = true;
@@ -255,6 +382,7 @@ export function SemanticLayerEditor({
     working.current = undefined;
     gesture.current = undefined;
     change(next);
+    requestOverlayDraw();
   }
   function close() {
     if (saving) return;
@@ -310,7 +438,9 @@ export function SemanticLayerEditor({
         if (v && source.data[i * 4 + 3] && !blocked[i]) weights[i] = 255;
       });
       update(active, { weights });
-      setPolygon([]);
+      polygonGesture.current = undefined;
+      setPolygonCount(0);
+      requestOverlayDraw();
     };
     w.onerror = () => {
       w.terminate();
@@ -441,6 +571,15 @@ export function SemanticLayerEditor({
         onKeyDown={(e) => {
           if ((e.target as HTMLElement).matches("input,select,textarea"))
             return;
+          // Handle Escape for polygon tool - cancel unfinished polygon without closing editor
+          if (e.key === "Escape" && tool === "polygon" && polygonGesture.current && polygonGesture.current.points.length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            polygonGesture.current = undefined;
+            setPolygonCount(0);
+            requestOverlayDraw();
+            return;
+          }
           if (e.key === "Escape") {
             e.preventDefault();
             close();
@@ -508,7 +647,14 @@ export function SemanticLayerEditor({
                         aria-pressed={tool === id}
                         onClick={() => {
                           setTool(id);
-                          setPolygon([]);
+                          cursor.current = undefined;
+                          if (id === "polygon") {
+                            polygonGesture.current = { points: [], cursor: undefined };
+                          } else {
+                            polygonGesture.current = undefined;
+                          }
+                          setPolygonCount(0);
+                          requestOverlayDraw();
                         }}
                       >
                         {tr(
@@ -582,21 +728,21 @@ export function SemanticLayerEditor({
                   {tool === "polygon" && (
                     <>
                       <button
-                        disabled={polygon.length < 3 || busy || current?.locked}
+                        disabled={polygonCount < 3 || busy || current?.locked}
                         onClick={() =>
-                          select({ kind: "polygon", points: polygon })
+                          select({ kind: "polygon", points: polygonGesture.current?.points ?? [] })
                         }
                       >
                         {tr("layers.applyPolygon")}
                       </button>
                       <button
-                        disabled={!polygon.length}
-                        onClick={() => setPolygon([])}
+                        disabled={polygonCount === 0}
+                        onClick={() => { polygonGesture.current = undefined; setPolygonCount(0); requestOverlayDraw(); }}
                       >
                         {tr("layers.clearPolygon")}
                       </button>
                       <span>
-                        {polygon.length} {tr("layers.points")}
+                        {polygonCount} {tr("layers.points")}
                       </span>
                     </>
                   )}
@@ -633,11 +779,11 @@ export function SemanticLayerEditor({
                       )
                         return;
                       if (tool === "polygon") {
-                        if (polygon.length < 128)
-                          setPolygon([
-                            ...polygon,
-                            { x: Math.floor(p.x), y: Math.floor(p.y) },
-                          ]);
+                        const points = [...(polygonGesture.current?.points ?? []), { x: Math.floor(p.x), y: Math.floor(p.y) }];
+                        if (points.length > 128) return;
+                        polygonGesture.current = { points, cursor: polygonGesture.current?.cursor };
+                        setPolygonCount(points.length);
+                        requestOverlayDraw();
                         return;
                       }
                       if (tool === "fill" || tool === "pick") {
@@ -661,30 +807,37 @@ export function SemanticLayerEditor({
                       paint(p, p);
                     }}
                     onPointerMove={(e) => {
+                      const p = point(e);
+                      cursor.current = p;
+                      if (polygonGesture.current) polygonGesture.current.cursor = p;
+                      requestOverlayDraw();
                       const g = gesture.current;
                       if (!g || g.id !== e.pointerId) return;
-                      const p = point(e);
                       paint(g.point, p);
                       g.point = p;
                     }}
                     onPointerUp={finish}
                     onPointerCancel={finish}
+                    onPointerLeave={() => {
+                      cursor.current = undefined;
+                      if (polygonGesture.current) polygonGesture.current.cursor = undefined;
+                      requestOverlayDraw();
+                    }}
                     style={{ imageRendering: "pixelated" }}
                   />
-                  {polygon.length > 0 && (
-                    <svg
-                      className="semantic-polygon"
-                      viewBox={`0 0 ${source.width} ${source.height}`}
-                      aria-hidden="true"
-                    >
-                      <polyline
-                        points={polygon.map((p) => `${p.x},${p.y}`).join(" ")}
-                        fill="none"
-                        stroke="#D9A77E"
-                        strokeWidth={1}
-                      />
-                    </svg>
-                  )}
+                  <canvas
+                    ref={vectors}
+                    width={source.width}
+                    height={source.height}
+                    className="selection-vector"
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      pointerEvents: "none",
+                    }}
+                  />
                 </PixelViewport>
               </div>
               <aside aria-label={tr("layers.list")}>

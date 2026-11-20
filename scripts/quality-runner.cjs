@@ -86,6 +86,7 @@ async function runProfile(profile, options = {}) {
     "style-creator": "style-creator-smoke.cjs",
     packs: "packs-smoke.cjs",
     native: "native-smoke.cjs",
+    "semantic-layers-visual": "semantic-layers-visual-smoke.cjs",
   };
   if (!["dev", "smoke", "full"].includes(profile))
     throw new Error("Unknown profile; use dev, smoke <workflow>, or full");
