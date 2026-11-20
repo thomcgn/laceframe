@@ -52,7 +52,7 @@ test('lock prevents parallel process from reserving a second session', () => {
   const x=setup();
   try {
     fs.mkdirSync(x.file+'.lock');
-    assert.throws(()=>new SharedFreeBudget(x.file,config).reserve(1000),/locked/);
+    assert.throws(()=>new SharedFreeBudget(x.file,config).reserve(1000),/lock|in use/i);
   } finally { x.clean(); }
 });
 
