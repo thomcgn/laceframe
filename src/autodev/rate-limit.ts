@@ -94,8 +94,8 @@ export class SharedFreeBudget {
     };
   }
 
-  reserve(now = Date.now()): void {
-    this.withLock(() => {
+  reserve(now = Date.now()): number {
+    return this.withLock(() => {
       const s = this.read();
       this.prune(s, now);
       const used = s.reservations.reduce((n, r) => n + r.count, 0);
@@ -104,8 +104,23 @@ export class SharedFreeBudget {
         const expiry = Math.min(...s.reservations.map(r => r.at + this.config.windowMinutes * 60_000));
         throw new RateLimitPause(expiry, 'Proactive free-model session budget reached');
       }
-      s.reservations.push({ at: now, count: this.config.estimatedRequestsPerTask });
+      const receipt = s.reservations.some(r => r.at === now)
+        ? Math.max(now, ...s.reservations.map(r => r.at)) + 1 : now;
+      s.reservations.push({ at: receipt, count: this.config.estimatedRequestsPerTask });
       this.write(s);
+      return receipt;
+    });
+  }
+
+  /** Refund only a session known not to have obtained tool access. */
+  release(receipt: number): boolean {
+    return this.withLock(() => {
+      const state = this.read();
+      const index = state.reservations.findIndex(r => r.at === receipt);
+      if (index < 0) return false;
+      state.reservations.splice(index, 1);
+      this.write(state);
+      return true;
     });
   }
 
