@@ -23,7 +23,8 @@
   "kilo": {
     "builderAgent": "laceframe-builder",
     "reviewerAgent": "laceframe-reviewer",
-    "taskTimeoutMs": 1800000
+    "taskTimeoutMs": 1800000,
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free"
   },
   "git": {
     "protectedBranches": [
