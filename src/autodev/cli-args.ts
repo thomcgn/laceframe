@@ -31,7 +31,7 @@ export function parseCliArgs(args: readonly string[]): CliAction {
   if (args.length === 1 && args[0] === "status") return "status";
   if (args.length === 2 && args[0] === "run" && (args[1] === "--dry-run" || args[1] === "-d")) return "dry-run";
   if (args.length === 2 && args[0] === "run" && args[1] === "--execute") return "execute";
-  if (args.length === 2 && args[0] === "retry" && /^[1-9]\\d*$/.test(args[1]) && Number.isSafeInteger(Number(args[1]))) return `retry:${args[1]}`;
+  if (args.length === 2 && args[0] === "retry" && /^[1-9]\d*$/.test(args[1]) && Number.isSafeInteger(Number(args[1]))) return `retry:${Number(args[1])}`;
 
   throw new Error(`Unsupported or incomplete arguments: ${args.join(" ")}. Use --help for usage.`);
 }
