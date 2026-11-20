@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { AutodevController, GitHubIssue, ControllerState } from "../src/autodev/controller";
+import { AutodevController, GitHubIssue, ControllerState, SessionCheckpoint } from "../src/autodev/controller";
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -52,6 +52,7 @@ describe("AutodevController", () => {
     mockFs.writeFileSync.mockImplementation(() => {});
     mockFs.mkdirSync.mockImplementation(() => undefined);
     mockExecFileSync.mockReturnValue("");
+    mockFs.statSync.mockReturnValue({ mtimeMs: Date.now() } as fs.Stats);
 
     mockExecSync.mockImplementation((cmd: string) => {
       if (cmd.includes("git status")) return "";
@@ -76,6 +77,7 @@ describe("AutodevController", () => {
       expect(state.currentIssue).toBeNull();
       expect(state.reviewIteration).toBe(0);
       expect(state.processedIssues).toEqual([]);
+      expect(state.checkpoint).toBeNull();
     });
 
     it("loads state from file when exists", () => {
@@ -87,12 +89,42 @@ describe("AutodevController", () => {
         failedIssues: [],
         dryRun: true,
         lastRun: "2026-01-01T00:00:00Z",
+        checkpoint: null,
       };
       mockFs.existsSync.mockReturnValue(true);
       mockFs.readFileSync.mockReturnValue(JSON.stringify(savedState));
       const state = controllerAny.loadState();
       expect(state.currentIssue).toBe(42);
       expect(state.reviewIteration).toBe(2);
+    });
+
+    it("loads state with checkpoint", () => {
+      const checkpoint: SessionCheckpoint = {
+        issueNumber: 42,
+        reviewIteration: 1,
+        phase: "builder",
+        sessionId: "session-123",
+        kiloAgent: "builder",
+        prompt: "test prompt",
+        timestamp: "2026-01-01T00:00:00Z",
+        reason: "rate-limit",
+        gitStatus: "",
+        headCommit: "abc123",
+      };
+      const savedState: ControllerState = {
+        currentIssue: 42,
+        reviewIteration: 1,
+        lastProcessedIssue: null,
+        processedIssues: [],
+        failedIssues: [],
+        dryRun: false,
+        lastRun: null,
+        checkpoint,
+      };
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(savedState));
+      const state = controllerAny.loadState();
+      expect(state.checkpoint).toEqual(checkpoint);
     });
   });
 
@@ -110,6 +142,8 @@ describe("AutodevController", () => {
       expect(config.repo).toBe("thomcgn/laceframe");
       expect(config.branch).toBe("develop");
       expect(config.maxReviewIterations).toBe(3);
+      expect(config.kilo?.inactivityTimeoutMs).toBe(1800000);
+      expect(config.kilo?.sessionResume).toBe(true);
     });
   });
 
@@ -380,6 +414,7 @@ BLOCKERS: 2
       await expect(controllerAny.finalizeIssue(issue, buildResult)).resolves.toBe(true);
     });
   });
+
   describe("interrupted issue recovery", () => {
     it("requeues interrupted #36 only when Git is clean and issue is approved", () => {
       controllerAny.state.currentIssue = 36;
@@ -395,6 +430,7 @@ BLOCKERS: 2
       expect(() => controllerAny.retryIssue(36)).not.toThrow();
       expect(controllerAny.state.currentIssue).toBeNull();
       expect(controllerAny.state.failedIssues).toEqual([]);
+      expect(controllerAny.state.checkpoint).toBeNull();
     });
   });
 
@@ -442,4 +478,29 @@ BLOCKERS: 2
     });
   });
 
+  describe("checkpoint handling", () => {
+    it("writes checkpoint file atomically", () => {
+      const checkpoint: SessionCheckpoint = {
+        issueNumber: 42,
+        reviewIteration: 1,
+        phase: "builder",
+        sessionId: "session-123",
+        kiloAgent: "builder",
+        prompt: "test prompt",
+        timestamp: "2026-01-01T00:00:00Z",
+        reason: "rate-limit",
+        gitStatus: "",
+        headCommit: "abc123",
+      };
+      controllerAny.writeCheckpointFile(checkpoint);
+      expect(mockFs.writeFileSync).toHaveBeenCalled();
+      expect(mockFs.renameSync).toHaveBeenCalled();
+    });
+
+    it("clears checkpoint file", () => {
+      mockFs.existsSync.mockReturnValue(true);
+      controllerAny.clearCheckpointFile();
+      expect(mockFs.unlinkSync).toHaveBeenCalled();
+    });
+  });
 });

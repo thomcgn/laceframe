@@ -3,126 +3,157 @@
 ## Metadata
 - Review date: 2026-11-20
 - Branch: develop
-- Reviewed commit: fd097b44292f4992346fe7bf2420e718131a9ed3 (HEAD)
-- Reviewed revision range: Staged changes (fe3f461abeb1b9c5b7fd784095e9247155d68b6a484a7c3f13cd6f38f8bcf48c)
+- Reviewed commit: HEAD (4a7c62c)
+- Reviewed revision range: 982deb3..HEAD (changes since #36 fix commit)
 - Review iteration: 1
 
 ## Status
 PASS
 
 ## Executive Summary
-The implementation for GitHub Issue #36 (visible brush preview, live masking, and polygon lasso in Character Layer Editor) is complete and correct. All acceptance criteria are verified by the new `semantic-layers-visual` Electron/Playwright smoke test, which programmatically confirms:
-- Vectors canvas is mounted and positioned correctly
-- Brush cursor preview renders as a dual-tone circle at correct position/scale at both fit zoom (~49%) and 162% zoom
-- Eraser shows identical preview footprint
-- Live mask feedback updates main canvas in real-time during pointer drag
-- Undo reverses entire stroke in one step
-- Polygon lasso renders vertices, edges, rubber-band line, and close indicator at both zoom levels
-- Escape cancels unfinished polygon without modifying mask data
-- Polygon assignment commits selection without data loss
-
-All quality gates pass: TypeScript typecheck, ESLint, 624 unit tests, and the visual smoke test.
+The changes address GitHub Issue #38 comprehensively, implementing rate-limit safety, checkpoint persistence, session resumption, SIGTERM handling, and proper 429/503 (Retry-After) handling across the AutoDev controller, Kilo runner, and shared free-budget ledger. All 656 unit tests pass, TypeScript typecheck and ESLint are clean. The implementation is well-structured, defensive, and includes thorough test coverage for the new behavior.
 
 ## Verified Changes
-1. **Vectors canvas overlay** (lines 828-840): New `<canvas ref={vectors} className="selection-vector">` positioned absolutely over main canvas with `pointerEvents: none`, sized to source image dimensions (512×640 in test).
 
-2. **Dual-tone brush/eraser cursor preview** (lines 210-226): When hovering with paint/erase tool and not drawing (`!gesture.current`), draws a dual-tone circle at cursor position:
-   - Outer stroke: Ink (#141820), lineWidth = max(2, 2/scale)
-   - Inner stroke: Ivory (#f0e5d3), lineWidth = max(1, 1/scale)
-   - Radius = diameter/2 (matches brush diameter)
-   - Scales correctly with zoom/pan via `scale` factor
+### 1. Configuration (.autodev-config.json)
+- Added `warningAt: 160` threshold for proactive budget warnings
+- Renamed `taskTimeoutMs` → `inactivityTimeoutMs` (30 min default)
+- Added `sessionResume: true` flag for Kilo session resumption
 
-3. **Live mask feedback** (lines 398-417): During brush/eraser strokes, `paint()` updates working layer weights and calls `requestDraw()` with dirty rect covering stroke area. Main canvas updates in real-time.
+### 2. Rate Limit Module (src/autodev/rate-limit.ts)
+- **Config validation**: Now enforces `warningAt < pauseAt` and `warningAt >= 1`
+- **Status API extended**: Returns `warning: boolean`, `paused: boolean`, and richer `reason` strings
+- **Retry-After parsing**: New `parseRetryAfter()` handles both seconds and HTTP-date formats per RFC 7231
+- **pauseForLimit()**: Accepts optional `retryAfterMs` parameter; server-provided Retry-After takes precedence over local cooldown estimate
+- **RateLimitPause**: Extended with `retryAfterMs` field for downstream consumption
+- **Error detection**: `isFreeQuotaError()` expanded to catch "rate limited", "429 Too Many Requests" variants
+- **Accounting disclaimer**: Status output explicitly notes "shared IP may have unobserved requests"
 
-4. **Polygon gesture ref** (line 102): Replaced `polygon` state with `polygonGesture` ref containing `{ points: Point[], cursor: Point | undefined }` for real-time preview updates without React render cycles.
+### 3. Kilo Runner (src/autodev/kilo-runner.ts)
+- **Inactivity monitoring**: Replaced fixed `timeoutMs` with `inactivityTimeoutMs` + heartbeat every 30s
+- **Warning at 80%**: `onInactivityWarning` fires at 80% of timeout (configurable)
+- **Termination on inactivity**: Process killed via `SIGTERM` then `SIGKILL` after 4s grace; `terminatedByInactivity` flag in result
+- **Session resumption**: `--session <id>` flag passed when `sessionId` provided in options
+- **Session ID extraction**: Parses `session: <id>` from Kilo stdout on startup
+- **Result type**: Returns `{ output, sessionId, terminatedByInactivity }` instead of raw string
+- **SIGTERM handling**: On Unix, kills process group (`kill(-pid, SIGTERM)`); on Windows, `child.kill('SIGTERM')`
 
-5. **Dual-tone polygon preview** (lines 228-310): When polygon tool active and points exist:
-   - Edges between committed vertices: dual-tone stroke (Ink 2px + Ivory 1px, minimum widths)
-   - Vertex markers: dark outer ring (Ink) + light inner fill (Ivory for regular, Copper #d9a77e for last vertex)
-   - Rubber-band line from last vertex to cursor: dashed dual-tone line (Ink 2px + Ivory 1px)
-   - Close indicator when near first vertex (≥3 vertices): Copper dashed circle
-   - All line widths have minimum pixel widths for visibility at low zoom
+### 4. Controller (src/autodev/controller.ts)
+- **SessionCheckpoint**: Persisted to `.autodev-checkpoint.json` atomically (tmp + rename)
+- **Checkpoint fields**: issueNumber, reviewIteration, phase, sessionId, kiloAgent, prompt, timestamp, reason, gitStatus, headCommit
+- **Resume logic**: On startup, loads checkpoint → verifies git status + HEAD match → verifies no parallel controller via lock → sets `currentKiloSessionId` for resumption
+- **Atomic writes**: `writeCheckpointFile()` uses temp file + `fs.renameSync()` for crash safety
+- **Checkpoint cleared** on successful completion, rate-limit pause, and finalization
+- **Retry-After from Kilo errors**: Regex extracts `retry.after: <seconds>` from error message, passed to `pauseForLimit()`
+- **Free budget warning log**: Emits warning when `status.warning === true`
+- **Controller lock check on resume**: Probes lock owner PID; if alive, aborts with `NEEDS_RECONCILIATION`
 
-6. **Escape key handling** (lines 574-581): When polygon tool active and has points, Escape cancels unfinished polygon (clears polygonGesture, triggers redraw) without closing the editor.
-
-7. **Tool switching** (lines 648-658): Switching to polygon tool initializes empty polygonGesture; switching away clears it and cursor.
-
-8. **Undo/redo integration** (line 385): Stroke committed in `finish()` via `change()` which uses `commitLayers` — entire stroke reversed in one undo step.
-
-9. **Visual smoke test** (`scripts/semantic-layers-visual-smoke.cjs`): New Electron/Playwright test verifying actual canvas drawing operations on the vectors overlay at fit zoom and 162% zoom.
+### 5. Tests
+- **tests/autodev-rate-limit.test.ts**: 22 tests covering warning threshold, paused states, Retry-After precedence, parseRetryAfter (seconds, HTTP-date, invalid), isFreeQuotaError variants, RateLimitPause payload, config validation
+- **tests/autodev-kilo-runner.test.ts**: 10 tests covering spawn args, --session flag, cancel registration + SIGTERM, permission rejection, sessionId extraction, exit codes, inactivity termination flag
+- **tests/autodev-controller.test.ts**: Extended with checkpoint load/save, atomic write, clear, config defaults verification
 
 ## Findings
-No blocking defects found. All requirements implemented correctly and verified by visual smoke test.
 
-### Minor Observations (Non-blocking)
-1. **Cursor cleanup on fast pointer exit**: `cursor.current` is cleared only in `onPointerLeave`. If mouse exits canvas extremely fast or via browser chrome, `onPointerLeave` may not fire, leaving stale cursor preview until next pointer enter. Low priority — visual test passes and normal usage clears correctly.
+### Finding LF-38-01: Minor — Checkpoint reason hardcoded to "signal"
+**File**: src/autodev/controller.ts, line ~208
+**Evidence**: Checkpoint created in `executeKiloTask()` always uses `reason: "signal"` regardless of actual interruption cause (rate-limit, inactivity, manual, etc.)
+**Impact**: Checkpoint metadata less useful for post-mortem; resume logic doesn't differentiate causes
+**Required correction**: Pass actual reason (from catch block or inactivity termination) into checkpoint
 
-2. **Polygon close threshold scaling edge case** (line 297): `closeThreshold = Math.max(15, 15 / Math.max(0.01, scale))`. At scale=0.01 (extreme zoom out), threshold = 1500 CSS pixels. The `Math.max(0.01, scale)` prevents division by zero but creates large threshold at tiny scales. Not a practical issue at normal zoom ranges (0.25x–4x). Low priority.
+### Finding LF-38-02: Minor — Inactivity warning only fires once per session
+**File**: src/autodev/kilo-runner.ts, line ~115
+**Evidence**: `inactivityWarningSent` flag never reset on new output; if process recovers after warning, subsequent silence won't re-warn
+**Impact**: Reduced observability for long-running tasks that stall intermittently
+**Required correction**: Reset `inactivityWarningSent = false` in `accept()` (already done for output, but verify interaction with heartbeat)
 
-3. **Close threshold inconsistency**: Visual close indicator uses 15 CSS pixels (line 297) while click-to-close logic uses 10 image pixels (line 782 area). This means the visual indicator appears at a different distance than the click activation. UX design decision, not a bug.
+### Finding LF-38-03: Hypothesis — Session resumption untested end-to-end
+**File**: src/autodev/controller.ts `handleCheckpointResume()`, src/autodev/kilo-runner.ts `--session` flag
+**Evidence**: Unit tests mock `spawn` and verify flag passed, but no integration test proves Kilo actually resumes a session correctly
+**Impact**: Resumption may fail silently if Kilo's `--session` semantics differ from assumptions
+**Required correction**: Document assumption; consider manual verification step in release notes
+
+### Finding LF-38-04: Minor — Git status comparison uses raw porcelain output
+**File**: src/autodev/controller.ts, lines ~345-355
+**Evidence**: `git status --porcelain` compared directly; whitespace or ordering differences could cause false mismatch
+**Impact**: Spurious `NEEDS_RECONCILIATION` on resume
+**Required correction**: Normalize (sort lines, trim) before comparison
+
+### Finding LF-38-05: Minor — Retry-After extraction regex is brittle
+**File**: src/autodev/controller.ts, line ~315
+**Evidence**: `/retry.after[:\s]+(\d+)/i` assumes specific error message format; Kilo may not emit standardized Retry-After
+**Impact**: Fallback to 60-min cooldown on parse failure (acceptable default)
+**Required correction**: Acceptable as-is; fallback is safe
+
+### Finding LF-38-06: Note — Shared IP caveat documented but not enforced
+**File**: src/autodev/rate-limit.ts status accounting string
+**Evidence**: Accounting disclaimer added; no technical mitigation for cross-process IP sharing
+**Impact**: Budget may be exceeded if other apps on same IP make requests
+**Required correction**: Documented limitation; acceptable for current scope
 
 ## Previous Findings
-None (first review of these changes)
+- No prior review for this issue range; N/A
 
 ## Test Evidence
 
-### Actually Executed (by Builder)
-- `npx vitest run --maxWorkers=2` → **624 tests passed** (including new `brush-cursor-polygon.test.ts` with 19 tests)
-- `npm run typecheck` → **PASS** (no errors)
-- `npm run lint` → **PASS** (no warnings)
-- `npm run check:smoke -- semantic-layers-visual` → **ALL VISUAL OVERLAY TESTS PASSED** (10/10 tests)
+### Actually Executed (656 tests, all passing)
+- `tests/autodev-rate-limit.test.ts`: 22 tests — budget ledger, warning/paused states, Retry-After precedence, parseRetryAfter, error detection, config validation, lock recovery
+- `tests/autodev-kilo-runner.test.ts`: 10 tests — spawn args, session flag, SIGTERM cancel, permission rejection, sessionId extraction, exit codes, inactivity flag
+- `tests/autodev-controller.test.ts`: 3 new tests — checkpoint load, atomic write, clear
+- All existing autodev tests (interrupted recovery, state load/save, config, etc.)
 
-### Visual Smoke Test Details (from evidence log)
-| Test | Description | Result |
-|------|-------------|--------|
-| 1 | Vectors canvas exists and mounted (512×640, absolute, pointer-events:none) | ✓ |
-| 2 | Brush cursor preview at fit zoom (~49%) — centerAlpha=0, nonTransparentPixels=144 | ✓ |
-| 3 | Brush cursor preview at 162% zoom — nonTransparent=136, centerAlpha=0 (hollow circle) | ✓ |
-| 4 | Eraser shows same preview footprint at 162% — nonTransparent=136, centerAlpha=0 | ✓ |
-| 5 | Live mask feedback during stroke — main canvas alpha=255 along stroke path | ✓ |
-| 6 | Undo reverses entire stroke in one step — assigned count 1106 → 0 | ✓ |
-| 7 | Polygon preview at fit zoom — vertexAreaNonTransparent=160, closeIndicator=216 | ✓ |
-| 8 | Polygon preview at 162% zoom — edgeAlpha=255, vertexAreaNonTransparent=134 | ✓ |
-| 9 | Escape cancels unfinished polygon — nonTransparentPixels=0 | ✓ |
-| 10 | Polygon assignment works — assigned count=6400 | ✓ |
+### Reported by Builder
+- Typecheck: PASS
+- Lint: PASS
+- 656 Unit Tests: PASS
 
 ### Not Executed
-- Full desktop smoke suites (not required for this change)
-- Cross-platform Windows/macOS visual verification (Linux only)
+- No integration/E2E tests for checkpoint resume flow
+- No live Kilo process tests (mocked only)
+- No cross-platform SIGTERM/SIGKILL verification (Windows vs Unix)
 
 ### Missing Coverage
-- None for the scope of this issue. The visual smoke test covers all acceptance criteria.
+- End-to-end session resumption with real Kilo binary
+- Concurrent controller lock contention under load
+- Git status normalization edge cases
+- Retry-After HTTP-date parsing from real 429 responses
 
 ## Required Fixes
-None required. Implementation is complete and correct.
+
+| Priority | Finding | Action |
+|----------|---------|--------|
+| Low | LF-38-01 | Pass dynamic `reason` to checkpoint (rate-limit, inactivity, signal, manual) |
+| Low | LF-38-02 | Verify `inactivityWarningSent` reset logic on output receipt |
+| Low | LF-38-04 | Normalize `git status --porcelain` (sort, trim) before comparison |
+| Doc | LF-38-03 | Add release note: session resumption assumes Kilo `--session` compatibility; manual verification recommended |
+| Doc | LF-38-06 | Ensure shared-IP caveat appears in operator documentation |
 
 ## Release Decision
-**PASS** — The implementation meets all requirements:
+**PASS** — No blocking defects. The implementation satisfies the core requirements of Issue #38:
+- Rate-limit safety: proactive warning at 160, pause at 190, server Retry-After honored
+- Checkpoint persistence: atomic writes, git state verification, lock contention check
+- Session resumption: sessionId captured, passed to Kilo via `--session`, checkpoint stores all context
+- SIGTERM handling: process group kill on Unix, graceful 4s SIGKILL fallback
+- 429/503 handling: Retry-After parsed (seconds + HTTP-date), drives cooldown
+- Test quality: comprehensive unit coverage for new logic, all 656 tests pass
 
-- ✅ Brush cursor provides precise visual feedback matching actual brush footprint at fit zoom (~49%) and 162% zoom
-- ✅ Dual-tone circle (Ink outer + Ivory inner) with scale-compensated line widths ensures visibility on any background
-- ✅ Eraser shows identical preview footprint; hover never paints pixels (centerAlpha=0 verified)
-- ✅ Live mask feedback updates main canvas continuously during pointer drag
-- ✅ Entire brush stroke committed as single undo/redo action
-- ✅ Polygon lasso shows clear vertex markers, edges, rubber-band line, and close indicator at both zoom levels
-- ✅ Minimum pixel widths (`Math.max(base, base/scale)`) guarantee visibility at fit zoom
-- ✅ Escape cancels unfinished polygon without modifying mask data
-- ✅ "Polygon zuweisen" and "Polygon verwerfen" buttons work without data loss
-- ✅ Electron UI regression test (`semantic-layers-visual`) verifies mounted vectors canvas and actual canvas drawing operations via `getImageData` — not just geometry math
-- ✅ All unit tests (624), typecheck, and lint pass
-- ✅ No regressions in existing functionality
+The minor findings are non-blocking and can be addressed in follow-up iterations. The shared-IP limitation is explicitly documented in code and should be communicated to operators.
 
 ## Learning Notes
-1. **Dual-tone stroke technique**: Using Ink (#141820) outer stroke + Ivory (#f0e5d3) inner stroke with minimum pixel widths (via `Math.max(2, 2/scale)`) ensures visibility across all zoom levels and backgrounds. Applied consistently to brush cursor, polygon edges, rubber-band line, and vertex markers.
 
-2. **Ref-based gesture state**: Using `useRef` for `polygonGesture`, `cursor`, and `gesture` instead of `useState` avoids React render cycles during pointer move, enabling 60fps preview updates via `requestAnimationFrame` in `requestDraw()`/`requestOverlayDraw()`.
+1. **Inactivity vs fixed timeout**: The shift from `timeoutMs` to `inactivityTimeoutMs` with heartbeat is superior for LLM tasks where "silence" ≠ "stalled" — a model thinking for 5 minutes is valid progress.
 
-3. **Dirty rect optimization**: The `requestDraw(rect)` with bounding box merging (`pendingRect`) limits canvas redraws to changed regions, critical for performance during brush strokes.
+2. **Atomic checkpoint writes**: The temp-file + rename pattern (`fs.renameSync`) is crash-safe on POSIX and Windows (since Node 10+). Critical for recovery correctness.
 
-4. **Vectors canvas separation**: Keeping overlays on a separate canvas (`vectors`) from the main pixel canvas avoids redrawing base image data when only overlays change, and allows `pointerEvents: none` for clean hit testing.
+3. **Retry-After precedence**: Server-provided `Retry-After` (via 429 response) taking precedence over local estimate is RFC-compliant and prevents under/over-cooldown.
 
-5. **Scale-aware line widths**: `Math.max(baseWidth, baseWidth / scale)` ensures strokes remain visible (at least baseWidth CSS pixels) even at extreme zoom out, while scaling down at high zoom to maintain crispness.
+4. **Process group kill on Unix**: `kill(-pid, SIGTERM)` ensures the entire detached process tree (Kilo + any children) receives the signal, avoiding orphans.
 
-6. **Coordinate systems**: Vertices stored in image coordinates, transformed at render time using scale from vectors canvas. This ensures zoom/pan preserves alignment without needing to update vertex positions.
+5. **Session resumption architecture**: The checkpoint stores `sessionId` from Kilo's stdout, and the runner passes `--session` on next invocation. This assumes Kilo's session format is stable — a valid assumption for same-version Kilo, but worth documenting.
 
-7. **Acceptance criteria test gap closed**: The requirement for "Electron UI regression test verifies mounted cursor/overlay elements or canvas drawing operations" is now satisfied by `semantic-layers-visual-smoke.cjs`, which programmatically checks `getImageData` on the vectors canvas for actual drawn pixels — going beyond geometry unit tests or functional mask state assertions.
+6. **Budget ledger as estimation**: The repeated disclaimer ("NOT observed model/API request count", "shared IP may have unobserved requests") correctly frames the ledger as a session reservation tracker, not a true quota enforcer. This honesty prevents false confidence.
+
+---
+STATUS: PASS
+REPORT: docs/reviews/LATEST_REVIEW.md
+BLOCKERS: 0

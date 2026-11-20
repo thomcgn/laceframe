@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { SharedFreeBudget, RateLimitPause, isFreeQuotaError, type FreeBudgetConfig } from "./rate-limit.js";
-import { runKiloStreaming } from "./kilo-runner.js";
+import { SharedFreeBudget, RateLimitPause, isFreeQuotaError, parseRetryAfter, type FreeBudgetConfig } from "./rate-limit.js";
+import { runKiloStreaming, type KiloResult } from "./kilo-runner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +28,21 @@ export interface ControllerState {
   failedIssues: number[];
   dryRun: boolean;
   lastRun: string | null;
+  /** Checkpoint for safe pause/resume */
+  checkpoint: SessionCheckpoint | null;
+}
+
+export interface SessionCheckpoint {
+  issueNumber: number;
+  reviewIteration: number;
+  phase: "builder" | "reviewer" | "quality-gates" | "finalize";
+  sessionId: string | null;
+  kiloAgent: "builder" | "reviewer";
+  prompt: string;
+  timestamp: string;
+  reason: "rate-limit" | "inactivity" | "signal" | "manual";
+  gitStatus: string;
+  headCommit: string;
 }
 
 export interface ReviewResult {
@@ -65,8 +80,9 @@ export interface AutodevConfig {
   kilo?: {
     builderAgent: string;
     reviewerAgent: string;
-    taskTimeoutMs: number;
     model?: string;
+    inactivityTimeoutMs: number;
+    sessionResume: boolean;
   };
   git?: {
     protectedBranches: string[];
@@ -92,6 +108,7 @@ const STATE_FILE = path.join(__dirname, "..", "..", ".autodev-state.json");
 const CONFIG_FILE = path.join(__dirname, "..", "..", ".autodev-config.json");
 const LOG_DIR = path.join(__dirname, "..", "..", "logs", "autodev");
 const CONTROLLER_LOCK = path.join(__dirname, "..", "..", ".autodev-controller.lock");
+const CHECKPOINT_FILE = path.join(__dirname, "..", "..", ".autodev-checkpoint.json");
 
 class KiloExecutionError extends Error {
   constructor(message: string) {
@@ -109,6 +126,7 @@ export class AutodevController {
   private initialHead = "";
   private readonly freeBudget: SharedFreeBudget;
   private terminateKilo: (() => void) | null = null;
+  private currentKiloSessionId: string | null = null;
 
   constructor(dryRun = false) {
     this.state = this.loadState();
@@ -117,7 +135,7 @@ export class AutodevController {
     this.ensureLogDir();
     this.freeBudget = new SharedFreeBudget(
       path.join(__dirname, "..", "..", ".autodev-free-budget.json"),
-      this.config.freeBudget ?? { windowMinutes: 60, limit: 200, pauseAt: 190, estimatedRequestsPerTask: 50, cooldownMinutes: 60 },
+      this.config.freeBudget ?? { windowMinutes: 60, limit: 200, warningAt: 160, pauseAt: 190, estimatedRequestsPerTask: 50, cooldownMinutes: 60 },
     );
   }
 
@@ -144,6 +162,7 @@ export class AutodevController {
       failedIssues: [],
       dryRun: false,
       lastRun: null,
+      checkpoint: null,
     };
   }
 
@@ -178,6 +197,13 @@ export class AutodevController {
       maxReviewIterations: 3,
       qualityGates: ["typecheck", "test", "lint"],
       smokeTests: [],
+      kilo: {
+        builderAgent: "laceframe-builder",
+        reviewerAgent: "laceframe-reviewer",
+        model: "kilo/nvidia/nemotron-3-ultra-550b-a55b:free",
+        inactivityTimeoutMs: 30 * 60 * 1000,
+        sessionResume: true,
+      },
     };
   }
 
@@ -203,7 +229,11 @@ export class AutodevController {
       this.log("Starting autodev controller");
       await this.verifyPrerequisites();
       this.initialHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8" }).trim();
-      if (this.state.currentIssue !== null) {
+
+      // Check for existing checkpoint to resume
+      if (this.state.checkpoint) {
+        await this.handleCheckpointResume();
+      } else if (this.state.currentIssue !== null) {
         throw new Error(`Interrupted issue #${this.state.currentIssue} requires manual reconciliation before resume`);
       }
 
@@ -243,8 +273,9 @@ export class AutodevController {
           }
           this.state.currentIssue = null;
           this.state.reviewIteration = 0;
-          this.state.lastRun = new Date().toISOString();
+          this.state.checkpoint = null;
           this.saveState();
+          this.clearCheckpointFile();
         }
 
         if (this.state.dryRun) {
@@ -261,7 +292,7 @@ export class AutodevController {
         // A failed in-progress Kilo task is NOT safe to replay automatically: it
         // may have modified the working tree. Persist the issue and stop cleanly.
         this.saveState();
-        this.log(`RATE LIMIT PAUSE until ${new Date(error.until).toISOString()}. Inspect working tree before resuming interrupted issue.`, "warn");
+        this.log(`RATE LIMIT PAUSE until ${new Date(error.until).toISOString()}. Reason: ${error.message}. Inspect working tree before resuming interrupted issue.`, "warn");
         return;
       }
       if (error instanceof KiloExecutionError && this.state.currentIssue !== null) {
@@ -275,7 +306,9 @@ export class AutodevController {
             "--remove-label", this.config.labels.inProgress], { encoding: "utf-8" });
           this.state.currentIssue = null;
           this.state.reviewIteration = 0;
+          this.state.checkpoint = null;
           this.saveState();
+          this.clearCheckpointFile();
           this.log(`Kilo infrastructure failure; issue #${issueNumber} released for a later retry`, "warn");
         } else {
           this.log("Kilo failed after possible file modifications; state retained for manual review", "warn");
@@ -408,7 +441,9 @@ export class AutodevController {
       this.state.failedIssues = this.state.failedIssues.filter(n => n !== issueNumber);
       this.state.currentIssue = null;
       this.state.reviewIteration = 0;
+      this.state.checkpoint = null;
       this.saveState();
+      this.clearCheckpointFile();
       this.log(`Issue #${issueNumber} requeued. Existing quota history remains untouched.`);
     } finally {
       this.releaseControllerLock();
@@ -418,7 +453,12 @@ export class AutodevController {
   private async waitForFreeBudget(): Promise<void> {
     for (;;) {
       const status = this.freeBudget.status();
-      if (status.resumeAt === null) return;
+      if (status.resumeAt === null) {
+        if (status.warning) {
+          this.log(`Free model budget warning: ${status.used}/${status.remaining} estimated requests used (warning at ${this.config.freeBudget?.warningAt ?? 160})`, "warn");
+        }
+        return;
+      }
       const ms = Math.max(1000, status.resumeAt - Date.now() + 250);
       this.log(`Free models paused (${status.reason}). Resuming no earlier than ${new Date(status.resumeAt).toISOString()}`);
       // Long waits are split because Node timers have a maximum delay.
@@ -666,7 +706,11 @@ export class AutodevController {
         return { success: true, commitHash: "dry-run", testResults: "dry-run" };
       }
 
-      await this.executeKiloTask(this.config.kilo?.builderAgent ?? "laceframe-builder", prompt);
+      await this.executeKiloTask(
+        this.config.kilo?.builderAgent ?? "laceframe-builder",
+        prompt,
+        "builder"
+      );
 
       this.stageTaskChanges();
       const testResults = await this.runQualityGates(issue);
@@ -706,38 +750,137 @@ ${issue.requiredValidation.join("\n")}
 Return a summary of what was implemented, files changed, and test results.`;
   }
 
-  private async executeKiloTask(agent: string, prompt: string): Promise<string> {
+  private async executeKiloTask(agentName: string, prompt: string, agentRole: "builder" | "reviewer"): Promise<KiloResult> {
     const receipt = this.freeBudget.reserve();
     const model = this.config.kilo?.model ?? "kilo/nvidia/nemotron-3-ultra-550b-a55b:free";
+    const inactivityTimeoutMs = this.config.kilo?.inactivityTimeoutMs ?? 30 * 60 * 1000;
+    const sessionResume = this.config.kilo?.sessionResume ?? true;
     const started = Date.now();
-    const logPath = path.join(LOG_DIR, `kilo-${this.state.currentIssue ?? "manual"}-${agent}-${Date.now()}.log`);
-    this.log(`Kilo session: agent=${agent}, model=${model}, log=${logPath}`);
+    const logPath = path.join(LOG_DIR, `kilo-${this.state.currentIssue ?? "manual"}-${agentName}-${Date.now()}.log`);
+    this.log(`Kilo session: agent=${agentName}, model=${model}, inactivityTimeout=${inactivityTimeoutMs}ms, sessionResume=${sessionResume}, log=${logPath}`);
+
     try {
-      const output = await runKiloStreaming({
-        agent, model, prompt, logPath,
-        timeoutMs: this.config.kilo?.taskTimeoutMs ?? 30 * 60 * 1000,
+      // Build checkpoint for safe pause/resume
+      const checkpoint: SessionCheckpoint = {
+        issueNumber: this.state.currentIssue ?? -1,
+        reviewIteration: this.state.reviewIteration,
+        phase: agentRole === "builder" ? "builder" : "reviewer",
+        sessionId: this.currentKiloSessionId,
+        kiloAgent: agentRole,
+        prompt,
+        timestamp: new Date().toISOString(),
+        reason: "signal",
+        gitStatus: execFileSync("git", ["status", "--porcelain"], { encoding: "utf-8" }).trim(),
+        headCommit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8" }).trim(),
+      };
+      this.state.checkpoint = checkpoint;
+      this.saveState();
+      this.writeCheckpointFile(checkpoint);
+
+      const result = await runKiloStreaming({
+        agent: agentName,
+        model,
+        prompt,
+        logPath,
+        inactivityTimeoutMs,
+        sessionId: sessionResume ? this.currentKiloSessionId ?? undefined : undefined,
         onOutput: (stream, chunk) => {
           (stream === "stdout" ? process.stdout : process.stderr).write(chunk);
         },
-        onHeartbeat: (silenceMs) => {
-          this.log(`Kilo ${agent}: elapsed ${Math.round((Date.now() - started) / 1000)}s; silence ${Math.round(silenceMs / 1000)}s (not proof of progress)`);
+        onHeartbeat: (silenceMs, elapsedMs) => {
+          this.log(`Kilo ${agentName}: elapsed ${Math.round(elapsedMs / 1000)}s; silence ${Math.round(silenceMs / 1000)}s (not proof of progress)`);
+        },
+        onInactivityWarning: (silenceMs) => {
+          this.log(`Kilo ${agentName}: INACTIVITY WARNING - ${Math.round(silenceMs / 1000)}s silence, timeout at ${Math.round(inactivityTimeoutMs / 1000)}s`, "warn");
         },
         registerCancel: (cancel) => { this.terminateKilo = cancel; },
       });
-      this.log(`Kilo ${agent} completed in ${Math.round((Date.now() - started) / 1000)}s`);
-      return output;
+
+      this.currentKiloSessionId = result.sessionId;
+      this.log(`Kilo ${agentName} completed in ${Math.round((Date.now() - started) / 1000)}s${result.sessionId ? `, sessionId=${result.sessionId}` : ""}`);
+      return result;
     } catch (error) {
       const failure = error as Error & { code?: string };
       if (isFreeQuotaError(error)) {
-        const until = this.freeBudget.pauseForLimit("Kilo free-model quota exceeded");
-        throw new RateLimitPause(until, "Kilo rejected the session with free-model rate limit");
+        // Try to extract Retry-After from error message
+        const retryAfterMatch = String(error).match(/retry.after[:\s]+(\d+)/i);
+        const retryAfterMs = retryAfterMatch ? parseRetryAfter(retryAfterMatch[1]) : undefined;
+        const until = this.freeBudget.pauseForLimit("Kilo free-model quota exceeded", Date.now(), retryAfterMs ?? undefined);
+        throw new RateLimitPause(until, "Kilo rejected the session with free-model rate limit", retryAfterMs ?? undefined);
       }
       // A spawned process may already have spent quota; only ENOENT is provably unused.
       if (failure.code === "ENOENT") this.freeBudget.release(receipt);
-      throw new KiloExecutionError(`Kilo ${agent} (${model}) failed: ${failure.message.slice(0, 450)}; log: ${logPath}`);
+      throw new KiloExecutionError(`Kilo ${agentName} (${model}) failed: ${failure.message.slice(0, 450)}; log: ${logPath}`);
     } finally {
       this.terminateKilo = null;
+      this.state.checkpoint = null;
+      this.saveState();
+      this.clearCheckpointFile();
     }
+  }
+
+  private writeCheckpointFile(checkpoint: SessionCheckpoint): void {
+    const temp = `${CHECKPOINT_FILE}.${process.pid}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(checkpoint, null, 2));
+    fs.renameSync(temp, CHECKPOINT_FILE);
+  }
+
+  private clearCheckpointFile(): void {
+    if (fs.existsSync(CHECKPOINT_FILE)) {
+      fs.unlinkSync(CHECKPOINT_FILE);
+    }
+  }
+
+  private async handleCheckpointResume(): Promise<void> {
+    if (!this.state.checkpoint) return;
+
+    const checkpoint = this.state.checkpoint;
+    this.log(`Found checkpoint for issue #${checkpoint.issueNumber}, iteration ${checkpoint.reviewIteration}, phase ${checkpoint.phase}, reason ${checkpoint.reason}`);
+
+    // Verify git state matches checkpoint
+    const currentGitStatus = execFileSync("git", ["status", "--porcelain"], { encoding: "utf-8" }).trim();
+    const currentHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8" }).trim();
+
+    if (currentGitStatus !== checkpoint.gitStatus || currentHead !== checkpoint.headCommit) {
+      this.log("Git state differs from checkpoint; cannot safely resume automatically", "warn");
+      this.log(`Checkpoint git status: ${checkpoint.gitStatus || "(clean)"}`, "warn");
+      this.log(`Current git status: ${currentGitStatus || "(clean)"}`, "warn");
+      this.log(`Checkpoint HEAD: ${checkpoint.headCommit}`, "warn");
+      this.log(`Current HEAD: ${currentHead}`, "warn");
+      throw new Error("NEEDS_RECONCILIATION: Git state differs from checkpoint. Manual intervention required.");
+    }
+
+    // Verify no parallel children running
+    const controllerLock = path.join(__dirname, "..", "..", ".autodev-controller.lock");
+    if (fs.existsSync(controllerLock)) {
+      const ownerFile = path.join(controllerLock, "pid");
+      if (fs.existsSync(ownerFile)) {
+        const raw = fs.readFileSync(ownerFile, "utf-8").trim();
+        const owner = Number(raw);
+        if (Number.isSafeInteger(owner) && owner > 0 && owner !== process.pid) {
+          try {
+            process.kill(owner, 0);
+            throw new Error("NEEDS_RECONCILIATION: Another AutoDev controller instance is running.");
+          } catch (probeError) {
+            if ((probeError as NodeJS.ErrnoException).code !== "ESRCH") throw probeError;
+            // Owner process is dead, lock is stale - we can proceed
+          }
+        }
+      }
+    }
+
+    // Verify Kilo session can be resumed
+    if (!this.config.kilo?.sessionResume || !checkpoint.sessionId) {
+      this.log("Session resumption not configured or no session ID in checkpoint; starting fresh", "warn");
+      this.currentKiloSessionId = null;
+      return;
+    }
+
+    this.currentKiloSessionId = checkpoint.sessionId;
+    this.log(`Resuming Kilo session ${checkpoint.sessionId} for ${checkpoint.kiloAgent}`);
+
+    // For now, we log the resumption but let the new Kilo invocation handle --session
+    // Actual resumption is handled by kilo-runner when sessionId is passed
   }
 
   rateLimitStatus(): ReturnType<SharedFreeBudget["status"]> {
@@ -790,7 +933,7 @@ Return a summary of what was implemented, files changed, and test results.`;
 
     const previous = fs.existsSync("docs/reviews/LATEST_REVIEW.md")
       ? fs.statSync("docs/reviews/LATEST_REVIEW.md").mtimeMs : 0;
-    await this.executeKiloTask(this.config.kilo?.reviewerAgent ?? "laceframe-reviewer", prompt);
+    await this.executeKiloTask(this.config.kilo?.reviewerAgent ?? "laceframe-reviewer", prompt, "reviewer");
     const report = "docs/reviews/LATEST_REVIEW.md";
     if (!fs.existsSync(report) || fs.statSync(report).mtimeMs <= previous) {
       throw new Error("Reviewer did not generate a fresh report");

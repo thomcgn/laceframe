@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { SharedFreeBudget, RateLimitPause, isFreeQuotaError } from '../src/autodev/rate-limit.js';
 
-const config = { windowMinutes: 60, limit: 200, pauseAt: 190, estimatedRequestsPerTask: 50, cooldownMinutes: 60 };
+const config = { windowMinutes: 60, limit: 200, warningAt: 160, pauseAt: 190, estimatedRequestsPerTask: 50, cooldownMinutes: 60 };
 function setup() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'autodev-rate-'));
   return {file:path.join(dir,'budget.json'), clean:()=>fs.rmSync(dir,{recursive:true,force:true})};

@@ -23,8 +23,9 @@
   "kilo": {
     "builderAgent": "laceframe-builder",
     "reviewerAgent": "laceframe-reviewer",
-    "taskTimeoutMs": 1800000,
-    "model": "kilo/nvidia/nemotron-3-ultra-550b-a55b:free"
+    "model": "kilo/nvidia/nemotron-3-ultra-550b-a55b:free",
+    "inactivityTimeoutMs": 1800000,
+    "sessionResume": true
   },
   "git": {
     "protectedBranches": [
@@ -40,6 +41,7 @@
   "freeBudget": {
     "windowMinutes": 60,
     "limit": 200,
+    "warningAt": 160,
     "pauseAt": 190,
     "estimatedRequestsPerTask": 50,
     "cooldownMinutes": 60

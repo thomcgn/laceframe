@@ -2,11 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /** Conservative SESSION reservations. Kilo hides the actual per-message request count.
- * This cannot enforce an account-wide 200-request quota without gateway telemetry.
+ *  This cannot enforce an account-wide 200-request quota without gateway telemetry.
+ *  Estimates are explicitly marked as estimates; shared IP means unobserved requests from other apps are possible.
  */
 export interface FreeBudgetConfig {
   windowMinutes: number;
   limit: number;
+  warningAt: number;
   pauseAt: number;
   estimatedRequestsPerTask: number;
   cooldownMinutes: number;
@@ -20,7 +22,11 @@ interface BudgetState {
 }
 
 export class RateLimitPause extends Error {
-  constructor(public readonly until: number, message: string) {
+  constructor(
+    public readonly until: number,
+    message: string,
+    public readonly retryAfterMs?: number
+  ) {
     super(message);
     this.name = 'RateLimitPause';
   }
@@ -29,6 +35,7 @@ export class RateLimitPause extends Error {
 export class SharedFreeBudget {
   constructor(private readonly file: string, readonly config: FreeBudgetConfig) {
     if (config.limit < 1 || config.pauseAt > config.limit || config.pauseAt < 1 ||
+        config.warningAt > config.pauseAt || config.warningAt < 1 ||
         config.estimatedRequestsPerTask < 1 || config.estimatedRequestsPerTask > config.pauseAt ||
         config.windowMinutes < 1 || config.cooldownMinutes < 1) {
       throw new Error('Invalid free model budget configuration');
@@ -122,7 +129,7 @@ export class SharedFreeBudget {
     if (s.cooldownUntil <= now) { s.cooldownUntil = 0; s.pauseReason = ''; }
   }
 
-  status(now = Date.now()): { used: number; remaining: number; resumeAt: number | null; reason: string; accounting: string } {
+  status(now = Date.now()): { used: number; remaining: number; warning: boolean; paused: boolean; resumeAt: number | null; reason: string; accounting: string } {
     const s = this.read();
     this.prune(s, now);
     const used = s.reservations.reduce((n, r) => n + r.count, 0);
@@ -130,11 +137,24 @@ export class SharedFreeBudget {
       ? Math.min(...s.reservations.map(r => r.at + this.config.windowMinutes * 60_000))
       : 0;
     const eligible = used + this.config.estimatedRequestsPerTask <= this.config.pauseAt;
+    const atWarning = used >= this.config.warningAt;
+    const atPause = used >= this.config.pauseAt || s.cooldownUntil > now;
+    let reason = '';
+    if (s.cooldownUntil > now) {
+      reason = s.pauseReason;
+    } else if (atWarning) {
+      reason = 'approaching session budget warning threshold';
+    } else if (!eligible) {
+      reason = 'proactive session budget';
+    }
     return {
-      used, remaining: Math.max(0, this.config.pauseAt - used),
+      used,
+      remaining: Math.max(0, this.config.pauseAt - used),
+      warning: atWarning,
+      paused: atPause,
       resumeAt: s.cooldownUntil > now || !eligible ? Math.max(s.cooldownUntil, eligible ? 0 : firstExpiry) : null,
-      reason: s.cooldownUntil > now ? s.pauseReason : !eligible ? 'proactive session budget' : '',
-      accounting: 'estimated Kilo session reservations, NOT observed model/API request count',
+      reason,
+      accounting: 'estimated Kilo session reservations, NOT observed model/API request count; shared IP may have unobserved requests',
     };
   }
 
@@ -168,11 +188,14 @@ export class SharedFreeBudget {
     });
   }
 
+  /** Pause budget due to external rate limit (e.g., 429 with Retry-After).
+   *  retryAfterMs takes precedence over local cooldown estimate. */
   pauseForLimit(reason: string, now = Date.now(), retryAfterMs?: number): number {
     return this.withLock(() => {
       const s = this.read();
       this.prune(s, now);
-      s.cooldownUntil = Math.max(s.cooldownUntil, now + Math.max(retryAfterMs ?? this.config.cooldownMinutes * 60_000, 0));
+      const cooldown = retryAfterMs ?? this.config.cooldownMinutes * 60_000;
+      s.cooldownUntil = Math.max(s.cooldownUntil, now + Math.max(cooldown, 0));
       s.pauseReason = reason;
       this.write(s);
       return s.cooldownUntil;
@@ -183,4 +206,16 @@ export class SharedFreeBudget {
 export function isFreeQuotaError(value: unknown): boolean {
   const text = String(value instanceof Error ? [value.message, (value as Error & {stderr?: unknown}).stderr].join(' ') : value);
   return /free model usage limit reached|too many requests|rate.?limit|\b429\b/i.test(text);
+}
+
+/** Parse Retry-After header value (seconds or HTTP-date) to milliseconds.
+ *  Returns null if unparseable. */
+export function parseRetryAfter(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const seconds = Number(value.trim());
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  // Try HTTP-date format
+  const date = Date.parse(value);
+  if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+  return null;
 }
