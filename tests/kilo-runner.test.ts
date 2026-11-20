@@ -28,7 +28,7 @@ describe("live Kilo process", () => {
     mockedSpawn.mockReturnValue(child as unknown as ReturnType<typeof spawn>);
     const chunks: string[] = [];
     const promise = runKiloStreaming({
-      agent: "laceframe-builder", model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+      agent: "laceframe-builder", model: "kilo/nvidia/nemotron-3-ultra-550b-a55b:free",
       prompt: "test", logPath: path.join(dir, "run.log"), timeoutMs: 10000,
       onOutput: (stream, chunk) => { chunks.push(stream + ":" + chunk); },
       onHeartbeat: () => {}, registerCancel: () => {},
@@ -41,7 +41,7 @@ describe("live Kilo process", () => {
     expect(chunks).toEqual(["stdout:editing file\n", "stderr:warning\n"]);
     expect(fs.readFileSync(path.join(dir, "run.log"), "utf8")).toContain("editing file");
     expect(mockedSpawn).toHaveBeenCalledWith("kilo",
-      ["run", "--auto", "--model", "nvidia/nemotron-3-ultra-550b-a55b:free", "--agent", "laceframe-builder", "test"],
+      ["run", "--auto", "--model", "kilo/nvidia/nemotron-3-ultra-550b-a55b:free", "--agent", "laceframe-builder", "test"],
       expect.objectContaining({ stdio: ["ignore", "pipe", "pipe"] }));
   });
 
@@ -54,7 +54,7 @@ describe("live Kilo process", () => {
     });
     mockedSpawn.mockReturnValue(child as unknown as ReturnType<typeof spawn>);
     const promise = runKiloStreaming({
-      agent: "laceframe-reviewer", model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+      agent: "laceframe-reviewer", model: "kilo/nvidia/nemotron-3-ultra-550b-a55b:free",
       prompt: "test", logPath: path.join(dir, "error.log"), timeoutMs: 10000,
       onOutput: () => {}, onHeartbeat: () => {}, registerCancel: () => {},
     });
