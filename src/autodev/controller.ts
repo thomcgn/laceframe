@@ -338,8 +338,12 @@ export class AutodevController {
         "--json", "state,labels"], { encoding: "utf-8" })) as { state: string; labels: {name:string}[] };
       if (issue.state !== "OPEN") throw new Error("Issue is not open");
       if (!issue.labels.some(label => label.name === this.config.labels.approved)) throw new Error("Issue is not approved");
-      execFileSync("gh", ["issue", "edit", String(issueNumber), "--repo", this.config.repo,
-        "--remove-label", this.config.labels.blocked, "--remove-label", this.config.labels.inProgress], { encoding: "utf-8" });
+      const staleLabels = [this.config.labels.blocked, this.config.labels.inProgress]
+        .filter(label => issue.labels.some(item => item.name === label));
+      if (staleLabels.length) {
+        execFileSync("gh", ["issue", "edit", String(issueNumber), "--repo", this.config.repo,
+          ...staleLabels.flatMap(label => ["--remove-label", label])], { encoding: "utf-8" });
+      }
       this.state.failedIssues = this.state.failedIssues.filter(n => n !== issueNumber);
       this.state.reviewIteration = 0;
       this.saveState();
