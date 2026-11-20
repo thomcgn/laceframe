@@ -708,7 +708,7 @@ Return a summary of what was implemented, files changed, and test results.`;
 
   private async executeKiloTask(agent: string, prompt: string): Promise<string> {
     const receipt = this.freeBudget.reserve();
-    const model = this.config.kilo?.model ?? "nvidia/nemotron-3-ultra-550b-a55b:free";
+    const model = this.config.kilo?.model ?? "kilo/nvidia/nemotron-3-ultra-550b-a55b:free";
     const started = Date.now();
     const logPath = path.join(LOG_DIR, `kilo-${this.state.currentIssue ?? "manual"}-${agent}-${Date.now()}.log`);
     this.log(`Kilo session: agent=${agent}, model=${model}, log=${logPath}`);
