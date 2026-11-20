@@ -85,23 +85,23 @@ export class SharedFreeBudget {
         const raw = fs.readFileSync(ownerFile, "utf8").trim();
         const owner = Number(raw);
         if (!Number.isSafeInteger(owner) || owner <= 0) {
-          throw new Error("Budget lock has an invalid owner");
+          throw new Error("Budget lock has an invalid owner", { cause: error });
         }
         try {
           process.kill(owner, 0);
-          throw new Error(`Budget is already in use by PID ${owner}`);
+          throw new Error(`Budget is already in use by PID ${owner}`, { cause: error });
         } catch (probeError) {
           if ((probeError as NodeJS.ErrnoException).code !== "ESRCH") throw probeError;
         }
         if (fs.readFileSync(ownerFile, "utf8").trim() !== raw) {
-          throw new Error("Budget lock owner changed; retry");
+          throw new Error("Budget lock owner changed; retry", { cause: error });
         }
         fs.unlinkSync(ownerFile);
       } else {
         if (Date.now() - fs.statSync(lock).mtimeMs < 5000) {
-          throw new Error("Budget lock is being initialized; retry shortly");
+          throw new Error("Budget lock is being initialized; retry shortly", { cause: error });
         }
-        if (fs.readdirSync(lock).length) throw new Error("Unknown files in budget lock");
+        if (fs.readdirSync(lock).length) throw new Error("Unknown files in budget lock", { cause: error });
       }
       fs.rmdirSync(lock);
       claim();
