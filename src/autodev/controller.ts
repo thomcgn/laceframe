@@ -295,8 +295,15 @@ export class AutodevController {
   private readonly onControllerSigterm = (): void => this.onControllerSignal("SIGTERM");
 
   private onControllerSignal(signal: "SIGINT" | "SIGTERM"): void {
+    // Let the Kilo child close and drain its pipes before the controller's
+    // normal finally block releases the lock and preserves the issue state.
+    if (this.terminateKilo) {
+      this.log(`Received ${signal}; stopping Kilo before AutoDev shutdown`, "warn");
+      this.terminateKilo();
+      process.exitCode = signal === "SIGINT" ? 130 : 143;
+      return;
+    }
     try {
-      this.terminateKilo?.();
       this.releaseControllerLock();
     } catch (error) {
       this.log(`Could not release AutoDev lock on ${signal}: ${String(error)}`, "warn");
