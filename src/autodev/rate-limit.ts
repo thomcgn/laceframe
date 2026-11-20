@@ -65,11 +65,55 @@ export class SharedFreeBudget {
 
   private withLock<T>(fn: () => T): T {
     const lock = `${this.file}.lock`;
+    const ownerFile = path.join(lock, "pid");
     fs.mkdirSync(path.dirname(lock), { recursive: true });
-    try { fs.mkdirSync(lock); } catch {
-      throw new Error(`Budget file is locked by another process (${lock}). Stop concurrent AutoDev instances.`);
+    const claim = (): void => {
+      fs.mkdirSync(lock);
+      try {
+        fs.writeFileSync(ownerFile, String(process.pid), { flag: "wx" });
+      } catch (error) {
+        fs.rmdirSync(lock);
+        throw error;
+      }
+    };
+
+    try {
+      claim();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (fs.existsSync(ownerFile)) {
+        const raw = fs.readFileSync(ownerFile, "utf8").trim();
+        const owner = Number(raw);
+        if (!Number.isSafeInteger(owner) || owner <= 0) {
+          throw new Error("Budget lock has an invalid owner");
+        }
+        try {
+          process.kill(owner, 0);
+          throw new Error(`Budget is already in use by PID ${owner}`);
+        } catch (probeError) {
+          if ((probeError as NodeJS.ErrnoException).code !== "ESRCH") throw probeError;
+        }
+        if (fs.readFileSync(ownerFile, "utf8").trim() !== raw) {
+          throw new Error("Budget lock owner changed; retry");
+        }
+        fs.unlinkSync(ownerFile);
+      } else {
+        if (Date.now() - fs.statSync(lock).mtimeMs < 5000) {
+          throw new Error("Budget lock is being initialized; retry shortly");
+        }
+        if (fs.readdirSync(lock).length) throw new Error("Unknown files in budget lock");
+      }
+      fs.rmdirSync(lock);
+      claim();
     }
-    try { return fn(); } finally { fs.rmdirSync(lock); }
+    try {
+      return fn();
+    } finally {
+      if (fs.existsSync(ownerFile) && fs.readFileSync(ownerFile, "utf8").trim() === String(process.pid)) {
+        fs.unlinkSync(ownerFile);
+        fs.rmdirSync(lock);
+      }
+    }
   }
 
   private prune(s: BudgetState, now: number): void {
