@@ -26,6 +26,12 @@ async function main(): Promise<void> {
       console.log(JSON.stringify(new AutodevController(true).rateLimitStatus(), null, 2));
       return;
     }
+    if (action.startsWith("retry:")) {
+      const issueNumber = Number(action.slice("retry:".length));
+      new AutodevController(false).retryIssue(issueNumber);
+      console.log(`AutoDev issue #${issueNumber} requeued`);
+      return;
+    }
     const dryRun = action === "dry-run";
     if (dryRun) console.log("[DRY RUN] No Kilo task, commit, push or GitHub issue mutation");
     await runAutodev(dryRun);
