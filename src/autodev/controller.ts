@@ -195,9 +195,9 @@ export class AutodevController {
 
     this.acquireControllerLock();
     this.isRunning = true;
-    this.log("Starting autodev controller");
 
     try {
+      this.log("Starting autodev controller");
       await this.verifyPrerequisites();
       this.initialHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8" }).trim();
       if (this.state.currentIssue !== null) {
